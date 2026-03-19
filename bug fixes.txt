@@ -1,0 +1,340 @@
+bug fixes
+=============================
+
+Ok, there are some things we need to clean up and fix.
+
+- Training.  Right now if a warrior trains in something, it seems that they are automatically successful.  The success of training should depend on a few things.
+
+ 	- The Intelligence of the warrior and the Constitution of the warrior play a big factor.  Higher intelligence makes it easier to learn weapon skills and non weapon skills.
+ 	- Constitution helps with increasing the attributes.  
+		- There should be a formula put on training.  Each skill level that it gained should be harder to attain.  So let's say I wanted to train skills in Initiative.  I have an average intelligence of 12.  I have 0 skills currently in initiative.  With that intelligence and this being the first skill in that area, the success rate should be realistic.  an average intelligence person can pick something up relatively easy, but is not guaranteed.  So for sake of this example, let's say that they initial success rate ios at around 75%.  If the intelligence is increased, the success rate increases.  For example if I increase the Intelligence to 13 that increases my success rate to say 76% or 77%.  Now let's say that my Int is still12 and I successfully learned the first skill level.  expanding on that, so if an intelligence 12 warrior has a 75% chance of learning the first Initiative skill, then the 2nd skill will be slightly more difficult to attain.  Perhaps it drops the success rate say 5-7%.  If the Intelligence is increased, then an increase would raise the success rate 2.5%.   To put it in better terms.  Int 12, 0 skill, a 75% success rate.  Int 12, 1 skill in an area 68% success rate.  Int 12, 2 skills in an area 61%.  Now, if the Int increases from 12 to 13 and the warrior has a level 2 in a skill then the success rate would go from 61% up to 63.5%.  I hope that makes sense.
+
+		- Now with the attribute increases, those are influenced by the Constitution score.  The higher the constitution score, the higher the success rate in increasing attributes.  The percentage success rate is dependent on the Constituition score.  To give a real life example, a warrior with an 18 constitution should be able to increase any one attribute by 5-6 points realtively easy.  If they trained in that attribute 3 times per fight, I would expect them to attain the 6th increase somewhere around their 10th fight.  All increases to that attribute after attaining the 6th increase is much more difficult, regardless of their constitution score.  
+
+- When a warrior dies on their turn, they should not train in any skills or attributes.  They are dead and can't train.
+
+- Monster fights.  When a warrior is chosen to fight against a monster, those fights need to always end in death.  There is a very slim chance that the PC actually kills a monster.  If that happens, then that PC character becomes the monster.  Their stats should be boosted to reflect that new role.  Also, the monsters record will always be 0-0-0 on the fight report.  They are not allowed to increase their record.
+
+- Peasant fights - Peasants records should never change from 0-0-0.  we also need to increase the difficulty of the peasants slightly.  not too much though as they are meant to be "fodder" for the players, but I want them to at least present a slight challenge to the player
+
+- When I select a team in the tree, if I click on the team name, then the part of the screen that would normally show the warrior stats and strats would show the teams overall record, and their record over the last 5 turns. (this should also include the turn range that covers those 5 turns). For example if a team is 17-8-2 over a 5 turn span, let's show the turn range like turns 4-9 or somethign like that.  
+
+- When the user clicks on the manager bname in the warrior tree, we displpay the total overall record for that manager.  This is sthe cumulative record for all the teams they manage.  This number would include the cumulative record of any teams that were replaced as well.  
+	- Example:
+		- Team 1 has a record of 35-15-4
+		- Team 2 has a record of 22-18-1
+		- Team 3 has a record of 24-21-2
+		- team 4 has a record of 19-26-0
+		- team 5 has a record of 32-23-6
+		- retired/replaced team had a record of 9-31-0
+
+		the overall record for that manager would be displpayed as 141-134-13
+
+		we can add a checkbox to exclude the archived teams which would then give our example a record of 132-103-13
+
+- Need to have the ability to upload all teams for a manager at 1 time.  we have that checkbox to run next turn, we should make sure that is what is looked at wehn uploading to the server, or when running locally.  We should be able to run all teams from a manager locally for testing purposes.
+
+- Not sure how the user downloads the processed turn from the server, or how the fights get pusehd to each manager
+
+- Replacement warriors.  When a warrior is slain in a fight, then we do not want to remove them from the team tree before a new replacement is created.  If a warrior is slain on a turn, then the replacment tab for that warrior slot becomes active and has a replacement roll-up  so that the player can create a new replacement warrior.  This works similar to a new team, however, we do not need to add a team name as the replacement is already on a team at that point.  It should basically have the following:
+
+Name
+Race
+Gender
+
+Strength - <base value>
+Dexterity - <base value>
+Constitution - <base value>
+Intelligence - <base value>
+Presence - <base value>
+Size - <base value>
+
+user can add 16 points to base values
+
+<save button> <cancel button>
+
+Save button is not active until the user adds their 16 points.  Again, the same rules apply for replacements as they do for new team warriors.  56 points total for the base amounts, user can add 16 points, but no more than 7 to any one attribute and nothing can exceed 25.  Cannot decrease a base value at all.
+
+
+- When a wariror from a team dies, we need to make sure that the fight result (listed as a loss in the overall team records) is included in the team record.  For example. if a team has a record of 32-18-1, and that turn the warriors on that team went 1-4-0 and one of the warriors on that team died, then the team record would go to 33-22-1.  The dead warrior would remain in the warrior tree with an icon to show that they were dead. (perhaps a small skull and crossbones, or a small tombstone)  That warrior slot then has the replacement tab activated and a base replacement rollup is available.  Once that replacement warrior is saved, then they populate the warrior tree in the same spot as the dead warrior.  The dead warrio is then archived on a new tab that we create called archives.  On the archive tab, we would move the warrior stat/strat tab informatio to that tab.  Since they are dead at this point, they can  no longer fight, but we keep the visual snapshot of the warriors attributes, skills and everything for historic record keeping.
+
+- I will want to add a new weapon to the mix.  I want to add a Short Spear.  this would be a lunging weapon, a little heavier than a Javelin and does more damage than the javelin.  Not quite the size of a Boarspear and does slightly less damage, on average than the boarspear.
+Here are my thoughts on what it would be for a weapons block:
+
+"short_spear": Weapon(
+        skill_key     = "short_spear",
+        display       = "Short Spear",
+        weight        = 3.0,
+        throwable     = True,
+        two_hand      = False,
+        category      = POLEARM_SPEAR,
+        charge_attack = True,
+        notes=(
+            "Light and potent weapon. Effective in Lunge, Wall of "
+            "Steel, and Strike. Can throw. Use with a shield. "
+            "Great attack rate and average to above average damage. Favored by all races."
+        ),
+        preferred_styles=["Lunge", "Wall of Steel", "Strike", "Opportunity Throw"],
+    ),
+
+- Need to have intervention on fights that are lengthy. Anything fight that gets to the 8 minute mark, the ref starts to intervene somehow.  Not sure if that means they start throwing objects at the gladiators to inflict damage to get them into a surender situation.  One thing that I want to avoid is the Ref actually killing gladiators.  
+
+- Need to make sure that permanent injuries are working.  Make sure the a permanent injury actually hinders a warrior in some way.  For example, if they have a level 6 injury to their primary arm, maybe their attacks are slightly less effective or they fumble with their weapon more often. This is something that as the injusry gets more debilitating, the effects are more pronounced.  A level 1 injury probably isn't really noticed.  Maybe a twinge of pain or something like that, but doesn't really effect their ability to fight.  As that perm level goes up, then the effects are more prevelant.  We can work on perms more later.
+
+
+
+Features
+=============================
+- We need the ability to replace or remove a team.  If a user chosses to replace a team,then they can select a checkbox or something and when they do that, it allows them to use the create new team feature again.  Once they create the new team, create teh warriors for that new team and click save, then the old team is replaced with the new team.  The warriors fromt he old team are then moved to the archive tab for that team slot for historical record keeping.
+
+- Need logs for each turn.  This will be a log that lists the individual fights.  this log would be available until the next turn is run, when on the logs are overwritten with teh new turn data.  In the logs I would like to see the individual fights and the rolls and results during combat.  I need this so that I can read through the data and determine if weapon damage, armor durability, or anything of that nature needs modified.  Also it will tell me if the triggers are actually working or not as it should show me the hit points of a warrior when a trigger is used or the stamina that the warrior is at when a tired strategy is activated.  I need them for continuous improvement of the game.
+
+	- I would like a separate log for the fights and results as well.  A more general log to show that each warrior was matched again st someone of relative experience.  This is used to make sure that the matchmaking engine is working as expected.
+
+- I need a way within the league server admin panel to re-run a specific turn or re-run the current turn.  Also eed a progeess meter on this screen to show the progress of the turn results.  
+
+- I need a button or a way to reset the arena completely.  Once I get through the testing, I want to be able to rest the arena ack to turn 1 with all previous results removed.  
+
+- We need to create 10-12 Managers to use as filler warriors that are not jsut the NPC peasants.  These should be AI managed teams so they would act just like a real person, but the machine is actually running the teams and entering them in to the arena.  (Not sure how feasable this is though)
+
+- I would like to create an arena newsletter for each turn.  In this we would have soemthing like this:
+
+Date   : 02/26/2026    
+
+<arenaname> ARENA               
+TURN 8
+
+The Top Teams
+
+Career Win-Loss Record           W   L  K    %  Win-Loss Record Last 5 Turns    W  L K
+=======================================================================================
+ 1/ 2*ARCAN BBQ 2025 (236)      30  19 13 61.2   1/ 1*HELL'S SENTINELS (234)   10  8 4
+ 2/ 1*HELL'S SENTINELS (234)    36  25 12 59.0   2/ 5*ARCAN BBQ 2025 (236)      8  4 3
+ 3/ 3*BLOOD GANG 825A (214)     27  23 12 54.0   3/ 3*VALHALLA BOUND (240)      8  7 3
+ 4/ 4*NORSEMEN (228)            35  20 11 63.6   4/ 2*BLOOD GANG 825A (214)     8  5 2
+ 5/ 7*MOTU (246)                32  25 10 56.1   5/ 4*VULGAR UNICORN (220)      7  5 2
+ 6/ 5*VALHALLA BOUND (240)      33  24  9 57.9   6/12*MOVIE PUNS (230)          6  6 2
+ 7/ 6*NEON DREADWYRMS (253)     23  22  9 51.1   7/ 9*PREDATORS (223)           4  6 2
+ 8/ 8*VULGAR UNICORN (220)      24  24  9 50.0   8/ 7*DERANGED 5 (244)         11  4 1
+ 9/ 9*OF WOLF & VENOM 2 (221)   13  19  9 40.6   9/10*MOTU (246)               11  5 1
+10/11*MONSTERS 25M5 (252)       33  19  8 63.5  10/14*NORSEMEN (228)            9  5 1
+11/10*TASK FORCE GREEN (225)    33  22  8 60.0  11/13*TASK FORCE GREEN (225)    9  6 1
+12/12*PREDATORS (223)           23  22  8 51.1  12/ 8*MEDAL OF HONOR 6 (250)    8 12 1
+13/13*MEDAL OF HONOR 6 (250)    37  30  7 55.2  13/18*MONSTERS 25M5 (252)       7  6 1
+14/16*MAID NO MORE (237)        18  28  7 39.1  14/15*BIG LAKE FEELS (229)      7  7 1
+15/14*KILLING GROUND (219)      27  25  6 51.9  15/17*MAID NO MORE (237)        5  7 1
+16/19*MOVIE PUNS (230)          24  23  6 51.1  16/ 6*OF WOLF & VENOM 2 (221)   3  2 1
+17/15*BIG LAKE FEELS (229)      25  25  6 50.0  17/11*GONE FISHING PA (247)     7  5 0
+18/18*DERANGED 5 (244)          28  22  5 56.0  18/22*13 MONKEYS (238)          4  8 0
+19/17*ONE HIT WONDERS (222)     21  18  5 53.8  19/16*KILLING GROUND (219)      4 10 0
+20/20*GONE FISHING PA (247)     25  21  4 54.3  20/20*BLOODY MISFITS 2505 (227) 3  3 0
+21/21*THE KOP REAPER'S (216)    15  16  3 48.4  21/21*NEON DREADWYRMS (253)     3  6 0
+22/23*13 MONKEYS (238)          15  35  2 30.0  22/23*THE KOP REAPER'S (216)    2  2 0
+23/22*BLOODY MISFITS 2505 (227) 10  26  2 27.8  23/19*ONE HIT WONDERS (222)     2  4 0
+24/24*EMU'S CHOICES (251)        7  31  2 18.4  24/25*WYLDRAGE ATDOOM (254)     1  5 0
+25/25*WYLDRAGE ATDOOM (254)      6  30  0 16.7  25/24*EMU'S CHOICES (251)       1  6 0
+
+
+							Arena Happenings
+
+Well, what are you looking at, <arenaname>?  Ain't you never seen Snide Clemens 
+before?  Ah, shaddup and listen to my news.  MOVIE PUNS turned their 1-2-1 turn into 
+a 6th place rank in the listings this turn.  Any better than this, and you get put on 
+hit lists.  Gee, I'm impressed, a 3-1-1 is nice, but don't get cocky, MONSTERS 25M5, 
+the Fates teach humility, and the Fates are proud.  Of course, we're all terribly 
+impressed to see BASILISK win a fight and gain 26 points, terribly.  Tsk, tsk, KARK 
+beat THE BLOB and THE BLOB lost 13 points.  You're breakin' my heart.  I'm not in a 
+very good mood today, but why am I telling you this?  You want to know what's new, 
+don't you, DUSKMOOR?   
+     Well, let's take a look at some more misdeeds of you miserable sword-boys.  
+What's the big D?  TASK FORCE GREEN was the most avoided team?  Bunch of lily 
+livered... grumble... mumble... curse...  And it looks like OF WOLF & VENOM 2 avoided 
+them the most this turn.  What a pack of would be losers, if you ask me.  Hmph.  Ooh, 
+I'm frightfully impressed, WILLIAM L. WELLER was this turn's most challenged warrior. 
+Watch that ego swell, sports fans.   
+     Ah, now we come to my favorite part, where we see all the guys who are dead and 
+gone, and get to see if their team cared.  Nipped in the bud, you might say, was 
+VARDA of VALHALLA BOUND this turn.  Course, I wouldn't say that, so much as have a 
+belly laugh.  Heh heh.  And now a passing thought on a warrior dying young (COBRA of 
+OF WOLF & VENOM 2):  You had your chance and now you're dead.  Oh well...  Nipped in 
+the bud, you might say, was OATH of BLOOD GANG 825A this turn.  Course, I wouldn't 
+say that, so much as have a belly laugh.  Heh heh.  And now a passing thought on a 
+warrior dying young (HIGHWAY of TASK FORCE GREEN):  You had your chance and now 
+you're dead.  Oh well...  Consider GOLDFINGER gone, and ONE HIT WONDERS unfeeling, 
+letting the bloodfeud for hers death go unrevenged.  Three down, and one turn to go 
+for TASK FORCE GREEN to call in the bloodfeud against COBRA, else CYNDER is but small 
+history.  Not that I'll be buying the drinks, but I'll be glad to see WARRIOR GAMES 
+and MOVIE PUNS at The Warty Toad tonight celebrating their bloodfeud victory over 
+TRANSFUSION.  Well, ODDVAR THE OLD, I guess VALHALLA BOUND stable was just too 
+chicken to bloodfeud you over ARHYLR.  I guess cowardice is part of managing a team.  
+A big yahoo goes out to TRI-KLOPS this turn, for revenging MOTU's bloodfeud against 
+VALHALLA BOUND's warrior VARDA.  Heh, heh, heh.  It's about time C.Y.P.B. got beat 
+for picking on warriors like TRUMAN OLSON.  Bravo, MEDAL OF HONOR 6.  See you at The 
+Warty Toad.  So, NEON DREADWYRMS, just going to let GOLDFANG rot in peace are we?  
+Bye bye Bloodfeud, hello gloating arrogant PROTECTOR.  Titanium shields and bamboo 
+daggers, guess what brave team is developing these kinds of weapons?   
+     I was about to buy a new quill pen the other day, but some fighter took it for 
+an epee.  Forgive me for writing with a dagger.  Just wait 'till next time I show up 
+here, I won't be so nice!  So nyaaah!  Glad to see the back of this place
+
+-- Snide Clemens 
+
+CHAMPION                       W   L  K Popularity  TEAM NAME 
+===========================================================================                 
+SUNRISE VICTORY           	  20  22  0  97         WARLORDS (14)             
+
+ELITES                         W   L  K Popularity  TEAM NAME 
+===========================================================================                 
+MIST SONG                 	  11   6  0  82         WARLORDS (14)             
+-EMILE                     	   8   4  0  69         FAR TRAVELERS (95)        
+
+VETERANS                       W   L  K Popularity  TEAM NAME 
+===========================================================================                 
+-MANKAR                    	   9   3  0  66         FAR TRAVELERS (95)        
+
+INITIATES                      W   L  K Popularity  TEAM NAME 
+===========================================================================                 
+THE PHOOL                 	   6   4  0  53         WARLORDS (14)             
+RYZ RAZORHAND             	   7   4  1  38         DARQUE KNIGHTS (22)       
+-GAMERA                    	   7   5  1  35         FAR TRAVELERS (95)        
+MACE FACE                 	   4   4  0  35         WARLORDS (14)             
+ENID RAVENSCAR            	   6   7  1  34         DARQUE KNIGHTS (22)       
+
+ROOKIES                        W   L  K Popularity  TEAM NAME 
+===========================================================================                 
+CAVENDISH VANNIN          	   2   1  0  25         I-1/25 MANX CORPS (97)    
+-QUANG                     	   6   6  0  24         FAR TRAVELERS (95)        
+TYNWALD                    	   3   0  0  24         I-1/25 MANX CORPS (97)    
+
+RECRUITS                       W   L  K Popularity  TEAM NAME
+===========================================================================                  
+LARIS MOONSONG            	   4   7  0  19         DARQUE KNIGHTS (22)       
+ORC MONK                  	   2   1  0  19         WARLORDS (14)             
+MEC VANN IRONHAND         	   2   1  0  14         I-1/25 MANX CORPS (97)    
+DEEMSTER DHONE            	   1   2  0  14         I-1/25 MANX CORPS (97)    
+LORD MANN CREGBAL         	   2   1  0   8         I-1/25 MANX CORPS (97)    
+
+'-' denotes a warrior who did not fight this turn.
+
+THE DEAD            W  L K  TEAM NAME          SLAIN BY         TURN 
+===========================================================================
+NIX NIGHTSHADE      2  4 0  DARQUE KNIGHTS     SPYMASTER         280 
+ 
+LAST WEEK'S FIGHTS
+====================================================================================
+NIX NIGHTSHADE was butchered by SPYMASTER in a 1 minute Monster fight.
+CAVENDISH VANNIN was bested by RYZ RAZORHAND in a 2 minute Challenge duel.
+MEC VANN IRONHAND was demolished by MACE FACE in a 1 minute uneven Challenge fight.
+TYNWALD bested LARIS MOONSONG in a 2 minute Challenge contest.
+FREYA BEARMAW was subdued by PSYDE in a 2 minute master's competition.
+SUNRISE VICTORY vanquished NOBLE ASSASSIN in a 1 minute mismatched Title fight.
+MIST SONG handily defeated FEISTY RUFFIAN in a action packed 1 minute uneven fight.
+THE PHOOL vanquished ENID RAVENSCAR in a 1 minute uneven duel.
+ORC MONK narrowly defeated LORD MANN CREGBAL in a 5 minute beginner's duel.
+DEEMSTER DHONE overpowered SHIFTYEYED VOLUNTEER in a 3 minute one-sided fight.
+
+                       BATTLE REPORT
+
+    MOST POPULAR RACE                RECORD DURING THE LAST 10 TURNS
+=============================================================================      
+|RACE              FIGHTS       RACE  		       W -   L -  K      PERCENT|
+|DWARF		          5         DWARF		       6 -   3 -  0         67  |
+|HUMAN                3         HUMAN		       4 -   2 -  0         67  |
+|HALFLING	          2         HALFLING		  10 -   5 -  0         67  |
+|ELF		          2         ELF			      26 -  17 -  1         60  |
+|HALF-ELF             2         HALF-ELF 		  22 -  15 -  2         59  |
+|HALF-ORC             1         HALF-ORC	      11 -   9 -  0         55  |
+
+
+                      TOP WARRIOR by RACE
+
+RACE   			 WARRIOR                     W   L  K  TEAM NAME 
+=============================================================================                
+DWARF 		     MIST SONG          	    11   6  0  WARLORDS (14)
+HUMAN			 THE PHOOL               	 6   4  0  WARLORDS (14)
+HALFLING	     RYZ RAZORHAND           	 7   4  1  DARQUE KNIGHTS (22)
+ELF 			 ELFY MCELFERSON   		 	 8   2  2  ELVES ALIVE! (7) 
+HALF-ELF		 TRIPPIN' BALLS				13   6  1  ON SOMETHING (12)
+HALF-ORC		 DOOM SLAYER				11   1  4  ORCLAND RAIDERS (5)
+
+
+This is a suggestion on the style of the newsletter.  I do like the  tier list of 
+CHAMPION
+ELITES
+VETERANS
+INITIATES
+ROOKIES
+RECRUITS
+
+The manner in which we rank them is subjective.  All warriors with 5 fights and under are in the RECRUITS Tier automatically.  From there, they move up the rankings based on wins and popularity.  We cannot have a CHAMPION until they have at least 10 fights.  At that point the CHAMPION is the warrior that is the most popular.  If 2 or more warriors tie for most popular, then we look at overall record with the best record getting the title.  If we still have a tie, then the Champion is left empty until someone meets the criteria to be the champion.  From that point on, the Champion would be the warrior that beats the current Champion.  If the current Champion is beaten by a peasant, then the Championship is given to the warrior that meets the original criteria.  I also like the idea of the arena being named Bloodspire Arena.  That is a pretty cool name.  So the newsletter should be like this at the header:
+
+Date   : 02/26/2026    
+
+BLOOSDSPIRE ARENA (1)              TURN - 8
+
+- Challenge tab would list the warriors that are in the valid challenge range of a warrior.  we set those parameters earlier 
+
+
+
+
+
+Potential upgrades
+==============================================================================
+New Skills
+- CLEAVE
+- ACROBATICS
+- RIPOSTE
+- COMBAT TACTICS
+	- BASICALLY YOU LEARN A RANDOM SKILL FROM YOUR OPPONENT BASED ON WHAT THEY ARE MOST PROFICIENT AT
+		- FOR EXAMPLE, IF YOU SELECT COMBAT TACTICS, AND YOUR OPPONENT IS HIGHLY SKILLED IN FEINT, THEN YOU HAVE A HIGHER CHANCE OF LEARNING THAT SKILL FROM YOUR OPPONENT.
+
+- UNDER PREFERENCES
+	- A HIDE RECORD IN THE TREE FUNCTION
+
+- ACTIONS MENU
+	UPLOAD TO SERVER
+	DOWNLOAD FROM SERVER
+	REGISTER MANAGER ACCOUNT (THIS SEEMS LIKE THIS IS THE LEAGUE SETTINGS FUNCTION)
+	CREATE NEW TEAM
+	RUN TURN LOCALLY
+	RETIRE/REPLACE TEAM
+		- THIS WOULD THEN ILLICIT A DROP DOWN ASKING WHAT TEAM THEY WANT TO REPLACE
+			- SELECTED TEAM IS TEHN MOVED TO ARCHIVES TAB
+			- NEW TEAM CREATE OPENS
+				- USER CREATES NEW TEAM WITH 5 NEW WARRIORS
+			- NEW TEAM APPEARS WHERE OLD TEAM WAS LOCATED.  
+
+- FOR THE REPLACEMENT WARRIORS, PERHAPS WE ALLOW A 1 TIME RE-ROLL IF THE INITIAL REPLACEMENT IS NOT GOOD, THEY HAVE THE CHANCE TO POSSIBLY GET A BETTER REPLACEMENT, BUT THAT IS NOT GUARANTEED.  THEY ARE STUCK WITH THE RE-ROLL VALUES THOUGH.  BASICALLY THIS IS A GAME OF CHANCE.  YOU MAY GET A BETTER REPLACEMENT, YOU MAY GET A WORSE ONE.  
+
+
+- A RIVALS/RECORDS TAB.  THIS TAB WOULD HAVE A CUMULATIVE RECORD FOR THAT MANAGER AGAINST ALL OTHER MANAGERS, INCLUDING THE PEASANTS AND MONSTERS
+	- ALONG WITH THIS WE WOULD HAVE A BEST OF SUBSET OF DATA
+		- BEST OF EACH RACE
+		- BEST AT A CERTAIN FIGHT LEVEL 
+			- BEST WARRIOR(S) AT 25 FIGHTS
+			- BEST WARRIOR(S) AT 50 FIGHTS
+			- BEST WARRIOR(S) AT 75 FIGHTS
+			- BEST WARRIOR(S) AT 100 FIGHTS
+			- BEST WARRIOR(S) AT 150 FIGHTS
+			- BEST WARRIOR(S) AT 200+ FIGHTS
+		- WARRIOR(S) WITH THE MOST KILLS
+		- LONGEST WINNING STREAK (EACH TEAM)
+		- LONGEST LOSING STREAK (EACH TEAM)
+
+- A WEAPONS REPORT (WE DO THIS FOR ALL THE WEAPONS)
+	- WEAPON NAME (NUMBER OF WARRIORS THAT USED THIS WEAPON)
+
+- SCOUTING REPORT
+	- USER IS ALLOWED TO SELECT UP TO 3 WARRIORS IN THE ARENA TO "SCOUT" (THIS IS MANAGER SPECIFIC. MEANING THAT IT LIMITS EACH MANAGER TO 3 SCOUTING REPORTS FOR EACH TURN.  THAT RESETS EACH TURN.  SO EVEN IF A MANAGER HAS 25 WARRIRORS, THEY ARE ONLY ALLOWED TO SCOUT UP TO 3 OPPONENTS)
+		- GAIN INSIGHT INTO WHAT WEAPONS/ARMOR THE WARRIOR USES
+		- THE REPORT GIVES THE MANAGER THE MOST RECENT FIGHT THAT WARRIOR HAD.  JUST SHOWS THE FIGHT VERBIAGE, AND NOT THE STRATEGY THEY USED.  THE PLAYER WOULD NEED TO TRY TO FIGURE THAT OUT FROM THE FIGHT DIALOGUE.  WE CAN LIST THE WWEAPONS AND ARMOR THOUGH AS THAT WOULD BE SOMETHING A SCOUT WOULD BE ABLE TO SEE ANYWAY.
+		- WITH THIS WE COULD ADD SOME VERBIAGE IN THOSE FIGHTS THAT THERE IS A SCOUT FROM WHATEVER MANGERS STABLE ATTENDING THE FIGHT.  DOES NOT SPECIFY WHICH WARRIOR IS BEING SCOUTED.
+
+
+
+
+
+
+
+
+

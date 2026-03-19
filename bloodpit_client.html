@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Blood Pit Client - v1.2</title>
+<style>
+/* ============================================================
+   WINDOWS CLASSIC THEME
+   ============================================================ */
+:root {
+  --bg:       #d4d0c8;
+  --white:    #ffffff;
+  --lt-gray:  #e4e0d8;
+  --mid:      #808080;
+  --dark:     #404040;
+  --title:    #000080;
+  --title-tx: #ffffff;
+  --sel:      #000080;
+  --sel-tx:   #ffffff;
+  --font:     'Tahoma', 'Arial', sans-serif;
+  --fs:       11px;
+  --input-bg: #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: var(--bg); font-family: var(--font); font-size: var(--fs); color: #000; user-select: none; overflow: hidden; }
+#app { width:100%; height:100%; display:flex; flex-direction:column; }
+a { color: inherit; text-decoration: none; }
+
+/* Borders */
+.r { border: 2px solid; border-color: var(--white) var(--mid) var(--mid) var(--white); }
+.s { border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); }
+.flat { border: 1px solid var(--mid); }
+
+/* Buttons */
+button {
+  background: var(--bg); border: 2px solid;
+  border-color: var(--white) var(--mid) var(--mid) var(--white);
+  padding: 3px 14px; font: var(--fs) var(--font);
+  cursor: default; min-width: 72px; color: #000;
+}
+button:active { border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 4px 13px 2px 15px; }
+button:disabled { color: var(--mid); }
+button.sm { min-width: 28px; padding: 1px 6px; font-size: 10px; }
+button.wide { min-width: 120px; }
+
+/* Inputs + Selects */
+input[type=text], input[type=password], input[type=email], input[type=number] {
+  background: var(--input-bg); border: 2px solid;
+  border-color: var(--mid) var(--white) var(--white) var(--mid);
+  padding: 2px 4px; font: var(--fs) var(--font); color: #000; outline: none;
+}
+input[type=text]:focus, input[type=password]:focus, input[type=email]:focus { border-color: var(--mid) var(--white) var(--white) var(--mid); }
+input.ro { background: var(--bg); cursor: default; }
+select {
+  background: var(--input-bg); border: 2px solid;
+  border-color: var(--mid) var(--white) var(--white) var(--mid);
+  padding: 1px 2px; font: var(--fs) var(--font); color: #000; cursor: default;
+  appearance: auto;
+}
+input[type=number] { width: 44px; text-align: center; }
+
+/* Title bar */
+.title-bar {
+  background: var(--title); color: var(--title-tx); font-weight: bold;
+  padding: 3px 6px; display: flex; align-items: center; gap: 6px; font-size: 11px;
+}
+.title-bar-btns { margin-left: auto; display: flex; gap: 2px; }
+.title-btn {
+  width: 16px; height: 14px; line-height: 12px; text-align: center;
+  background: var(--bg); border: 1px solid var(--mid); font-size: 9px;
+  color: #000; padding: 0; min-width: 0; cursor: default;
+}
+
+/* Tabs */
+.tabs { display: flex; padding: 4px 6px 0; gap: 2px; }
+.tab {
+  padding: 4px 14px 3px; cursor: default; position: relative; bottom: -2px;
+  background: var(--bg); border: 2px solid;
+  border-color: var(--white) var(--mid) var(--bg) var(--white);
+  font: var(--fs) var(--font); z-index: 1;
+}
+.tab:not(.active) { background: #bbb8b0; bottom: 0; padding-top: 3px; border-bottom-color: var(--mid); }
+.tab-body { border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 10px; background: var(--bg); }
+.tab-content { display: none; } .tab-content.active { display: block; }
+
+/* Group boxes */
+.group {
+  border: 2px solid var(--mid); margin: 6px 4px 4px; padding: 10px 8px 6px;
+  position: relative; background: var(--bg);
+}
+.group-label {
+  position: absolute; top: -9px; left: 8px;
+  background: var(--bg); padding: 0 4px; font-weight: bold;
+}
+
+/* Tables */
+table.grid { border-collapse: collapse; width: 100%; }
+table.grid th {
+  background: var(--bg); border: 1px solid var(--mid);
+  padding: 2px 6px; text-align: center; font-weight: normal; white-space: nowrap;
+}
+table.grid td {
+  border: 1px solid var(--mid); padding: 1px 4px;
+  white-space: nowrap; font-size: 11px;
+}
+table.grid tr.sel td { background: var(--sel); color: var(--sel-tx); }
+table.grid tr:not(.sel):hover td { background: #e8e8e4; }
+table.grid tr.sel td input, table.grid tr.sel td select { background: var(--sel); color: var(--sel-tx); }
+
+/* Tree */
+#tree-panel {
+  width: 280px; min-width: 280px; overflow-y: auto; overflow-x: hidden;
+  border-right: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid);
+  background: var(--input-bg); padding: 2px 0;
+}
+.tree-row {
+  display: flex; align-items: center; padding: 1px 2px; cursor: default; white-space: nowrap;
+}
+.tree-row:hover { background: #ddd; }
+.tree-row.sel { background: var(--sel); color: var(--sel-tx); }
+.tree-row.sel img, .tree-row.sel .ico { filter: invert(100%); }
+.tree-exp { width: 14px; font-size: 9px; text-align: center; flex-shrink: 0; }
+.tree-ico { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; margin-right: 2px; }
+.tree-lbl { font-size: 11px; }
+.tree-mgr { font-weight: bold; }
+
+/* Menu bar */
+#menu-bar { background: var(--bg); border-bottom: 1px solid var(--mid); display: flex; padding: 1px 2px; gap: 0; }
+.menu-item { padding: 2px 8px; cursor: default; }
+.menu-item:hover { background: var(--sel); color: var(--sel-tx); }
+
+/* Main layout */
+#app { display: flex; flex-direction: column; height: 100vh; }
+#main-body { display: flex; flex: 1; overflow: hidden; }
+#content { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px; }
+
+/* Panels */
+.panel-label { font-weight: bold; margin-bottom: 4px; font-size: 11px; }
+.field-row { display: flex; align-items: center; margin-bottom: 4px; gap: 4px; }
+.field-lbl { min-width: 80px; text-align: right; }
+.field-val { background: var(--input-bg); border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 1px 4px; font: var(--fs) var(--font); }
+
+/* Warrior stat view */
+.stat-val { display: inline-block; min-width: 70px; padding: 1px 4px; background: var(--input-bg); border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); }
+.strat-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.strat-table th { background: var(--bg); border: 1px solid var(--mid); padding: 2px 4px; font-weight: bold; text-align: left; }
+.strat-table td { border: 1px solid var(--mid); padding: 1px 2px; }
+.strat-table .row-num { width: 18px; text-align: center; font-weight: bold; }
+.strat-table select { border: none; background: transparent; padding: 0; width: 100%; font: var(--fs) var(--font); }
+.strat-table input[type=number] { border: none; background: transparent; width: 30px; }
+
+/* Skills / Injuries panels */
+.text-panel { background: var(--input-bg); border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 4px 6px; height: 120px; overflow-y: auto; font-size: 11px; line-height: 1.6; }
+
+/* Login dialog */
+#login-dialog {
+  width: 420px; background: var(--bg); position: absolute;
+  top: 80px; left: 50%; transform: translateX(-50%);
+  border: 2px solid var(--mid); box-shadow: 2px 2px 0 var(--dark);
+}
+.form-grid { display: grid; grid-template-columns: 130px 1fr; gap: 4px 8px; align-items: center; padding: 8px; }
+.form-grid label { text-align: right; }
+.form-grid input { width: 100%; }
+.btn-row { display: flex; gap: 6px; padding: 8px; justify-content: flex-end; border-top: 1px solid var(--mid); }
+
+/* Team creation */
+#ct-dialog { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px; padding: 4px; overflow-y: auto; }
+.stat-spin { display: flex; align-items: center; gap: 3px; }
+.stat-spin input { width: 50px; text-align: center; }
+
+/* Status / error messages */
+.msg { padding: 4px 8px; margin: 4px 0; font-size: 11px; }
+.msg.err { background: #fdd; border: 1px solid #c00; color: #800; }
+.msg.ok  { background: #dfd; border: 1px solid #080; color: #040; }
+
+/* Points counter */
+.pts-box { background: var(--input-bg); border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 4px 12px; font-size: 13px; font-weight: bold; text-align: center; min-width: 50px; }
+
+/* Divider */
+.vsep { width: 6px; border-left: 2px solid; border-color: var(--mid) var(--white); margin: 0 4px; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 16px; height: 16px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--bg); border: 2px solid; border-color: var(--white) var(--mid) var(--mid) var(--white); }
+::-webkit-scrollbar-button { background: var(--bg); border: 2px solid; border-color: var(--white) var(--mid) var(--mid) var(--white); height: 16px; width: 16px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   STATE
+   ============================================================ */
+const S = {
+  view:        'login',   // 'login' | 'main' | 'create_team' | 'turn_results'
+  loginTab:    'new',     // 'login' | 'new'
+  account:     null,
+  teams:       {},
+  sel:         { type: null, teamId: null, wIdx: null },
+  wTab:        'stats',
+  expanded:    {},
+  gd:          null,
+  ct:          null,
+  msg:         '',
+  msgType:     'ok',
+  running:     false,     // true while turn is being processed
+  turnResults: null,      // last turn result payload from server
+  narrative:   null,      // {text, title} for overlay
+  league: {               // league server connection settings
+    url:         '',      // e.g. http://192.168.1.5:8766
+    managerId:   '',
+    managerName: '',
+    password:    '',
+    uploaded:    false,
+    resultsReady:false,
+  },
+};
+
+/* ============================================================
+   API
+   ============================================================ */
+const API = {
+  async get(path) {
+    const r = await fetch(path); return r.json();
+  },
+  async post(path, body) {
+    const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    return r.json();
+  },
+  async put(path, body) {
+    const r = await fetch(path, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    return r.json();
+  },
+};
+
+/* ============================================================
+   UTILITIES
+   ============================================================ */
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function el(id) { return document.getElementById(id); }
+function setMsg(text, type='ok') { S.msg = text; S.msgType = type; }
+
+function opts(items, val, blankLabel) {
+  let h = blankLabel ? `<option value="">${esc(blankLabel)}</option>` : '';
+  items.forEach(it => { h += `<option value="${esc(it)}" ${it===val?'selected':''}>${esc(it)}</option>`; });
+  return h;
+}
+
+function fmtRecord(w) { return `${w.wins||0}-${w.losses||0}-${w.kills||0}`; }  // W-L-K
+
+async function loadTeams() {
+  if (!S.account) return;
+  for (const tid of S.account.team_ids) {
+    if (!S.teams[tid]) {
+      const r = await API.get(`/api/team?id=${tid}`);
+      if (r.success) S.teams[tid] = r.team;
+    }
+  }
+}
+
+async function reloadTeam(tid) {
+  const r = await API.get(`/api/team?id=${tid}`);
+  if (r.success) S.teams[tid] = r.team;
+}
+
+function getSelWarrior() {
+  if (S.sel.type !== 'warrior') return null;
+  const team = S.teams[S.sel.teamId];
+  if (!team) return null;
+  return team.warriors[S.sel.wIdx] || null;
+}
+
+/* ============================================================
+   RENDER DISPATCHER
+   ============================================================ */
+function render() {
+  const app = el('app');
+  clearTimeout(_saveTimer);
+  if (S.view === 'login')            app.innerHTML = buildLogin();
+  else if (S.view === 'main')        app.innerHTML = buildMain();
+  else if (S.view === 'create_team') app.innerHTML = buildCreateTeam();
+  else if (S.view === 'turn_results') app.innerHTML = buildTurnResults();
+  // Narrative overlay is appended on top, not a full re-render
+  if (S.narrative) showNarrativeOverlay(); else hideNarrativeOverlay();
+  attachEvents();
+}
+
+/* ============================================================
+   LOGIN SCREEN
+   ============================================================ */
+function buildLogin() {
+  const isNew = S.loginTab === 'new';
+  return `
+<div style="background:#d4d0c8; width:100vw; height:100vh; display:flex; align-items:flex-start; justify-content:center; padding-top:80px;">
+  <div id="login-dialog">
+    <div class="title-bar">
+      <span>Blood Pit Client - v1.2</span>
+      <div class="title-bar-btns">
+        <button class="title-btn">_</button>
+        <button class="title-btn">□</button>
+        <button class="title-btn">✕</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${!isNew?'active':''}" id="tab-login">Login</div>
+      <div class="tab ${isNew?'active':''}" id="tab-new">New Player</div>
+    </div>
+    <div class="tab-body">
+      ${S.msg ? `<div class="msg ${S.msgType}">${esc(S.msg)}</div>` : ''}
+      ${isNew ? buildNewPlayerForm() : buildLoginForm()}
+    </div>
+  </div>
+</div>`;
+}
+
+function buildLoginForm() {
+  return `
+<div class="group">
+  <span class="group-label">Account Login</span>
+  <div class="form-grid">
+    <label>Manager Name</label><input type="text" id="l-name" autocomplete="off">
+    <label>Password</label><input type="password" id="l-pass">
+  </div>
+</div>
+<div class="btn-row">
+  <button id="btn-login">Login</button>
+</div>`;
+}
+
+function buildNewPlayerForm() {
+  return `
+<div class="group">
+  <span class="group-label">Account Setup</span>
+  <div class="form-grid">
+    <label>Manager Name</label><input type="text" id="n-name" autocomplete="off">
+    <label>Email Address</label><input type="text" id="n-email" autocomplete="email" placeholder="email@example.com">
+    <label>Password</label><input type="password" id="n-pass">
+    <label>Verify Password</label><input type="password" id="n-pass2">
+  </div>
+</div>
+<div class="btn-row">
+  <button id="btn-agreement" style="min-width:150px;">Read User Agreement</button>
+  <button id="btn-create">Create Account</button>
+</div>`;
+}
+
+/* ============================================================
+   MAIN SCREEN
+   ============================================================ */
+function buildMain() {
+  // NOTE: No id="app" wrapper here — the outer #app div (in the HTML body)
+  // is the permanent container. We only write its innerHTML.
+  return `
+<div style="display:flex; flex-direction:column; height:100%;overflow:hidden;">
+  ${buildMenuBar()}
+  <div style="display:flex; flex:1; overflow:hidden;">
+    <div id="tree-wrap" style="width:240px; min-width:200px; overflow-y:auto; background:#d4d0c8; border-right:2px solid #808080;">
+      ${buildTree()}
+    </div>
+    <div id="content" style="flex:1; overflow:auto; padding:6px; background:#d4d0c8;">
+      ${buildContent()}
+    </div>
+  </div>
+</div>`;
+}
+
+function buildMenuBar() {
+  const canAdd = S.account && S.account.team_ids.length < 5;
+  return `
+<div id="menu-bar" style="position:relative;">
+  <span class="menu-item">File</span>
+  <span class="menu-item">Edit</span>
+  <span class="menu-item">Preferences</span>
+  <span class="menu-item" id="menu-action" style="position:relative;">Action
+    <div id="action-dropdown" style="display:none; position:absolute; top:100%; left:0;
+         background:var(--bg); border:2px solid; border-color:var(--mid) var(--white) var(--white) var(--mid);
+         min-width:140px; z-index:999; box-shadow:2px 2px 0 var(--dark);">
+      <div class="menu-item" id="act-new-team"
+           style="padding:3px 12px; ${canAdd?'':'color:var(--mid); pointer-events:none;'}">
+        New Team${canAdd?'':' (max 5)'}
+      </div>
+      <div style="border-top:1px solid var(--mid); margin:2px 0;"></div>
+      <div class="menu-item" id="act-run-turn"
+           style="padding:3px 12px; ${S.sel.teamId?'':'color:var(--mid); pointer-events:none;'}">
+        Run Turn (Local)${S.sel.teamId?'':' — select a team'}
+      </div>
+      <div style="border-top:1px solid var(--mid); margin:2px 0;"></div>
+      <div class="menu-item" id="act-league-settings" style="padding:3px 12px;">
+        League Settings...
+      </div>
+      <div class="menu-item" id="act-league-upload"
+           style="padding:3px 12px; ${(S.sel.teamId&&S.league.managerId)?'':'color:var(--mid); pointer-events:none;'}">
+        Upload Turn to League${S.sel.teamId&&S.league.managerId?'':' — configure league first'}
+      </div>
+      <div class="menu-item" id="act-league-results"
+           style="padding:3px 12px; ${S.league.managerId?'':'color:var(--mid); pointer-events:none;'}">
+        Get League Results${S.league.managerId?'':' — configure league first'}
+      </div>
+    </div>
+  </span>
+  <span style="flex:1;"></span>
+  <span class="menu-item" id="menu-logout">Logout</span>
+  <span class="menu-item">Help</span>
+</div>`;
+}
+
+function buildTree() {
+  if (!S.account) return '<div id="tree-panel"></div>';
+  let h = `<div id="tree-panel">`;
+
+  // Manager row
+  const mSel = S.sel.type === 'manager' ? 'sel' : '';
+  h += `<div class="tree-row tree-mgr ${mSel}" id="tr-mgr"
+             onclick="treeSelectManager()" style="cursor:default;">
+    <span class="tree-exp"> </span>
+    <span class="tree-ico">⚑</span>
+    <span class="tree-lbl">${esc(S.account.manager_name)}</span>
+  </div>`;
+
+  for (const tid of S.account.team_ids) {
+    const team = S.teams[tid];
+    if (!team) continue;
+    const expanded = S.expanded[tid] !== false;
+    const tSel = (S.sel.type === 'team' && S.sel.teamId == tid) ? 'sel' : '';
+    h += `<div class="tree-row ${tSel}" id="tr-t-${tid}"
+               onclick="treeSelectTeam(${tid})" style="padding-left:18px; cursor:default;">
+      <span class="tree-exp" onclick="event.stopPropagation(); treeToggle(${tid})"
+            style="cursor:pointer; padding:0 4px;">${expanded ? '▼' : '▶'}</span>
+      <span class="tree-ico">⚔</span>
+      <span class="tree-lbl">${esc(team.team_name)}</span>
+    </div>`;
+
+    if (expanded) {
+      (team.warriors || []).forEach((w, idx) => {
+        if (!w) return;
+        const wSel = (S.sel.type === 'warrior' && S.sel.teamId == tid && S.sel.wIdx == idx) ? 'sel' : '';
+
+        // Injury indicator: count active permanent injuries
+        const injLevels   = w.injury_levels || {};
+        const injCount    = Object.values(injLevels).filter(v => v > 0).length;
+        const hasSevere   = Object.values(injLevels).some(v => v >= 5);
+        const injBadge    = injCount >= 3
+          ? `<span title="${injCount} permanent injuries" style="color:${hasSevere?'#800':'#840'};
+             font-size:10px; margin-left:3px;">[${injCount}⚕]</span>`
+          : '';
+
+        // Streak badge
+        const streak = w.streak || 0;
+        const streakBadge = streak >= 3
+          ? `<span style="color:#060;font-size:9px;margin-left:3px;">W${streak}🔥</span>`
+          : streak <= -3
+          ? `<span style="color:#800;font-size:9px;margin-left:3px;">L${Math.abs(streak)}❄</span>`
+          : '';
+
+        // Monster/retire flag icons
+        const flagBadge = w.want_monster_fight
+          ? `<span title="Queued for Monster fight" style="font-size:10px;margin-left:3px;">☠</span>`
+          : w.want_retire
+          ? `<span title="Retirement pending" style="font-size:10px;margin-left:3px;">🏆</span>`
+          : '';
+
+        h += `<div class="tree-row ${wSel}" id="tr-w-${tid}-${idx}"
+                   onclick="treeSelectWarrior(${tid}, ${idx})"
+                   style="padding-left:38px; cursor:default;">
+          <span class="tree-exp"> </span>
+          <span class="tree-ico">👤</span>
+          <span class="tree-lbl">${esc(w.name)}${injBadge}${streakBadge}${flagBadge}</span>
+        </div>`;
+      });
+    }
+  }
+
+  h += `</div>`;
+  return h;
+}
+
+/* ============================================================
+   TREE & TAB ACTION FUNCTIONS  (called by inline onclick)
+   ============================================================ */
+function setWTab(tab) {
+  S.wTab = tab;
+  refreshContent();
+}
+function treeSelectManager() {
+  S.sel = {type:'manager'};
+  refreshContent();
+}
+function treeSelectTeam(tid) {
+  S.sel = {type:'team', teamId: tid};
+  refreshContent();
+}
+function treeToggle(tid) {
+  S.expanded[tid] = !S.expanded[tid];
+  refreshTree();
+}
+async function treeSelectWarrior(tid, idx) {
+  if (_pendingWarrior && (S.sel.teamId !== tid || S.sel.wIdx !== idx)) {
+    await flushSave();
+  }
+  S.sel  = {type:'warrior', teamId: tid, wIdx: idx};
+  S.wTab = 'stats';
+  refreshContent();
+}
+
+/* ============================================================
+   CONTENT PANEL
+   ============================================================ */
+function buildContent() {
+  const { type, teamId, wIdx } = S.sel;
+
+  if (!type) {
+    // Manager selected or nothing
+    return `
+<div style="padding:10px;">
+  <b>${esc(S.account ? S.account.manager_name : '')}</b><br><br>
+  <span style="color:#444;">Select a team or warrior from the tree, or use <b>Action → New Team</b> to create a team.</span>
+  <br><br>
+  <span style="color:#666;">Teams: ${S.account.team_ids.length} / 5</span>
+</div>`;
+  }
+
+  if (type === 'team') {
+    const team = S.teams[teamId];
+    if (!team) return '<div style="padding:10px;">Loading...</div>';
+    return buildTeamPanel(team);
+  }
+
+  if (type === 'warrior') {
+    const team = S.teams[teamId];
+    if (!team) return '<div style="padding:10px;">Loading...</div>';
+    const w = team.warriors[wIdx];
+    if (!w) return '<div style="padding:10px;">Empty slot.</div>';
+    return buildWarriorPanel(team, w, wIdx);
+  }
+
+  return '';
+}
+
+/* ============================================================
+   TEAM DETAIL PANEL
+   ============================================================ */
+function buildTeamPanel(team) {
+  const totalW = team.warriors.reduce((a,w)=>a+(w?w.wins:0),0);
+  const totalL = team.warriors.reduce((a,w)=>a+(w?w.losses:0),0);
+  const totalD = team.warriors.reduce((a,w)=>a+(w?w.kills||0:0),0); // K = kills
+  return `
+<div style="padding:4px;">
+  <div style="font-weight:bold; margin-bottom:6px; font-size:12px;">Team</div>
+  <table style="border-collapse:collapse; width:100%; max-width:700px;">
+    <tr>
+      <td style="padding:3px 8px; width:90px;">Name</td>
+      <td><input type="text" class="ro" value="${esc(team.team_name)}" style="width:320px;" readonly></td>
+      <td style="padding:3px 8px; width:120px; text-align:right;">Last Turn Ran</td>
+      <td><input type="text" class="ro" value="—" style="width:80px;" readonly></td>
+    </tr>
+    <tr>
+      <td style="padding:3px 8px;">Record</td>
+      <td><input type="text" class="ro" value="${esc(totalW+'-'+totalL+'-'+totalD)}" style="width:320px;" readonly></td>
+      <td style="padding:3px 8px; text-align:right;">Run This Turn</td>
+      <td><input type="checkbox" checked style="margin:4px;"></td>
+    </tr>
+    <tr>
+      <td style="padding:3px 8px;">Team Number</td>
+      <td><input type="text" class="ro" value="${esc(team.team_id)}" style="width:120px;" readonly></td>
+    </tr>
+  </table>
+</div>`;
+}
+
+/* ============================================================
+   WARRIOR PANEL — TABS
+   ============================================================ */
+function buildWarriorPanel(team, w, wIdx) {
+  const tabs = ['Stats/Strats','Fight Options','Fights','Challenges','Replacement'];
+  const tabMap = {'Stats/Strats':'stats','Fight Options':'fight','Fights':'fights','Challenges':'challenges','Replacement':'replacement'};
+  let tabsHtml = `<div class="tabs">`;
+  tabs.forEach(t => {
+    const key = tabMap[t];
+    tabsHtml += `<div class="tab ${S.wTab===key?'active':''}" onclick="setWTab('${key}')">${t}</div>`;
+  });
+  tabsHtml += `</div>`;
+
+  let body = '';
+  if (S.wTab === 'stats')         body = buildStatsTab(team, w, wIdx);
+  else if (S.wTab === 'fight')    body = buildFightOptionsTab(w);
+  else if (S.wTab === 'fights')   body = buildFightsTab(w);
+  else if (S.wTab === 'challenges') body = buildChallengesTab(w);
+  else if (S.wTab === 'replacement') body = buildReplacementTab(w);
+
+  return tabsHtml + `<div class="tab-body" style="overflow:auto;">${body}</div>`;
+}
+
+/* ---- Stats / Strats tab ---- */
+function buildStatsTab(team, w, wIdx) {
+  // Guard: if game data hasn't loaded yet return a placeholder.
+  // This prevents empty selects from firing scheduleAutoSave() on render
+  // and overwriting the warrior's saved armor/weapons/trains/strategies.
+  if (!S.gd) return '<div style="padding:20px;color:#555;">Loading game data...</div>';
+  const gd = S.gd;
+  const ft = Math.floor(w.height_in/12), ins = w.height_in%12;
+
+  // Stat rows
+  const attrs = ['strength','dexterity','constitution','intelligence','presence','size'];
+  let statRows = '';
+  attrs.forEach(a => {
+    const dv = w.stat_display ? w.stat_display[a] : (w[a]||'—');
+    statRows += `<tr>
+      <td style="text-align:right; padding:1px 6px; min-width:90px;">${capitalize(a)}</td>
+      <td style="padding:1px 4px;"><span class="stat-val">${esc(dv)}</span></td>
+    </tr>`;
+  });
+
+  // Equipment dropdowns
+  const armor_opts = (gd.armor||[]).concat(['None']);
+  const helm_opts  = (gd.helms||[]).concat(['None']);
+  const wpn_opts   = gd.weapons||[];
+  const cur_armor  = w.armor||'None';
+  const cur_helm   = w.helm||'None';
+  const cur_prim   = w.primary_weapon||'Open Hand';
+  const cur_sec    = w.secondary_weapon||'Open Hand';
+  const cur_bkp    = w.backup_weapon||'None';
+
+  // Build grouped train options: Attributes | Skills | Weapons
+  const attrTrains  = ['Strength','Dexterity','Constitution','Intelligence','Presence'];
+  const skillTrains = ['Brawl','Charge','Disarm','Dodge','Feint','Initiative','Lunge','Parry','Sweep','Throw'];
+  const gdTrains    = (gd.train_skills||[]);
+  const wpnTrains   = gdTrains.filter(t => !attrTrains.includes(t) && !skillTrains.includes(t));
+
+  const t1 = (w.trains||[])[0]||'', t2 = (w.trains||[])[1]||'', t3 = (w.trains||[])[2]||'';
+
+  function tOpts(val) {
+    // Normalise stored key (e.g. "war_flail" → "War Flail") for comparison
+    const norm = v => v.replace(/_/g,' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    const valNorm = norm(val);
+    const sel = v => (v === val || norm(v) === valNorm) ? ' selected' : '';
+    let h = '<option value="">—</option>';
+    h += '<optgroup label="── Attributes ──">';
+    attrTrains.forEach(a => { h += `<option value="${a}"${sel(a)}>${a}</option>`; });
+    h += '</optgroup><optgroup label="── Skills ──">';
+    skillTrains.forEach(s => { h += `<option value="${s}"${sel(s)}>${s}</option>`; });
+    h += '</optgroup><optgroup label="── Weapons ──">';
+    wpnTrains.forEach(wn => { h += `<option value="${wn}"${sel(wn)}>${wn}</option>`; });
+    h += '</optgroup>';
+    return h;
+  }
+
+  // Strategies
+  const triggers = gd.triggers||[];
+  const styles   = gd.styles||[];
+  const aimPts   = gd.aim_points||[];
+  const OC = 'onchange="scheduleAutoSave()"';
+
+  // Build 5 regular strat rows + 1 default
+  let stratRows = '';
+  const strats = w.strategies || [];
+
+  // Separate Always from numbered
+  const numbered = strats.filter(s => s.trigger !== 'Always');
+  const always   = strats.find(s => s.trigger === 'Always') || {trigger:'Always',style:'',activity:'',aim_point:'',defense_point:''};
+
+  // Blank-first option list — blank = row inactive
+  function stratOpts(items, val) {
+    let h = '<option value=""></option>';
+    items.forEach(it => { h += `<option value="${esc(it)}" ${it===val?'selected':''}>${esc(it)}</option>`; });
+    return h;
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const s = numbered[i] || { trigger:'', style:'', activity:'', aim_point:'', defense_point:'' };
+    stratRows += `<tr>
+      <td class="row-num">${i+1}</td>
+      <td><select data-si="${i}" data-sf="trigger" ${OC}>${stratOpts(triggers, s.trigger)}</select></td>
+      <td><select data-si="${i}" data-sf="style" ${OC}>${stratOpts(styles, s.style)}</select></td>
+      <td style="text-align:center;"><input type="number" min="0" max="9" value="${s.activity||''}" placeholder="" data-si="${i}" data-sf="activity" onchange="scheduleAutoSave()" style="width:36px;"></td>
+      <td><select data-si="${i}" data-sf="aim_point" ${OC}>${stratOpts(aimPts, s.aim_point)}</select></td>
+      <td><select data-si="${i}" data-sf="defense_point" ${OC}>${stratOpts(aimPts, s.defense_point)}</select></td>
+    </tr>`;
+  }
+  // D row — "Always" trigger locked, cannot be changed
+  stratRows += `<tr>
+    <td class="row-num" style="font-weight:bold;">D</td>
+    <td style="padding:2px 4px; background:#ececec; font-style:italic; color:#444;">Always</td>
+    <td><select data-si="D" data-sf="style" ${OC}>${stratOpts(styles, always.style)}</select></td>
+    <td style="text-align:center;"><input type="number" min="0" max="9" value="${always.activity||''}" placeholder="" data-si="D" data-sf="activity" onchange="scheduleAutoSave()" style="width:36px;"></td>
+    <td><select data-si="D" data-sf="aim_point" ${OC}>${stratOpts(aimPts, always.aim_point)}</select></td>
+    <td><select data-si="D" data-sf="defense_point" ${OC}>${stratOpts(aimPts, always.defense_point)}</select></td>
+  </tr>`;
+
+  // Skills and injuries
+  const skillsText  = (w.skills_text||[]).join('\n') || '(none)';
+  const injText     = (w.injuries_text||[]).join('\n') || '(none)';
+
+  return `
+<div style="padding:4px;">
+<!-- Warrior header -->
+<div class="panel-label">Warrior</div>
+<table style="width:100%; border-collapse:collapse; margin-bottom:4px;">
+  <tr>
+    <td style="width:50px; padding:2px 4px;">Name</td>
+    <td><input type="text" class="ro" value="${esc(w.name)}" style="width:240px;" readonly></td>
+    <td style="padding:2px 12px 2px 8px;">Race</td>
+    <td><input type="text" class="ro" value="${esc(w.race)}" style="width:80px;" readonly></td>
+    <td style="padding:2px 8px;">Height</td>
+    <td><input type="text" class="ro" value="${ft}' ${ins}&quot;" style="width:60px;" readonly></td>
+  </tr>
+  <tr>
+    <td style="padding:2px 4px;">Record</td>
+    <td><input type="text" class="ro" value="${esc(fmtRecord(w))}" style="width:240px;" readonly></td>
+    <td style="padding:2px 12px 2px 8px;">Gender</td>
+    <td><input type="text" class="ro" value="${esc(w.gender)}" style="width:80px;" readonly></td>
+    <td style="padding:2px 8px;">Weight</td>
+    <td><input type="text" class="ro" value="${esc(w.weight_lbs)} lbs" style="width:60px;" readonly></td>
+  </tr>
+</table>
+
+<!-- Luck + HP + QoL summary line -->
+<div style="font-size:10px; color:#555; margin-bottom:4px; display:flex; gap:14px;
+     justify-content:flex-end; padding-right:4px; flex-wrap:wrap;">
+  <span>Luck: <b>${w.luck!=null?w.luck:'—'}</b>/30</span>
+  <span>Max HP: <b>${w.max_hp||'?'}</b></span>
+  <span>Popularity: <b>${w.popularity||50}</b>/100</span>
+  <span>Turns active: <b>${w.turns_active||0}</b></span>
+  ${(w.streak||0)!==0 ? '<span>Streak: ' + streakLabel(w.streak||0) + '</span>' : ''}
+</div>
+<!-- Stats + Equipment + Trains -->
+<table style="width:100%; border-collapse:collapse; margin-bottom:6px;">
+  <tr>
+    <td style="vertical-align:top; width:200px;">
+      <table>${statRows}</table>
+    </td>
+    <td style="vertical-align:top; padding-left:10px;">
+      <table style="border-collapse:collapse;">
+        <tr><td style="padding:2px 6px; text-align:right; width:70px;">Armor</td><td><select id="sel-armor" style="width:160px;" onchange="scheduleAutoSave()">${opts(armor_opts, cur_armor)}</select></td></tr>
+        <tr><td style="padding:2px 6px; text-align:right;">Helm</td><td><select id="sel-helm" style="width:160px;" onchange="scheduleAutoSave()">${opts(helm_opts, cur_helm)}</select></td></tr>
+        <tr><td style="padding:2px 6px; text-align:right;">Primary</td><td><select id="sel-prim" style="width:160px;" onchange="scheduleAutoSave()">${opts(['Open Hand',...wpn_opts], cur_prim)}</select></td></tr>
+        <tr><td style="padding:2px 6px; text-align:right;">Secondary</td><td><select id="sel-sec" style="width:160px;" onchange="scheduleAutoSave()">${opts(['Open Hand',...wpn_opts], cur_sec)}</select></td></tr>
+        <tr><td style="padding:2px 6px; text-align:right;">Backup</td><td><select id="sel-bkp" style="width:160px;" onchange="scheduleAutoSave()">${opts(['None','Open Hand',...wpn_opts], cur_bkp)}</select></td></tr>
+      </table>
+    </td>
+    <td style="vertical-align:top; padding-left:10px;">
+      <div style="font-weight:bold; margin-bottom:4px;">Trains</div>
+      <table style="border-collapse:collapse;">
+        <tr><td style="padding:2px 4px;">1st</td><td><select id="sel-t1" style="width:160px;" onchange="scheduleAutoSave()">${tOpts(t1)}</select></td></tr>
+        <tr><td style="padding:2px 4px;">2nd</td><td><select id="sel-t2" style="width:160px;" onchange="scheduleAutoSave()">${tOpts(t2)}</select></td></tr>
+        <tr><td style="padding:2px 4px;">3rd</td><td><select id="sel-t3" style="width:160px;" onchange="scheduleAutoSave()">${tOpts(t3)}</select></td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- Strategies -->
+<div class="group" style="margin:0 0 6px 0;">
+  <span class="group-label">Strategies</span>
+  <table class="strat-table">
+    <thead>
+      <tr>
+        <th class="row-num">#</th>
+        <th style="min-width:200px;">Trigger</th>
+        <th style="min-width:130px;">Style</th>
+        <th style="width:60px; text-align:center;">Activity</th>
+        <th style="min-width:110px;">Aiming Point</th>
+        <th style="min-width:110px;">Defense Point</th>
+      </tr>
+    </thead>
+    <tbody id="strat-body">${stratRows}</tbody>
+  </table>
+  <!-- Changes auto-saved via onchange debounce -->
+</div>
+
+<!-- Skills and Injuries -->
+<div style="display:flex; gap:6px;">
+  <div style="flex:1;">
+    <div class="group" style="margin:0;">
+      <span class="group-label">Skills</span>
+      <div class="text-panel"><pre style="font-family:inherit; font-size:11px; white-space:pre-wrap;">${esc(skillsText)}</pre></div>
+    </div>
+  </div>
+  <div style="flex:1;">
+    <div class="group" style="margin:0;">
+      <span class="group-label">Permanent Injuries</span>
+      <div class="text-panel"><pre style="font-family:inherit; font-size:11px; white-space:pre-wrap;">${esc(injText)}</pre></div>
+    </div>
+  </div>
+</div>
+
+</div>`; // end stats tab
+}
+
+/* ---- Other tabs (stubs) ---- */
+function buildFightOptionsTab(w) {
+  const canRetire = (w.total_fights||0) >= 100;
+  const isMonster = w.want_monster_fight || false;
+  const isRetire  = w.want_retire        || false;
+  const retireLabel = canRetire
+    ? 'Retire Warrior — submit retirement papers this turn'
+    : `Retire Warrior — not eligible yet (${w.total_fights||0}/100 fights)`;
+
+  return `
+<div style="padding:12px;">
+  <div class="group" style="margin:0 0 12px;">
+    <span class="group-label">Fight Options for This Turn</span>
+    <p style="font-size:11px; color:#555; margin:0 0 10px;">
+      These flags apply to the <b>next turn only</b> and clear automatically after fights run.
+    </p>
+
+    <label style="display:flex; align-items:flex-start; gap:8px; margin-bottom:14px; cursor:default;">
+      <input type="checkbox" id="fo-monster"
+             ${isMonster ? 'checked' : ''}
+             onchange="saveFightOption('want_monster_fight', this.checked)"
+             style="margin-top:2px;">
+      <span>
+        <b>Monster Warrior</b><br>
+        <span style="font-size:11px; color:#555;">
+          ${esc(w.name)} will face one of the Arena&#39;s monsters instead of a normal rival.
+          Monsters are near-impossible to defeat &mdash; this almost always ends in death.
+          <b style="color:#800;">Only choose this if you want a replacement warrior.</b>
+        </span>
+      </span>
+    </label>
+
+    <label style="display:flex; align-items:flex-start; gap:8px; cursor:default;
+                  ${canRetire ? '' : 'opacity:0.5; pointer-events:none;'}">
+      <input type="checkbox" id="fo-retire"
+             ${isRetire ? 'checked' : ''}
+             ${canRetire ? '' : 'disabled'}
+             onchange="saveFightOption('want_retire', this.checked)"
+             style="margin-top:2px;">
+      <span>
+        <b>${retireLabel}</b><br>
+        <span style="font-size:11px; color:#555;">
+          ${canRetire
+            ? `${esc(w.name)} has earned a hero&#39;s retirement after ${w.total_fights} fights.
+               They leave the team this turn and a new recruit takes their place.`
+            : `Warriors must complete 100 fights to be eligible for retirement.`
+          }
+        </span>
+      </span>
+    </label>
+  </div>
+
+  <div class="group" style="margin:0;">
+    <span class="group-label">Career Summary</span>
+    <table style="border-collapse:collapse; font-size:11px; width:100%;">
+      <tr>
+        <td style="padding:3px 10px; color:#555; width:120px;">Total Fights</td>
+        <td style="padding:3px 8px; font-weight:bold;">${w.total_fights||0}</td>
+        <td style="padding:3px 10px; color:#555; width:120px;">Turns Active</td>
+        <td style="padding:3px 8px; font-weight:bold;">${w.turns_active||0}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 10px; color:#555;">Popularity</td>
+        <td style="padding:3px 8px; font-weight:bold;">${w.popularity||50}/100</td>
+        <td style="padding:3px 10px; color:#555;">Current Streak</td>
+        <td style="padding:3px 8px;">${streakLabel(w.streak||0)}</td>
+      </tr>
+      <tr>
+        <td style="padding:3px 10px; color:#555;">Can Retire</td>
+        <td style="padding:3px 8px;" colspan="3">
+          ${canRetire
+            ? '<b style="color:#060">Yes</b>'
+            : `<span style="color:#555">No &mdash; needs ${100-(w.total_fights||0)} more fight(s)</span>`}
+        </td>
+      </tr>
+    </table>
+  </div>
+</div>`;
+}
+
+function streakLabel(s) {
+  if (s === 0)  return '<span style="color:#888">—</span>';
+  if (s  >  0)  return `<b style="color:#060">W${s}</b>`;
+  return `<b style="color:#800">L${Math.abs(s)}</b>`;
+}
+
+async function saveFightOption(field, value) {
+  const {teamId, wIdx} = S.sel;
+  if (teamId == null || wIdx == null) return;
+  try {
+    const r = await API.put('/api/warrior', {
+      team_id: teamId, warrior_idx: wIdx,
+      [field]: value,
+    });
+    if (r.success) {
+      const w = S.teams[teamId]?.warriors?.[wIdx];
+      if (w) w[field] = value;
+    } else {
+      alert('Could not save: ' + r.error);
+    }
+  } catch(e) { console.warn('saveFightOption:', e); }
+}
+function buildFightsTab(w) {
+  const history = (w.fight_history || []).slice().reverse(); // newest first
+  if (!history.length) {
+    return `<div style="padding:10px;">
+      <b>Fight History</b><br><br>
+      <span style="color:#666;">${esc(w.name)} has not fought yet.</span>
+      <br><br>Record: ${esc(fmtRecord(w))} (${w.total_fights||0} fights)
+    </div>`;
+  }
+  let rows = '';
+  history.forEach((h, i) => {
+    const res = h.result ? h.result.toUpperCase() : '—';
+    const resColor = res==='WIN' ? '#060' : res==='LOSS' ? '#800' : '#444';
+    const slainNote  = h.warrior_slain  ? ' <b style="color:#800">(SLAIN)</b>'  : '';
+    const killedNote = h.opponent_slain ? ' <b style="color:#060">(KILLED)</b>' : '';
+    const fid = h.fight_id;
+    const viewBtn = fid
+      ? `<button class="sm" onclick="openNarrative(${fid})">View Fight</button>`
+      : `<span style="color:#aaa; font-size:10px;">no log</span>`;
+    rows += `<tr style="${i%2===0?'background:#f5f4f0;':''}">
+      <td style="padding:2px 6px; text-align:center;">${h.turn||'—'}</td>
+      <td style="padding:2px 6px;">${esc(h.opponent_name||'Unknown')}</td>
+      <td style="padding:2px 6px; text-align:center;">${esc(h.opponent_race||'')}</td>
+      <td style="padding:2px 6px; text-align:center; color:${resColor}; font-weight:bold;">${res}${slainNote}</td>
+      <td style="padding:2px 6px; text-align:center;">${h.is_kill?'<b style="color:#060">☠</b>':''}</td>
+      <td style="padding:2px 6px; text-align:center;">${h.minutes||'—'} min</td>
+      <td style="padding:2px 6px;">${viewBtn}</td>
+    </tr>`;
+  });
+  return `
+<div style="padding:6px;">
+  <div style="font-weight:bold; margin-bottom:6px;">Fight History — ${esc(w.name)}</div>
+  <div style="color:#555; margin-bottom:6px;">Record: ${esc(fmtRecord(w))} — ${w.total_fights||0} fights (W-L-K)</div>
+  <div style="overflow-x:auto;">
+  <table class="grid" style="font-size:11px;">
+    <thead>
+      <tr>
+        <th style="width:40px;">Turn</th>
+        <th style="min-width:140px;">Opponent</th>
+        <th style="width:80px;">Race</th>
+        <th style="width:60px;">Result</th>
+        <th style="width:45px;">Kill</th>
+        <th style="width:60px;">Duration</th>
+        <th style="width:80px;">Narrative</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  </div>
+</div>`;
+}
+function buildChallengesTab(w) {
+  return `<div style="padding:10px; color:#555;"><b>Challenges</b><br><br>Challenge system coming soon. Use the Quick-Run turn from the command line for now.</div>`;
+}
+function buildReplacementTab(w) {
+  return `<div style="padding:10px; color:#555;"><b>Replacement Warrior</b><br><br>When ${esc(w.name)} falls in battle, a replacement will appear here to configure.</div>`;
+}
+
+/* ============================================================
+   CREATE TEAM SCREEN
+   ============================================================ */
+function buildCreateTeam() {
+  const ct = S.ct;
+  if (!ct) return '<div style="padding:20px;">Loading rollups...</div>';
+
+  const selIdx = ct.sel;
+  const sw = ct.warriors[selIdx];        // selected warrior slot
+  const add = ct.adds[selIdx] || {};     // point additions for this slot
+
+  // Total points used so far for selected warrior
+  const ptsUsed = ATTR_KEYS.reduce((a, k) => a + (add[k]||0), 0);
+  const ptsLeft = 16 - ptsUsed;
+
+  // All 5 warriors saved?
+  const allSaved = ct.saved && ct.saved.every(Boolean);
+
+  // Build grid rows
+  let gridRows = '';
+  ct.warriors.forEach((w, i) => {
+    const sel = i === selIdx ? 'sel' : '';
+    const mark = (ct.saved && ct.saved[i]);
+    const indicator = mark ? '&#10003;' : '&#9675;';
+    const indStyle  = mark ? 'color:#080; font-weight:bold;' : 'color:#aaa;';
+    gridRows += `<tr class="${sel}" id="ct-row-${i}" style="cursor:default;">
+      <td style="padding:2px 4px; text-align:center; width:20px; ${indStyle}">${indicator}</td>
+      <td style="padding:2px 8px;"><input type="text" id="ct-name-${i}" value="${esc(w.name||'')}" style="width:140px;" placeholder="Name"></td>
+      <td style="padding:2px 4px; text-align:center;">${esc(w.race||'Human')}</td>
+      <td style="padding:2px 4px; text-align:center;">${esc(w.gender||'Male')}</td>
+      ${ATTR_KEYS.map(k => `<td style="padding:2px 4px; text-align:right;">${final(ct, i, k)}</td>`).join('')}
+    </tr>`;
+  });
+
+  // Build stat spinner rows for selected warrior
+  let spinRows = '';
+  ATTR_KEYS.forEach(k => {
+    const base = sw.base[k];
+    const cur  = add[k]||0;
+    const cap  = Math.min(7, 25 - base);
+    const fv   = base + cur;
+    spinRows += `<tr>
+      <td style="text-align:right; padding:2px 8px; width:100px;">${capitalize(k)}</td>
+      <td style="padding:2px 4px;">
+        <div class="stat-spin">
+          <span style="min-width:30px; text-align:right; font-weight:bold;">${fv}</span>
+          <button class="sm" id="ct-dec-${k}" ${cur<=0?'disabled':''}>-</button>
+          <button class="sm" id="ct-inc-${k}" ${cur>=cap||ptsLeft<=0?'disabled':''}>+</button>
+          <span style="color:#666; font-size:10px; margin-left:4px;">(base ${base}, max add ${cap})</span>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  // Race/gender for selected warrior
+  const gd = S.gd || {};
+  const races   = gd.races||['Human','Half-Orc','Halfling','Dwarf','Half-Elf','Elf'];
+  const genders = gd.genders||['Male','Female'];
+
+  return `
+<div style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
+  ${buildMenuBar()}
+  <div style="flex:1; overflow-y:auto; padding:8px;">
+  ${S.msg ? `<div class="msg ${S.msgType}">${esc(S.msg)}</div>` : ''}
+
+  <!-- Warrior grid -->
+  <div class="group">
+    <span class="group-label">New Team</span>
+    <div style="overflow-x:auto;">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th style="width:20px;"></th>
+          <th style="min-width:150px;">Warrior Name</th>
+          <th style="width:80px;">Race</th>
+          <th style="width:60px;">Gender</th>
+          ${ATTR_KEYS.map(k=>`<th style="width:46px;">${capitalize(k).substring(0,3)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody id="ct-grid">${gridRows}</tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- Team name + action buttons — locked until all 5 warriors saved -->
+  <div style="display:flex; align-items:center; gap:10px; margin:6px 4px;">
+    <span>Team Name</span>
+    <input type="text" id="ct-team-name" value="${esc(ct.teamName||'')}"
+           style="width:280px;" placeholder="${allSaved ? 'Enter team name' : 'Save all 5 warriors first'}"
+           ${allSaved ? '' : 'disabled'}>
+    <span style="margin-left:12px;">Create Team as</span>
+    <button id="btn-ct-save" class="wide" ${allSaved ? '' : 'disabled'}>New</button>
+    <button disabled class="wide">Replacement</button>
+    <div style="flex:1;"></div>
+    <button id="btn-ct-cancel">Cancel</button>
+  </div>
+
+  <!-- Warrior editor -->
+  <div class="group">
+    <span class="group-label">New Warrior</span>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+      <!-- Stat spinners -->
+      <div>
+        <table style="border-collapse:collapse;">
+          ${spinRows}
+        </table>
+      </div>
+      <!-- Name / Race / Gender + points -->
+      <div style="min-width:260px;">
+        <table style="border-collapse:collapse; margin-bottom:8px;">
+          <tr>
+            <td style="padding:3px 8px; text-align:right; width:70px;">Name</td>
+            <td><input type="text" id="ct-wname" value="${esc(sw.name||'')}" style="width:200px;" placeholder="Warrior name"></td>
+          </tr>
+          <tr>
+            <td style="padding:3px 8px; text-align:right;">Race</td>
+            <td><select id="ct-wrace" style="width:200px;">${opts(races, sw.race||'Human')}</select></td>
+          </tr>
+          <tr>
+            <td style="padding:3px 8px; text-align:right;">Gender</td>
+            <td><select id="ct-wgender" style="width:200px;">${opts(genders, sw.gender||'Male')}</select></td>
+          </tr>
+        </table>
+        <div class="group" style="margin:0; padding:8px; display:inline-block; min-width:200px;">
+          <span class="group-label">Points Left to Distribute</span>
+          <div style="text-align:center; margin:6px 0;">
+            <span class="pts-box" id="pts-left">${ptsLeft}</span>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:center;">
+            <button id="btn-ct-reset">Reset</button>
+            <button id="btn-ct-wsave">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- end scroll area -->
+</div>`;
+}
+
+const ATTR_KEYS = ['strength','dexterity','constitution','intelligence','presence','size'];
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function final(ct, i, k) { return (ct.warriors[i].base[k]||0) + (ct.adds[i]?ct.adds[i][k]||0:0); }
+
+/* ============================================================
+   EVENT BINDING
+   ============================================================ */
+function attachEvents() {
+  // --- Login ---
+  bind('tab-login',   () => { S.loginTab = 'login'; S.msg=''; render(); });
+  bind('tab-new',     () => { S.loginTab = 'new';   S.msg=''; render(); });
+  bind('btn-login',   doLogin);
+  bind('btn-create',  doCreateAccount);
+  bind('btn-agreement', () => alert('By playing Blood Pit you agree to fair play.\nOne account per player. Max 5 teams.'));
+
+  // --- Menu ---
+  bind('menu-logout', () => { S.account=null; S.teams={}; S.sel={type:null}; S.view='login'; S.msg=''; render(); });
+  bind('menu-action', (e) => {
+    e.stopPropagation();
+    const dd = el('action-dropdown');
+    if (!dd) return;
+    dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  });
+  bind('act-new-team', () => {
+    const dd = el('action-dropdown');
+    if (dd) dd.style.display = 'none';
+    if (!S.account || S.account.team_ids.length >= 5) return;
+    initCreateTeam();
+  });
+  bind('act-run-turn', () => {
+    const dd = el('action-dropdown');
+    if (dd) dd.style.display = 'none';
+    if (!S.sel.teamId) { alert('Select a team first.'); return; }
+    doRunTurn(S.sel.teamId);
+  });
+  bind('act-league-settings', () => {
+    const dd = el('action-dropdown');
+    if (dd) dd.style.display = 'none';
+    showLeagueSettings();
+  });
+  bind('act-league-upload', () => {
+    const dd = el('action-dropdown');
+    if (dd) dd.style.display = 'none';
+    if (!S.sel.teamId || !S.league.managerId) return;
+    doLeagueUpload(S.sel.teamId);
+  });
+  bind('act-league-results', () => {
+    const dd = el('action-dropdown');
+    if (dd) dd.style.display = 'none';
+    if (!S.league.managerId) return;
+    doLeagueGetResults();
+  });
+  bind('btn-league-save', doSaveLeagueSettings);
+  bind('btn-league-register', doLeagueRegister);
+  bind('btn-league-close', () => { el('league-modal')?.remove(); });
+  // Tree rows and warrior tabs use inline onclick — no binding needed here
+
+  // Warrior tabs use inline onclick="setWTab(...)" — no binding needed
+
+  // Warrior changes auto-save via scheduleAutoSave()
+
+  // --- Create team ---
+  bind('btn-ct-cancel', () => { S.view='main'; S.msg=''; render(); });
+  bind('btn-tr-back',   () => { S.view='main'; S.turnResults=null; render(); });
+  bind('btn-ct-save',   doSaveTeam);
+  bind('btn-ct-reset',  doCtReset);
+  bind('btn-ct-wsave',  doCtSaveWarrior);
+
+  if (S.ct) {
+    // Row selection in grid
+    for (let i = 0; i < 5; i++) {
+      const row = el(`ct-row-${i}`);
+      if (row) row.addEventListener('click', () => { doCtSaveWarrior(); S.ct.sel = i; render(); });
+    }
+    // Stat spinners
+    ATTR_KEYS.forEach(k => {
+      bind(`ct-dec-${k}`, () => ctAdjust(k, -1));
+      bind(`ct-inc-${k}`, () => ctAdjust(k, +1));
+    });
+  }
+}
+
+function bind(id, fn) { const e = el(id); if (e) e.addEventListener('click', fn); }
+function click(id, fn) { const e = el(id); if (e) e.addEventListener('click', fn); }
+
+function refreshTree() {
+  const wrap = el('tree-wrap');
+  if (wrap) { wrap.innerHTML = buildTree(); }
+  // No tree-wrap = not on main screen, nothing to do
+}
+function refreshContent() { const c = el('content'); if (c) c.innerHTML = buildContent(); }
+
+/* ============================================================
+   LOGIN ACTIONS
+   ============================================================ */
+async function doLogin() {
+  try {
+    const name = el('l-name')?.value?.trim();
+    const pass = el('l-pass')?.value;
+    if (!name || !pass) { setMsg('Please enter your manager name and password.', 'err'); render(); return; }
+    const r = await API.post('/api/account/login', {manager_name: name, password: pass});
+    if (r.success) {
+      S.account = { id: r.id, manager_name: r.manager_name, email: '',
+                   team_ids: [...new Set(r.team_ids)] };
+      S.view = 'main'; S.msg = '';
+      await loadTeams();
+      await loadLeagueSettings();
+      render();
+    } else {
+      setMsg(r.error, 'err'); render();
+    }
+  } catch (err) {
+    setMsg('Connection error: ' + err.message, 'err'); render();
+  }
+}
+
+async function doCreateAccount() {
+  // Read values BEFORE any render() call that would wipe the fields
+  const name  = el('n-name')?.value?.trim()  || '';
+  const email = el('n-email')?.value?.trim() || '';
+  const pass  = el('n-pass')?.value          || '';
+  const pass2 = el('n-pass2')?.value         || '';
+
+  if (!name)          { setMsg('Manager name is required.', 'err'); render(); return; }
+  if (!pass)          { setMsg('Password is required.', 'err'); render(); return; }
+  if (pass.length < 4){ setMsg('Password must be at least 4 characters.', 'err'); render(); return; }
+  if (pass !== pass2) { setMsg('Passwords do not match.', 'err'); render(); return; }
+
+  try {
+    const r = await API.post('/api/account/create', {manager_name:name, email, password:pass});
+    if (r.success) {
+      S.account = { id: r.id, manager_name: r.manager_name, email,
+                   team_ids: [...new Set(r.team_ids)] };
+      S.view = 'main'; S.msg = '';
+      render();
+    } else {
+      setMsg(r.error || 'Account creation failed.', 'err'); render();
+    }
+  } catch (err) {
+    setMsg('Connection error — is the server running? (' + err.message + ')', 'err'); render();
+  }
+}
+
+/* ============================================================
+   SAVE WARRIOR CHANGES
+   ============================================================ */
+async function doSaveWarrior() {
+  // Use _pendingWarrior if available (handles the case where S.sel moved
+  // to a different warrior before the 700ms debounce fired).
+  const src = _pendingWarrior || S.sel;
+  const {teamId, wIdx} = src;
+  if (teamId == null || wIdx == null) return;
+  // Only read from DOM if we're still viewing this warrior
+  const isCurrentView = (S.sel.type === 'warrior'
+                         && S.sel.teamId === teamId
+                         && S.sel.wIdx   === wIdx);
+  if (!isCurrentView && !el('sel-armor')) return;  // DOM belongs to different warrior
+
+  // Collect strategies — numbered rows only saved if trigger is set
+  const strats = [];
+  for (let i = 0; i < 5; i++) {
+    const trigger = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="trigger"]`);
+    if (!trigger) continue;
+    const style    = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="style"]`)    || 'Strike';
+    const actRaw   = getInputVal(`#strat-body input[data-si="${i}"][data-sf="activity"]`);
+    const activity = (actRaw !== '' && actRaw !== null) ? parseInt(actRaw) : 5;
+    const aim      = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="aim_point"]`)    || 'None';
+    const def      = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="defense_point"]`) || 'None';
+    strats.push({trigger, style, activity, aim_point:aim, defense_point:def});
+  }
+  // D row — trigger is always "Always" regardless of DOM
+  const dStyle    = getSelectVal('#strat-body select[data-si="D"][data-sf="style"]')    || 'Strike';
+  const dActRaw   = getInputVal('#strat-body input[data-si="D"][data-sf="activity"]');
+  const dActivity = (dActRaw !== '' && dActRaw !== null) ? parseInt(dActRaw) : 5;
+  const dAim      = getSelectVal('#strat-body select[data-si="D"][data-sf="aim_point"]')    || 'None';
+  const dDef      = getSelectVal('#strat-body select[data-si="D"][data-sf="defense_point"]') || 'None';
+  strats.push({trigger:'Always', style:dStyle, activity:dActivity, aim_point:dAim, defense_point:dDef});
+
+  // Training
+  const trains = [
+    getSelectVal('#sel-t1'), getSelectVal('#sel-t2'), getSelectVal('#sel-t3')
+  ].filter(t => t && t !== '—');
+
+  const body = {
+    team_id     : teamId,
+    warrior_idx : wIdx,
+    armor       : el('sel-armor')?.value||'None',
+    helm        : el('sel-helm')?.value||'None',
+    primary_weapon   : el('sel-prim')?.value||'Open Hand',
+    secondary_weapon : el('sel-sec')?.value||'Open Hand',
+    backup_weapon    : el('sel-bkp')?.value||'None',
+    trains,
+    strategies  : strats,
+  };
+
+  try {
+    const r = await API.put('/api/warrior', body);
+    if (r.success) {
+      _pendingWarrior = null;  // clear after successful save
+      await reloadTeam(teamId);
+      setMsg('Saved successfully.', 'ok');
+      refreshContent();
+      setTimeout(() => { S.msg=''; refreshContent(); }, 2000);
+    } else {
+      alert('Save failed: ' + r.error);
+    }
+  } catch (err) {
+    alert('Connection error: ' + err.message);
+  }
+}
+
+function getSelectVal(selector) { const e = document.querySelector(selector); return e ? e.value : null; }
+function getInputVal(selector)  { const e = document.querySelector(selector); return e ? e.value : null; }
+
+// Debounced auto-save: any change schedules a save 700ms later.
+// _pendingWarrior tracks which warrior the pending save belongs to,
+// so navigation to a different warrior flushes the right data first.
+let _saveTimer      = null;
+let _pendingWarrior = null;  // {teamId, wIdx} of the pending save
+
+function scheduleAutoSave() {
+  // Record which warrior this save belongs to
+  if (S.sel && S.sel.type === 'warrior') {
+    _pendingWarrior = {teamId: S.sel.teamId, wIdx: S.sel.wIdx};
+  }
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(doSaveWarrior, 700);
+}
+
+// Flush any pending save immediately (called before navigation)
+async function flushSave() {
+  if (!_saveTimer) return;
+  clearTimeout(_saveTimer);
+  _saveTimer = null;
+  await doSaveWarrior();
+}
+
+/* ============================================================
+   CREATE TEAM ACTIONS
+   ============================================================ */
+async function initCreateTeam() {
+  // Load game data if needed
+  if (!S.gd) { const r = await API.get('/api/game_data'); S.gd = r; }
+  // Fetch 5 fresh rollups
+  const r = await API.get('/api/rollup');
+  S.ct = {
+    teamName : '',
+    sel      : 0,
+    warriors : r.rolls.map(base => ({ base, name:'', race:'Human', gender:'Male' })),
+    adds     : r.rolls.map(() => ({ strength:0, dexterity:0, constitution:0, intelligence:0, presence:0, size:0 })),
+    saved    : [false, false, false, false, false],
+  };
+  S.view = 'create_team';
+  S.msg  = '';
+  render();
+}
+
+function ctAdjust(key, delta) {
+  const ct  = S.ct;
+  const i   = ct.sel;
+  const cur = ct.adds[i][key] || 0;
+  const base= ct.warriors[i].base[key];
+  const cap = Math.min(7, 25 - base);
+  const ptsUsed = ATTR_KEYS.reduce((a,k) => a + (ct.adds[i][k]||0), 0);
+  const ptsLeft = 16 - ptsUsed;
+
+  if (delta > 0 && (cur >= cap || ptsLeft <= 0)) return;
+  if (delta < 0 && cur <= 0) return;
+
+  ct.adds[i][key] = cur + delta;
+  // Sync name input if open
+  const nEl = el('ct-wname');
+  if (nEl) ct.warriors[i].name = nEl.value;
+  render();
+}
+
+function doCtReset() {
+  const i = S.ct.sel;
+  ATTR_KEYS.forEach(k => { S.ct.adds[i][k] = 0; });
+  render();
+}
+
+function doCtSaveWarrior() {
+  const ct = S.ct;
+  if (!ct) return;
+  const i = ct.sel;
+  // Sync all fields — name is NOT required here, validated at team save
+  const nEl  = el('ct-wname');    if (nEl)  ct.warriors[i].name   = nEl.value.trim();
+  const rEl  = el('ct-wrace');    if (rEl)  ct.warriors[i].race   = rEl.value;
+  const gEl  = el('ct-wgender'); if (gEl)  ct.warriors[i].gender = gEl.value;
+  const gNEl = el(`ct-name-${i}`); if (gNEl) ct.warriors[i].name = gNEl.value.trim();
+  // Mark this slot confirmed — unlocks team name when all 5 done
+  if (!ct.saved) ct.saved = [false,false,false,false,false];
+  ct.saved[i] = true;
+  render();
+}
+
+async function doSaveTeam() {
+  doCtSaveWarrior();  // save current warrior first
+  const ct = S.ct;
+
+  // Sync names from grid
+  for (let i = 0; i < 5; i++) {
+    const gNEl = el(`ct-name-${i}`);
+    if (gNEl) ct.warriors[i].name = gNEl.value.trim();
+  }
+
+  const tName = el('ct-team-name')?.value?.trim();
+  if (!tName) { setMsg('Please enter a team name.', 'err'); render(); return; }
+
+  // All names required at final save (can be unnamed during stat allocation)
+  for (let i = 0; i < 5; i++) {
+    const nm = (ct.warriors[i].name||'').trim();
+    if (!nm) {
+      setMsg(`Warrior ${i+1} needs a name. Click that row and enter one.`, 'err');
+      S.ct.sel = i;  // jump user to the unnamed slot
+      render(); return;
+    }
+  }
+
+  // Build warrior data
+  const warriors = ct.warriors.map((w, i) => {
+    const a = ct.adds[i] || {};
+    return {
+      name        : w.name.toUpperCase(),
+      race        : w.race,
+      gender      : w.gender,
+      strength    : w.base.strength    + (a.strength||0),
+      dexterity   : w.base.dexterity   + (a.dexterity||0),
+      constitution: w.base.constitution+ (a.constitution||0),
+      intelligence: w.base.intelligence+ (a.intelligence||0),
+      presence    : w.base.presence    + (a.presence||0),
+      size        : w.base.size        + (a.size||0),
+    };
+  });
+
+  try {
+    const r = await API.post('/api/team/create', {
+      manager_id  : S.account.id,
+      manager_name: S.account.manager_name,
+      team_name   : tName,
+      warriors,
+    });
+    if (r.success) {
+      if (!S.account.team_ids.includes(r.team_id)) S.account.team_ids.push(r.team_id);
+      S.teams[r.team_id] = r.team;
+      S.expanded[r.team_id] = true;
+      S.sel = { type:'team', teamId: r.team_id };
+      S.view = 'main';
+      S.ct = null;
+      S.msg = '';
+      render();
+    } else {
+      setMsg(r.error || 'Could not create team.', 'err'); render();
+    }
+  } catch (err) {
+    setMsg('Connection error: ' + err.message, 'err'); render();
+  }
+}
+
+/* ============================================================
+   TURN RESULTS VIEW
+   ============================================================ */
+function buildTurnResults() {
+  const tr  = S.turnResults;
+  if (!tr) return '<div style="padding:20px;">No results.</div>';
+
+  const bouts = tr.bouts || [];
+  const wins   = bouts.filter(b => b.result === 'WIN').length;
+  const losses = bouts.filter(b => b.result === 'LOSS').length;
+  const draws  = bouts.filter(b => b.result === 'DRAW').length;
+
+  let rows = '';
+  bouts.forEach((b, i) => {
+    const resColor = b.result==='WIN'  ? '#060'
+                   : b.result==='LOSS' ? '#800' : '#555';
+    const slainTag   = b.warrior_slain   ? ' <b style="color:#800; font-size:10px;">(SLAIN)</b>'    : '';
+    const killedTag  = b.opponent_slain  ? ' <b style="color:#060; font-size:10px;">(KILLED)</b>'   : '';
+    const typeTag    = `<span style="color:#888; font-size:10px;">[${esc(b.fight_type||'')}]</span>`;
+    const trainLines = (b.training||[]).map(t => esc(t)).join('<br>');
+    const fid = b.fight_id;
+    const viewBtn = fid
+      ? `<button class="sm" onclick="openNarrative(${fid})">View Fight</button>`
+      : `<span style="color:#aaa; font-size:10px;">no log</span>`;
+
+    rows += `<tr style="${i%2===0?'background:#f5f4f0;':''}">
+      <td style="padding:3px 8px;">${esc(b.warrior_name)}${slainTag}</td>
+      <td style="padding:3px 8px; font-weight:bold; color:${resColor};">${b.result}${killedTag}</td>
+      <td style="padding:3px 8px;">${esc(b.opponent_name)}<br><span style="color:#888;font-size:10px;">${esc(b.opponent_team)}</span></td>
+      <td style="padding:3px 8px; text-align:center;">${esc(b.opponent_race)}</td>
+      <td style="padding:3px 8px; text-align:center;">${b.minutes} min ${typeTag}</td>
+      <td style="padding:3px 8px; font-size:10px; color:#333;">${trainLines||'—'}</td>
+      <td style="padding:3px 8px;">${viewBtn}</td>
+    </tr>`;
+  });
+
+  return `
+<div style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
+  ${buildMenuBar()}
+  <div style="flex:1; overflow-y:auto; padding:8px;">
+
+  <div style="font-size:13px; font-weight:bold; margin-bottom:6px;">
+    TURN ${tr.turn_number} RESULTS &mdash; ${esc(tr.team ? tr.team.team_name : '')}
+  </div>
+  <div style="margin-bottom:10px; display:flex; gap:20px; font-size:12px;">
+    <span style="color:#060; font-weight:bold;">Wins: ${wins}</span>
+    <span style="color:#800; font-weight:bold;">Losses: ${losses}</span>
+    <span style="color:#555;">Draws: ${draws}</span>
+    <span style="color:#444;">${bouts.length} fights total</span>
+  </div>
+
+  <table class="grid" style="font-size:11px; margin-bottom:12px;">
+    <thead>
+      <tr>
+        <th style="min-width:130px; text-align:left; padding:3px 8px;">Warrior</th>
+        <th style="width:60px;">Result</th>
+        <th style="min-width:160px; text-align:left; padding:3px 8px;">Opponent</th>
+        <th style="width:70px;">Race</th>
+        <th style="width:90px;">Duration</th>
+        <th style="min-width:160px; text-align:left; padding:3px 8px;">Training</th>
+        <th style="width:80px;">Narrative</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div style="display:flex; gap:8px;">
+    <button id="btn-tr-back" class="wide">Return to Roster</button>
+  </div>
+
+  </div>
+</div>`;
+}
+
+/* ============================================================
+   NARRATIVE OVERLAY
+   ============================================================ */
+function showNarrativeOverlay() {
+  let ov = el('narrative-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'narrative-overlay';
+    document.body.appendChild(ov);
+  }
+  const t = S.narrative;
+  ov.style.cssText = `position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7);
+    z-index:9000; display:flex; align-items:flex-start; justify-content:center; padding:20px;`;
+  ov.innerHTML = `
+  <div style="background:#fff; width:100%; max-width:900px; max-height:90vh; display:flex;
+       flex-direction:column; border:2px solid #808080; box-shadow:4px 4px 0 #000;">
+    <div style="background:#000080; color:#fff; padding:4px 8px; display:flex; align-items:center; font-size:11px; font-weight:bold;">
+      <span>${esc(t.title || 'Fight Narrative')}</span>
+      <button onclick="closeNarrative()" style="margin-left:auto; min-width:0; width:16px; height:14px;
+        padding:0; font-size:9px; background:#d4d0c8; border:1px solid #808080; cursor:default;">✕</button>
+    </div>
+    <div style="flex:1; overflow-y:auto; padding:10px; background:#fff;">
+      <pre style="font-family:'Courier New',Courier,monospace; font-size:11px; line-height:1.5;
+           white-space:pre-wrap; color:#000;">${esc(t.text || '')}</pre>
+    </div>
+    <div style="padding:6px 8px; border-top:1px solid #808080; text-align:right; background:#d4d0c8;">
+      <button onclick="closeNarrative()">Close</button>
+    </div>
+  </div>`;
+}
+
+function hideNarrativeOverlay() {
+  const ov = el('narrative-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+async function openNarrative(fightId) {
+  try {
+    const r = await API.get(`/api/fight/narrative?id=${fightId}`);
+    if (r.success) {
+      S.narrative = { text: r.narrative, title: `Fight #${fightId}` };
+      showNarrativeOverlay();
+    } else {
+      alert('Could not load fight log: ' + r.error);
+    }
+  } catch (err) {
+    alert('Error loading fight log: ' + err.message);
+  }
+}
+
+function closeNarrative() {
+  S.narrative = null;
+  hideNarrativeOverlay();
+}
+
+/* ============================================================
+   RUN TURN ACTION
+   ============================================================ */
+async function doRunTurn(teamId) {
+  // Show running indicator
+  S.running = true;
+  const app = el('app');
+  if (app) {
+    app.innerHTML = `
+<div style="height:100%; display:flex; flex-direction:column; align-items:center;
+     justify-content:center; background:var(--bg);">
+  ${buildMenuBar()}
+  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="font-size:16px; font-weight:bold; margin-bottom:16px;">Running Turn...</div>
+    <div style="font-size:12px; color:#555; margin-bottom:24px;">
+      Warriors are fighting. This may take a moment.
+    </div>
+    <div style="display:flex; gap:6px;">
+      <div style="width:10px;height:10px;background:#000080;border-radius:50%;
+           animation:pulse 1s infinite 0s;"></div>
+      <div style="width:10px;height:10px;background:#000080;border-radius:50%;
+           animation:pulse 1s infinite 0.3s;"></div>
+      <div style="width:10px;height:10px;background:#000080;border-radius:50%;
+           animation:pulse 1s infinite 0.6s;"></div>
+    </div>
+    <style>@keyframes pulse{0%,100%{opacity:.2}50%{opacity:1}}</style>
+  </div>
+</div>`;
+  }
+
+  try {
+    const r = await API.post('/api/turn/run', { team_id: teamId });
+    if (r.success) {
+      // Refresh team in local store
+      S.teams[teamId] = r.team;
+      S.turnResults = r;
+      // Keep the same team selected in tree
+      S.sel = { type: 'team', teamId: teamId };
+      S.view = 'turn_results';
+    } else {
+      S.view = 'main';
+      setMsg('Turn failed: ' + (r.error || 'Unknown error'), 'err');
+    }
+  } catch (err) {
+    S.view = 'main';
+    setMsg('Connection error: ' + err.message, 'err');
+  }
+  S.running = false;
+  render();
+}
+
+/* ============================================================
+   LEAGUE FUNCTIONS
+   ============================================================ */
+
+async function loadLeagueSettings() {
+  try {
+    const r = await API.get('/api/league_settings');
+    if (r.success && r.settings) Object.assign(S.league, r.settings);
+  } catch(e) {}
+}
+
+function showLeagueSettings() {
+  el('league-modal')?.remove();
+  const lg = S.league;
+  const modal = document.createElement('div');
+  modal.id = 'league-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:8000;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+<div style="background:var(--bg);border:2px solid;border-color:var(--white) var(--mid) var(--mid) var(--white);width:440px;max-width:95vw;">
+  <div style="background:var(--title);color:#fff;padding:3px 8px;display:flex;align-items:center;font-weight:bold;font-size:11px;">
+    League Settings
+    <button id="btn-league-close" onclick="el('league-modal').remove()" style="margin-left:auto;min-width:0;width:16px;height:14px;padding:0;font-size:9px;background:var(--bg);border:1px solid var(--mid);">✕</button>
+  </div>
+  <div style="padding:12px;">
+    <div id="lm-msg" style="display:none;padding:4px 8px;margin-bottom:8px;font-size:11px;"></div>
+    <table style="border-collapse:collapse;width:100%;font-size:11px;">
+      <tr>
+        <td style="padding:4px 8px;width:110px;">Server URL</td>
+        <td><input type="text" id="lm-url" value="${esc(lg.url||'')}" style="width:260px;" placeholder="http://192.168.1.5:8766"></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 8px;">Manager Name</td>
+        <td><input type="text" id="lm-name" value="${esc(lg.managerName||'')}" style="width:260px;" placeholder="Your manager name"></td>
+      </tr>
+      <tr>
+        <td style="padding:4px 8px;">Password</td>
+        <td><input type="password" id="lm-pw" value="" style="width:260px;" placeholder="Enter password"></td>
+      </tr>
+      ${lg.managerId ? `<tr><td style="padding:4px 8px;color:#666;font-size:10px;">Manager ID</td><td style="font-size:10px;color:#666;">${esc(lg.managerId)}</td></tr>` : ''}
+    </table>
+    <div style="margin-top:10px;display:flex;gap:6px;justify-content:flex-end;">
+      ${!lg.managerId ? '<button id="btn-league-register" onclick="doLeagueRegister()">Register with Server</button>' : ''}
+      <button id="btn-league-save" onclick="doSaveLeagueSettings()">Save Settings</button>
+      <button onclick="el(\'league-modal\').remove()">Cancel</button>
+    </div>
+  </div>
+</div>`;
+  document.body.appendChild(modal);
+}
+
+function _leagueMsg(text, cls) {
+  const m = el('lm-msg');
+  if (!m) return;
+  m.textContent = text;
+  m.style.display = 'block';
+  m.style.background = cls === 'err' ? '#fcc' : '#cfc';
+  m.style.border     = cls === 'err' ? '1px solid #800' : '1px solid #080';
+}
+
+async function doSaveLeagueSettings() {
+  const url  = (el('lm-url')?.value  || '').trim().replace(/\/+$/, '');
+  const name = (el('lm-name')?.value || '').trim();
+  const pw   = (el('lm-pw')?.value   || '').trim();
+  if (!url) { _leagueMsg('Server URL is required.', 'err'); return; }
+  S.league.url         = url;
+  S.league.managerName = name;
+  if (pw) S.league.password = pw;
+  try {
+    await API.post('/api/league_settings', { url, managerName: name, managerId: S.league.managerId || '' });
+    _leagueMsg('Settings saved.', 'ok');
+    setTimeout(() => { el('league-modal')?.remove(); render(); }, 800);
+  } catch(e) { _leagueMsg('Could not save: ' + e.message, 'err'); }
+}
+
+async function doLeagueRegister() {
+  const url  = (el('lm-url')?.value  || '').trim().replace(/\/+$/, '');
+  const name = (el('lm-name')?.value || '').trim();
+  const pw   = (el('lm-pw')?.value   || '').trim();
+  if (!url || !name || !pw) { _leagueMsg('URL, manager name and password are all required.', 'err'); return; }
+  _leagueMsg('Registering...', 'ok');
+  try {
+    const r = await fetch(url + '/api/register', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({manager_name: name, password: pw})
+    });
+    const d = await r.json();
+    if (d.success) {
+      S.league.url = url; S.league.managerId = d.manager_id;
+      S.league.managerName = d.manager_name; S.league.password = pw;
+      await API.post('/api/league_settings', {url, managerId: d.manager_id, managerName: d.manager_name});
+      _leagueMsg('Registered! Manager ID: ' + d.manager_id, 'ok');
+      setTimeout(() => { el('league-modal')?.remove(); render(); }, 1200);
+    } else { _leagueMsg('Error: ' + d.error, 'err'); }
+  } catch(e) { _leagueMsg('Could not reach league server: ' + e.message, 'err'); }
+}
+
+async function doLeagueUpload(teamId) {
+  const lg = S.league;
+  if (!lg.url || !lg.managerId) { setMsg('Configure league settings first (Action → League Settings).', 'err'); render(); return; }
+  const pw = lg.password || prompt('League password:');
+  if (!pw) return;
+  lg.password = pw;
+  const teamData = await API.get('/api/team?id=' + teamId);
+  if (!teamData.success) { alert('Could not load team data.'); return; }
+  setMsg('Uploading to league server...', 'ok'); render();
+  try {
+    const r = await fetch(lg.url + '/api/upload', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({manager_id: lg.managerId, password: pw, team: teamData.team})
+    });
+    const d = await r.json();
+    if (d.success) {
+      lg.uploaded = true;
+      setMsg('✓ Team uploaded for Turn ' + d.turn + '. Waiting for host to run the turn.', 'ok');
+    } else { setMsg('Upload failed: ' + d.error, 'err'); }
+  } catch(e) { setMsg('Could not reach league server: ' + e.message, 'err'); }
+  render();
+}
+
+async function doLeagueGetResults() {
+  const lg = S.league;
+  if (!lg.url || !lg.managerId) { setMsg('Configure league settings first.', 'err'); render(); return; }
+  const pw = lg.password || prompt('League password:');
+  if (!pw) return;
+  lg.password = pw;
+  setMsg('Fetching league results...', 'ok'); render();
+  try {
+    const r = await fetch(`${lg.url}/api/results?manager_id=${encodeURIComponent(lg.managerId)}&password=${encodeURIComponent(pw)}`);
+    const d = await r.json();
+    if (!d.success) { setMsg('Error: ' + d.error, 'err'); render(); return; }
+    const teamId = S.sel.teamId || S.account?.team_ids?.[0];
+    if (!teamId) { setMsg('Select your team first.', 'err'); render(); return; }
+    const applied = await API.post('/api/apply_league_results', {team_id: teamId, result: d.result});
+    if (!applied.success) { setMsg('Error applying results: ' + applied.error, 'err'); render(); return; }
+    S.teams[teamId] = applied.team;
+    S.turnResults   = {turn_number: applied.turn_number, bouts: applied.bouts, team: applied.team};
+    lg.uploaded = false; lg.resultsReady = false;
+    S.sel = {type:'team', teamId}; S.view = 'turn_results'; S.msg = '';
+    render();
+  } catch(e) { setMsg('Could not reach league server: ' + e.message, 'err'); render(); }
+}
+
+/* ============================================================
+   INITIALISATION
+   ============================================================ */
+async function init() {
+  // Load game data and league settings synchronously before first render.
+  try { S.gd = await API.get('/api/game_data'); } catch(e) {}
+  try {
+    const ls = await API.get('/api/league_settings');
+    if (ls.success && ls.settings) Object.assign(S.league, ls.settings);
+  } catch(e) {}
+  render();
+}
+
+// Global one-time listeners — registered once, never re-added
+document.addEventListener('click', () => {
+  const dd = el('action-dropdown');
+  if (dd) dd.style.display = 'none';
+});
+
+init();
+</script>
+</body>
+</html>
