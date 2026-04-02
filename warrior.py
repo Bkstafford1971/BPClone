@@ -1,5 +1,5 @@
-# =============================================================================
-# warrior.py — Blood Pit Warrior Class
+﻿# =============================================================================
+# warrior.py — BLOODSPIRE Warrior Class
 # =============================================================================
 # Defines the Warrior dataclass along with:
 #   - 6 core attributes and their flavor descriptions
@@ -368,12 +368,12 @@ NON_WEAPON_SKILLS = [
     "disarm", "initiative", "feint", "brawl", "sweep",
 ]
 
-# 44 weapon skills — one per weapon in the game.
+# 45 weapon skills — one per weapon in the game.
 WEAPON_SKILLS = [
     "stiletto", "cestus", "knife", "dagger", "javelin", "hatchet",
     "short_sword", "epee", "hammer", "net", "small_pick", "buckler",
     "swordbreaker", "longsword", "scythe", "flail", "francisca", "mace",
-    "boar_spear", "quarterstaff", "trident", "military_pick", "scimitar",
+    "short_spear", "boar_spear", "quarterstaff", "trident", "military_pick", "scimitar",
     "broad_sword", "morningstar", "war_hammer", "target_shield",
     "bladed_flail", "war_flail", "bastard_sword", "pick_axe", "long_spear",
     "tower_shield", "battle_axe", "battle_flail", "great_staff", "pole_axe",
@@ -403,7 +403,7 @@ SKILL_LEVEL_NAMES = {
 
 class Warrior:
     """
-    Represents a single gladiator in Blood Pit.
+    Represents a single gladiator in BLOODSPIRE.
 
     Design notes:
       - Racial modifiers are NOT baked into base stats. They are stored in
@@ -489,6 +489,12 @@ class Warrior:
         #              warrior_slain, opponent_slain}
         self.fight_history: List[dict] = []
 
+        # --- Per-attribute gain counter (tracks how many successful increases
+        #     have been made per attribute; governs early vs late training tier) ---
+        self.attribute_gains: dict = {
+            "strength":0,"dexterity":0,"constitution":0,"intelligence":0,"presence":0
+        }
+
         # --- Luck (1-30, permanent, assigned at creation, adds to every roll) ---
         # A warrior's luck never changes. Lucky warriors (25-30) punch above their stats.
         # Unlucky warriors (1-5) may underperform despite good attributes.
@@ -496,6 +502,9 @@ class Warrior:
 
         # --- Popularity (0-100 flavor stat) ---
         self.popularity: int = 50
+
+        # --- Recognition (0+ rating, determines class ranking tier) ---
+        self.recognition: int = 0
 
         # --- Win/loss streak (+ve = win streak, -ve = loss streak, 0 = neutral) ---
         self.streak: int = 0
@@ -507,8 +516,14 @@ class Warrior:
         self.want_monster_fight: bool = False   # opt-in for Monster bout this turn
         self.want_retire:        bool = False   # request retirement (requires 100+ fights)
 
+        # --- Death state ---
+        self.is_dead: bool = False   # True once slain; slot awaits player replacement
+        self.killed_by: str = ""     # Name of the warrior/monster that slew this one
+
         # --- Physical Measurements ---
         self.height_in, self.weight_lbs = self._calc_measurements()
+        # Extra pounds gained through attribute training (STR/CON gains)
+        self.training_weight_bonus: int = 0
 
     # =========================================================================
     # DERIVED STAT CALCULATIONS
@@ -598,6 +613,8 @@ class Warrior:
         if self.gender == "Female":
             density *= 0.92   # Slightly lighter frame
         weight = max(30, int(height ** 2 * density))
+        # Add any weight gained through attribute training
+        weight += getattr(self, "training_weight_bonus", 0)
 
         return height, weight
 
@@ -670,6 +687,16 @@ class Warrior:
         return self.total_fights >= MAX_FIGHTS
 
     @property
+    def presence_hesitate_chance(self) -> int:
+        """
+        Chance (1-100) that this warrior's commanding presence causes an opponent
+        to hesitate at the start of a fight, losing a full minute of initiative.
+        Formula: max(0, (presence - 14) * 3)
+        PRE 14 = 0%, PRE 16 = 6%, PRE 18 = 12%, PRE 20 = 18%, PRE 25 = 33%
+        """
+        return max(0, (self.presence - 14) * 3)
+
+    @property
     def is_alive(self) -> bool:
         """False if permanently killed (any injury at level 9)."""
         return not self.injuries.is_fatal()
@@ -689,18 +716,30 @@ class Warrior:
     def train_skill(self, skill: str) -> str:
         """
         Apply one training session to a skill or attribute.
-        Returns a human-readable result message.
+        Returns a human-readable result message (success OR no-progress).
+        Training is NOT automatic — success depends on the warrior's stats.
 
-        Attribute training:
-          - Increases the attribute by 1 (except SIZE — guide explicitly bans this).
-          - CON increases trainability: at high CON, small chance of +2.
-            APPROX: extra gain chance = max(0, (CON - 14)) * 3%.
-          - Humans train stats faster: additional +5% extra gain chance.
+        SKILL training (weapon skills + non-weapon skills):
+          Governed by Intelligence.
+          Base chance = 75 - (current_level × 7)
+            Level 0→1 : 75%   Level 1→2 : 68%   Level 2→3 : 61%
+            Level 3→4 : 54%   Level 4→5 : 47%   Level 5→6 : 40%
+            Level 6→7 : 33%   Level 7→8 : 26%   Level 8→9 : 19%
+          INT modifier: (intelligence - 12) × 2.5% per point above/below 12
+            e.g. INT 13 = +2.5%, INT 15 = +7.5%, INT 10 = -5%
+          Clamped 5%–95%.
 
-        Skill training:
-          - Increases skill level by 1 (max 9).
-          - INT affects learning: higher INT = slightly higher chance of a bonus.
-            APPROX: extra gain chance = max(0, (INT - 10)) * 2%.
+        ATTRIBUTE training (STR / DEX / CON / INT / PRE — not SIZE):
+          Governed by Constitution.
+          Early gains (total attribute increases so far < 6):
+            Chance = max(2, 5 + (constitution - 10) × 2.125)
+            CON 10 = 5%,  CON 12 = 9%,  CON 15 = 16%,  CON 18 = 22%,  CON 25 = 37%
+          Late gains (6+ increases already made — much harder):
+            Chance = max(2, early_chance × 0.25)
+            CON 18 late: 22% × 0.25 = ~5%
+          Human racial bonus: +3% to early tier.
+          Calibration: CON 18 warrior training 3×/fight reaches +6 in ~9-10 fights.
+          "Total gains" is tracked per-attribute in self.attribute_gains.
         """
         key = skill.lower().replace(" ", "_")
 
@@ -713,37 +752,202 @@ class Warrior:
             if current_val >= STAT_MAX:
                 return f"{skill.capitalize()} is already at maximum ({STAT_MAX})."
 
-            # Base: always gain 1
-            gain = 1
+            # Track how many times this attribute has been successfully increased
+            gains_so_far = self.attribute_gains.get(key, 0)
+            con = self.constitution
 
-            # CON bonus: small chance for an extra point
-            con_bonus_chance = max(0, (self.constitution - 14) * 3)
+            # Early tier (first 6 gains): CON-driven, realistic pace
+            # CON 18 → ~22% per attempt → ~9 fights at 3 trains/fight to reach +6
+            early_chance = max(2.0, 5.0 + (con - 10) * 2.125)
             if self.race.modifiers.trains_stats_faster:
-                con_bonus_chance += 5   # Human racial bonus
-            if random.randint(1, 100) <= con_bonus_chance:
-                gain = 2
+                early_chance += 3.0   # Human racial bonus
 
-            new_val = min(STAT_MAX, current_val + gain)
+            if gains_so_far < 6:
+                chance = int(early_chance)
+            else:
+                # Late tier: very hard regardless of CON
+                chance = max(2, int(early_chance * 0.25))
+
+            chance = max(2, min(95, chance))
+
+            if random.randint(1, 100) > chance:
+                tier_label = "late tier — very hard" if gains_so_far >= 6 else f"CON {con}"
+                return (
+                    f"{skill.capitalize()} training: no progress this session "
+                    f"({tier_label}, {chance}% chance)."
+                )
+
+            new_val = min(STAT_MAX, current_val + 1)
             self.set_attr(key, new_val)
-            bonus_note = " (bonus training!)" if gain > 1 else ""
+            self.attribute_gains[key] = gains_so_far + 1
+            tier_note = " [harder tier]" if gains_so_far >= 6 else ""
+
+            # --- Attribute-specific side effects ---
+            if key == "strength":
+                # +2-3 lbs per STR point gained; STR already feeds into _calc_max_hp
+                wt = random.randint(2, 3)
+                self.training_weight_bonus = getattr(self, "training_weight_bonus", 0) + wt
+            elif key == "constitution":
+                # +5-7 lbs per CON point gained; HP recalc handled by recalculate_derived
+                wt = random.randint(5, 7)
+                self.training_weight_bonus = getattr(self, "training_weight_bonus", 0) + wt
+            # DEX bonus (+2.5% dodge, +2% parry) and INT bonus (4th train) are applied
+            # in combat.py — they are derived live from the current stat value.
+            # Presence hesitation chance is also derived live.
+
             return (
-                f"{skill.capitalize()} trained: {current_val} → {new_val}{bonus_note}"
+                f"{skill.capitalize()} trained: {current_val} → {new_val}"
+                f"{tier_note} ({chance}% chance)"
             )
 
         # --- Skill training ---
         elif key in ALL_SKILLS:
             current_level = self.skills.get(key, 0)
             if current_level >= 9:
-                return f"{skill} is already at Master Skill (9)."
+                return f"{skill.replace('_',' ').title()} is already at Master Skill (9)."
+
+            intel = self.intelligence
+            base_chance  = 75 - (current_level * 7)
+            int_modifier = (intel - 12) * 2.5
+            chance       = max(5, min(95, int(base_chance + int_modifier)))
+
+            if random.randint(1, 100) > chance:
+                return (
+                    f"{skill.replace('_',' ').title()} training: no progress this session "
+                    f"(INT {intel}, level {current_level}, {chance}% chance)."
+                )
 
             self.skills[key] = current_level + 1
             new_name = SKILL_LEVEL_NAMES[self.skills[key]]
             return (
                 f"{skill.replace('_',' ').title()} trained: "
-                f"Level {current_level} → Level {self.skills[key]} ({new_name})"
+                f"Level {current_level} → Level {self.skills[key]} ({new_name}, {chance}% chance)"
             )
         else:
             return f"Unknown skill or attribute: '{skill}'"
+
+    # =========================================================================
+    # RECOGNITION
+    # =========================================================================
+
+    def update_recognition(
+        self,
+        won: bool,
+        killed_opponent: bool = False,
+        self_hp_pct: float = 1.0,
+        opp_hp_pct: float = 0.0,
+        self_knockdowns: int = 0,
+        opp_knockdowns: int = 0,
+        self_near_kills: int = 0,
+        opp_near_kills: int = 0,
+        minutes_elapsed: int = 5,
+        max_minutes: int = 30,
+        opponent_total_fights: int = 0,
+    ) -> None:
+        """
+        Update recognition rating after a fight (formula v2).
+
+        Total = Base + Underdog Bonus + Dominance Bonus − Upset Penalty
+                     + Popularity Bonus + Luck Bonus
+        Clamped 1–15 per fight.  Lifetime total capped at 99.
+
+        self_* / opp_* args should reflect THIS warrior's perspective
+        (i.e. pass self's hp_pct, self's knockdowns, etc.).
+        record_result() must already have run so total_fights is current.
+        """
+        # ------------------------------------------------------------------
+        # Experience (pre-fight counts — record_result already incremented)
+        # ------------------------------------------------------------------
+        self_exp = max(1, self.total_fights - 1)
+        opp_exp  = max(1, opponent_total_fights - 1)
+
+        # ------------------------------------------------------------------
+        # 1. Base Points
+        # ------------------------------------------------------------------
+        if won:
+            base = 5 if killed_opponent else 3
+        else:
+            base = 1
+
+        # ------------------------------------------------------------------
+        # 2. Underdog Bonus (only when opponent has more experience)
+        # ------------------------------------------------------------------
+        underdog_bonus = 0
+        if opp_exp > self_exp:
+            pct_more = (opp_exp - self_exp) / self_exp * 100
+            if won:
+                if pct_more >= 25:   underdog_bonus = 3
+                elif pct_more >= 15: underdog_bonus = 2
+                else:                underdog_bonus = 1
+            else:
+                if pct_more >= 25:   underdog_bonus = 2
+                elif pct_more >= 15: underdog_bonus = 1
+                else:                underdog_bonus = 0
+
+        # ------------------------------------------------------------------
+        # 3. Dominance Bonus (wins/kills only)
+        # ------------------------------------------------------------------
+        dominance_bonus = 0
+        if won:
+            duration_pct    = minutes_elapsed / max(1, max_minutes)
+            dominance_score = (self_hp_pct * 50                      # 0–50: health remaining
+                               + (1.0 - duration_pct) * 30           # 0–30: shorter = more dominant
+                               + min(20, self_knockdowns * 10))       # 0–20: knockdowns dealt
+            dominance_score = min(100.0, dominance_score)
+            if dominance_score >= 75:   dominance_bonus = 3
+            elif dominance_score >= 50: dominance_bonus = 2
+            elif dominance_score >= 25: dominance_bonus = 1
+
+        # ------------------------------------------------------------------
+        # 4. Upset Penalty (losses only when this warrior was the favorite)
+        # ------------------------------------------------------------------
+        upset_penalty = 0
+        if not won and self_exp > opp_exp:
+            gap_pct = (self_exp - opp_exp) / self_exp * 100
+            if gap_pct >= 25:       base_penalty = 2
+            elif gap_pct >= 15:     base_penalty = 1
+            else:                   base_penalty = 0
+
+            if base_penalty > 0:
+                exp_factor = min(self_exp / 8.0, 3.0)
+
+                # Loss Quality Score (0–100): higher = loss was more heroic/close
+                duration_pct = minutes_elapsed / max(1, max_minutes)
+                lqs = 40
+                if self_near_kills > 0:   lqs += 30   # came close to winning
+                if duration_pct >= 0.80:  lqs += 20   # went the distance
+                if self_hp_pct >= 0.40:   lqs += 15   # still standing at defeat
+                lqs += self_knockdowns * 10            # heroic moments
+                if duration_pct <= 0.30:  lqs -= 15   # quick KO
+                lqs = max(0, min(100, lqs))
+
+                closeness_mult = (100 - lqs) / 100.0
+                upset_penalty  = round(base_penalty * exp_factor * closeness_mult)
+
+        # ------------------------------------------------------------------
+        # 5. Popularity Bonus (wins only — crowd recognises fan favourites)
+        # ------------------------------------------------------------------
+        popularity_bonus = 0
+        if won:
+            if self.popularity >= 70:   popularity_bonus = 2
+            elif self.popularity >= 50: popularity_bonus = 1
+
+        # ------------------------------------------------------------------
+        # 6. Luck Bonus (probabilistic — lucky warriors occasionally shine)
+        # ------------------------------------------------------------------
+        luck_bonus = 0
+        luck_threshold = 15
+        if self.luck > luck_threshold:
+            chance = (self.luck - luck_threshold) / (30 - luck_threshold)
+            if random.random() < chance:
+                luck_bonus = 1
+
+        # ------------------------------------------------------------------
+        # Final tally
+        # ------------------------------------------------------------------
+        points = base + underdog_bonus + dominance_bonus - upset_penalty + popularity_bonus + luck_bonus
+        points = max(1, min(15, points))
+        self.recognition = min(99, self.recognition + points)
 
     # =========================================================================
     # POPULARITY
@@ -901,11 +1105,16 @@ class Warrior:
             "trains":          self.trains,
             "blood_cry":       self.blood_cry,
             "luck":            self.luck,
+            "attribute_gains":  self.attribute_gains,
             "popularity":      self.popularity,
+            "recognition":     self.recognition,
             "streak":          self.streak,
             "turns_active":    self.turns_active,
             "want_monster_fight": self.want_monster_fight,
             "want_retire":     self.want_retire,
+            "is_dead":         self.is_dead,
+            "training_weight_bonus": self.training_weight_bonus,
+            "killed_by":       self.killed_by,
             "initial_stats":   self.initial_stats,
             "fight_history":   self.fight_history,
         }
@@ -938,12 +1147,22 @@ class Warrior:
         w.skills     = data.get("skills", {skill: 0 for skill in ALL_SKILLS})
         w.blood_cry    = data.get("blood_cry",  "")
         w.luck         = data.get("luck", random.randint(1, 30))  # retroactively assign if missing
+        w.attribute_gains = data.get("attribute_gains", {"strength":0,"dexterity":0,"constitution":0,"intelligence":0,"presence":0})
         w.popularity   = data.get("popularity", 50)
+        w.recognition  = data.get("recognition", 0)
         w.streak            = data.get("streak", 0)
         w.turns_active      = data.get("turns_active", 0)
         w.want_monster_fight= data.get("want_monster_fight", False)
         w.want_retire       = data.get("want_retire", False)
+        w.is_dead           = data.get("is_dead", False)
+        w.training_weight_bonus = data.get("training_weight_bonus", 0)
+        w.killed_by         = data.get("killed_by", "")
         w.initial_stats  = data.get("initial_stats")
+        # Backfill for warriors saved before initial_stats was tracked.
+        # Using current values as the baseline means past gains won't show the
+        # parenthetical, but any NEW training increase will display "16 (15)".
+        if w.initial_stats is None:
+            w.initial_stats = {attr: getattr(w, attr) for attr in ATTRIBUTES}
         w.fight_history  = data.get("fight_history", [])
         w.trains     = data.get("trains",     [])
 

@@ -1,5 +1,5 @@
-# =============================================================================
-# weapons.py — Blood Pit Weapon Definitions
+﻿# =============================================================================
+# weapons.py — BLOODSPIRE Weapon Definitions
 # =============================================================================
 # Contains:
 #   - Full weapon table (44 weapons, matching the 44 weapon skills)
@@ -99,7 +99,7 @@ ALL_CATEGORIES = [
 @dataclass
 class Weapon:
     """
-    A single weapon available in Blood Pit.
+    A single weapon available in BLOODSPIRE.
 
     skill_key:   Matches the key used in warrior.skills (snake_case).
     display:     Human-readable name as shown in fight narratives.
@@ -241,7 +241,7 @@ WEAPONS: dict[str, Weapon] = {
     "knife": Weapon(
         skill_key     = "knife",
         display       = "Knife",
-        weight        = 2.0,
+        weight        = 1.5,
         throwable     = True,
         two_hand      = False,
         category      = SWORD_KNIFE,
@@ -253,7 +253,7 @@ WEAPONS: dict[str, Weapon] = {
     "dagger": Weapon(
         skill_key     = "dagger",
         display       = "Dagger",
-        weight        = 2.3,
+        weight        = 2.0,
         throwable     = True,
         two_hand      = False,
         category      = SWORD_KNIFE,
@@ -299,7 +299,7 @@ WEAPONS: dict[str, Weapon] = {
     "scimitar": Weapon(
         skill_key     = "scimitar",
         display       = "Scimitar",
-        weight        = 4.5,
+        weight        = 3.5,
         throwable     = False,
         two_hand      = False,
         category      = SWORD_KNIFE,
@@ -327,7 +327,7 @@ WEAPONS: dict[str, Weapon] = {
     "broad_sword": Weapon(
         skill_key     = "broad_sword",
         display       = "Broad Sword",
-        weight        = 5.0,
+        weight        = 3.8,
         throwable     = False,
         two_hand      = False,
         category      = SWORD_KNIFE,
@@ -341,7 +341,7 @@ WEAPONS: dict[str, Weapon] = {
     "bastard_sword": Weapon(
         skill_key     = "bastard_sword",
         display       = "Bastard Sword",
-        weight        = 6.5,
+        weight        = 4.8,
         throwable     = False,
         two_hand      = True,
         category      = SWORD_KNIFE,
@@ -355,7 +355,7 @@ WEAPONS: dict[str, Weapon] = {
     "great_sword": Weapon(
         skill_key     = "great_sword",
         display       = "Great Sword",
-        weight        = 8.5,
+        weight        = 6.8,
         throwable     = False,
         two_hand      = True,
         category      = SWORD_KNIFE,
@@ -374,7 +374,7 @@ WEAPONS: dict[str, Weapon] = {
     "hatchet": Weapon(
         skill_key     = "hatchet",
         display       = "Hatchet",
-        weight        = 2.8,
+        weight        = 1.8,
         throwable     = True,
         two_hand      = False,
         category      = AXE_PICK,
@@ -385,7 +385,7 @@ WEAPONS: dict[str, Weapon] = {
     "francisca": Weapon(
         skill_key     = "francisca",
         display       = "Fransisca",
-        weight        = 3.8,
+        weight        = 2.5,
         throwable     = True,
         two_hand      = False,
         category      = AXE_PICK,
@@ -396,7 +396,7 @@ WEAPONS: dict[str, Weapon] = {
     "battle_axe": Weapon(
         skill_key     = "battle_axe",
         display       = "Battle Axe",
-        weight        = 7.5,
+        weight        = 4.5,
         throwable     = False,
         two_hand      = False,
         category      = AXE_PICK,
@@ -411,7 +411,7 @@ WEAPONS: dict[str, Weapon] = {
     "great_axe": Weapon(
         skill_key     = "great_axe",
         display       = "Great Axe",
-        weight        = 9.0,
+        weight        = 6.0,
         throwable     = False,
         two_hand      = True,
         category      = AXE_PICK,
@@ -425,7 +425,7 @@ WEAPONS: dict[str, Weapon] = {
     "small_pick": Weapon(
         skill_key     = "small_pick",
         display       = "Small Pick",
-        weight        = 3.2,
+        weight        = 2.8,
         throwable     = False,
         two_hand      = False,
         category      = AXE_PICK,
@@ -437,7 +437,7 @@ WEAPONS: dict[str, Weapon] = {
     "military_pick": Weapon(
         skill_key     = "military_pick",
         display       = "Military Pick",
-        weight        = 4.5,
+        weight        = 3.5,
         throwable     = False,
         two_hand      = False,
         category      = AXE_PICK,
@@ -452,7 +452,7 @@ WEAPONS: dict[str, Weapon] = {
     "pick_axe": Weapon(
         skill_key     = "pick_axe",
         display       = "Pick Axe",
-        weight        = 6.8,
+        weight        = 4.8,
         throwable     = False,
         two_hand      = True,
         category      = AXE_PICK,
@@ -468,7 +468,7 @@ WEAPONS: dict[str, Weapon] = {
     "hammer": Weapon(
         skill_key     = "hammer",
         display       = "Hammer",
-        weight        = 3.0,
+        weight        = 2.0,
         throwable     = True,
         two_hand      = False,
         category      = HAMMER_MACE,
@@ -479,7 +479,7 @@ WEAPONS: dict[str, Weapon] = {
     "mace": Weapon(
         skill_key     = "mace",
         display       = "Mace",
-        weight        = 4.0,
+        weight        = 3.0,
         throwable     = False,
         two_hand      = False,
         category      = HAMMER_MACE,
@@ -490,7 +490,7 @@ WEAPONS: dict[str, Weapon] = {
     "morningstar": Weapon(
         skill_key     = "morningstar",
         display       = "Morningstar",
-        weight        = 5.0,
+        weight        = 4.0,
         throwable     = False,
         two_hand      = False,
         category      = HAMMER_MACE,
@@ -504,7 +504,7 @@ WEAPONS: dict[str, Weapon] = {
     "war_hammer": Weapon(
         skill_key     = "war_hammer",
         display       = "War Hammer",
-        weight        = 5.0,
+        weight        = 4.5,
         throwable     = False,
         two_hand      = False,
         category      = HAMMER_MACE,
@@ -518,7 +518,7 @@ WEAPONS: dict[str, Weapon] = {
     "maul": Weapon(
         skill_key     = "maul",
         display       = "Maul",
-        weight        = 9.0,
+        weight        = 7.5,
         throwable     = False,
         two_hand      = True,
         category      = HAMMER_MACE,
@@ -531,10 +531,26 @@ WEAPONS: dict[str, Weapon] = {
     # POLEARMS & SPEARS
     # =========================================================================
 
+    "short_spear": Weapon(
+        skill_key     = "short_spear",
+        display       = "Short Spear",
+        weight        = 3.0,
+        throwable     = True,
+        two_hand      = False,
+        category      = POLEARM_SPEAR,
+        charge_attack = True,
+        notes=(
+            "Light and potent weapon. Effective in Lunge, Wall of "
+            "Steel, and Strike. Can throw. Use with a shield. "
+            "Great attack rate and average to above average damage. Favored by all races."
+        ),
+        preferred_styles=["Lunge", "Wall of Steel", "Strike", "Opportunity Throw"],
+    ),
+
     "boar_spear": Weapon(
         skill_key     = "boar_spear",
         display       = "Boar Spear",
-        weight        = 4.0,
+        weight        = 3.8,
         throwable     = True,
         two_hand      = False,
         category      = POLEARM_SPEAR,
@@ -550,7 +566,7 @@ WEAPONS: dict[str, Weapon] = {
     "long_spear": Weapon(
         skill_key     = "long_spear",
         display       = "Long Spear",
-        weight        = 7.2,
+        weight        = 4.2,
         throwable     = False,
         two_hand      = True,
         category      = POLEARM_SPEAR,
@@ -565,7 +581,7 @@ WEAPONS: dict[str, Weapon] = {
     "pole_axe": Weapon(
         skill_key     = "pole_axe",
         display       = "Pole Axe",
-        weight        = 8.0,
+        weight        = 5.5,
         throwable     = False,
         two_hand      = True,
         category      = POLEARM_SPEAR,
@@ -580,7 +596,7 @@ WEAPONS: dict[str, Weapon] = {
     "halberd": Weapon(
         skill_key     = "halberd",
         display       = "Halberd",
-        weight        = 9.5,
+        weight        = 7.5,
         throwable     = False,
         two_hand      = True,
         category      = POLEARM_SPEAR,
@@ -599,7 +615,7 @@ WEAPONS: dict[str, Weapon] = {
     "flail": Weapon(
         skill_key     = "flail",
         display       = "Flail",
-        weight        = 3.6,
+        weight        = 2.6,
         throwable     = False,
         two_hand      = False,
         category      = FLAIL,
@@ -615,7 +631,7 @@ WEAPONS: dict[str, Weapon] = {
     "bladed_flail": Weapon(
         skill_key     = "bladed_flail",
         display       = "Bladed Flail",
-        weight        = 5.6,
+        weight        = 4.0,
         throwable     = False,
         two_hand      = False,
         category      = FLAIL,
@@ -631,7 +647,7 @@ WEAPONS: dict[str, Weapon] = {
     "war_flail": Weapon(
         skill_key     = "war_flail",
         display       = "War Flail",
-        weight        = 6.0,
+        weight        = 5.0,
         throwable     = False,
         two_hand      = False,
         category      = FLAIL,
@@ -644,7 +660,7 @@ WEAPONS: dict[str, Weapon] = {
     "battle_flail": Weapon(
         skill_key     = "battle_flail",
         display       = "Battle Flail",
-        weight        = 7.5,
+        weight        = 6.5,
         throwable     = False,
         two_hand      = True,
         category      = FLAIL,
@@ -665,7 +681,7 @@ WEAPONS: dict[str, Weapon] = {
     "quarterstaff": Weapon(
         skill_key     = "quarterstaff",
         display       = "Quarterstaff",
-        weight        = 4.0,
+        weight        = 3.0,
         throwable     = False,
         two_hand      = True,
         category      = STAVE,
@@ -680,7 +696,7 @@ WEAPONS: dict[str, Weapon] = {
     "great_staff": Weapon(
         skill_key     = "great_staff",
         display       = "Great Staff",
-        weight        = 7.5,
+        weight        = 5.5,
         throwable     = False,
         two_hand      = True,
         category      = STAVE,
@@ -696,7 +712,7 @@ WEAPONS: dict[str, Weapon] = {
     "buckler": Weapon(
         skill_key     = "buckler",
         display       = "Buckler",
-        weight        = 3.2,
+        weight        = 2.2,
         throwable     = False,
         two_hand      = False,
         category      = SHIELD,
@@ -708,7 +724,7 @@ WEAPONS: dict[str, Weapon] = {
     "target_shield": Weapon(
         skill_key     = "target_shield",
         display       = "Target Shield",
-        weight        = 5.2,
+        weight        = 4.2,
         throwable     = False,
         two_hand      = False,
         category      = SHIELD,
@@ -720,7 +736,7 @@ WEAPONS: dict[str, Weapon] = {
     "tower_shield": Weapon(
         skill_key     = "tower_shield",
         display       = "Tower Shield",
-        weight        = 7.2,
+        weight        = 5.5,
         throwable     = False,
         two_hand      = False,
         category      = SHIELD,
@@ -736,7 +752,7 @@ WEAPONS: dict[str, Weapon] = {
     "cestus": Weapon(
         skill_key     = "cestus",
         display       = "Cestus",
-        weight        = 1.5,
+        weight        = 1.0,
         throwable     = False,
         two_hand      = False,
         category      = ODDBALL,
@@ -766,7 +782,7 @@ WEAPONS: dict[str, Weapon] = {
     "net": Weapon(
         skill_key     = "net",
         display       = "Net",
-        weight        = 3.0,
+        weight        = 2.5,
         throwable     = False,
         two_hand      = False,
         category      = ODDBALL,
@@ -798,7 +814,7 @@ WEAPONS: dict[str, Weapon] = {
     "great_pick": Weapon(
         skill_key     = "great_pick",
         display       = "Great Pick",
-        weight        = 9.0,
+        weight        = 7.5,
         throwable     = False,
         two_hand      = True,
         category      = ODDBALL,
@@ -828,7 +844,7 @@ WEAPONS: dict[str, Weapon] = {
     "ball_and_chain": Weapon(
         skill_key     = "ball_and_chain",
         display       = "Ball & Chain",
-        weight        = 8.5,
+        weight        = 7.5,
         throwable     = False,
         two_hand      = True,
         category      = ODDBALL,
@@ -846,7 +862,7 @@ WEAPONS: dict[str, Weapon] = {
     "swordbreaker": Weapon(
         skill_key     = "swordbreaker",
         display       = "Swordbreaker",
-        weight        = 3.2,
+        weight        = 2.6,
         throwable     = False,
         two_hand      = False,
         category      = ODDBALL,

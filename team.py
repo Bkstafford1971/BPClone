@@ -1,5 +1,5 @@
-# =============================================================================
-# team.py — Blood Pit Team Class
+﻿# =============================================================================
+# team.py — BLOODSPIRE Team Class
 # =============================================================================
 # A team always has exactly 5 warriors.
 # When a warrior dies or retires, a replacement slot opens immediately.
@@ -46,6 +46,16 @@ class Team:
 
         # Pending challenges: {warrior_name: [challenge_target, ...]}
         self.challenges: Dict[str, List[str]] = {}
+
+        # Archived warriors — dead warriors stored as stat snapshots after replacement
+        self.archived_warriors: List[dict] = []
+
+        # Pending replacement rollup bases: {slot_idx: base_stats_dict}
+        self.pending_replacements: Dict[int, dict] = {}
+
+        # Rolling turn history for last-5-turns newsletter column
+        # Each entry: {"turn": int, "w": int, "l": int, "k": int}
+        self.turn_history: List[dict] = []
 
     # =========================================================================
     # ROSTER MANAGEMENT
@@ -101,8 +111,9 @@ class Team:
 
     @property
     def active_warriors(self) -> List[Warrior]:
-        """All warriors who are alive and present (no None slots)."""
-        return [w for w in self.warriors if w is not None and w.is_alive]
+        """Return living warriors only — excludes None slots and is_dead warriors."""
+        return [w for w in self.warriors if w is not None
+                and w.is_alive and not getattr(w, "is_dead", False)]
 
     @property
     def is_full(self) -> bool:
@@ -120,45 +131,67 @@ class Team:
         warrior: Warrior,
         killed_by: str = "Unknown",
         killer_fights: int = 0,
-    ) -> Warrior:
+    ) -> int:
         """
-        Remove a warrior from the roster (they have died in combat).
-        Logs the death for blood challenge purposes.
-        Returns a freshly created replacement warrior placed in the same slot.
+        Mark a warrior as dead but keep them in their roster slot until the
+        player creates a replacement via the Replacement tab in the GUI.
+        Returns the slot index.
 
-        Guide: "When one or more warriors on your team are killed, you receive
-        an equal number of beginners as replacements."
+        The warrior stays in self.warriors[idx] with is_dead=True so they
+        appear in the tree with a skull icon. The Replacement tab activates,
+        letting the player roll up and name a new warrior. Once the player
+        saves the replacement, confirm_replacement() archives the dead warrior
+        and places the new one in the slot.
         """
         idx = self.warrior_index(warrior.name)
         if idx == -1:
             raise ValueError(f"Warrior '{warrior.name}' not found on team '{self.team_name}'.")
 
-        # Log for blood challenge tracking
+        warrior.is_dead   = True
+        warrior.killed_by = killed_by
+
         self.fallen_warriors.append({
             "warrior_name" : warrior.name,
             "killed_by"    : killed_by,
             "killer_fights": killer_fights,
+            "slot_idx"     : idx,
         })
 
-        # If the killer has 5+ fights, a blood challenge becomes available.
-        # Guide: "The killer must have at least 5 fights before you may BC them."
         if killer_fights >= 5:
-            self.blood_challenges.append((None, killed_by))  # challenger TBD by player
+            self.blood_challenges.append((None, killed_by))
             print(
                 f"  *** BLOOD CHALLENGE available against '{killed_by}' "
                 f"for the death of {warrior.name}! ***"
             )
 
-        # Create replacement (guide: same as a new warrior roll-up)
-        replacement = create_warrior_ai()
-        replacement.name = f"Recruit_{warrior.name[:4]}_{random.randint(10,99)}"
-        self.warriors[idx] = replacement
+        print(f"  {warrior.name} has fallen. Replacement slot open at position {idx}.")
+        return idx
 
-        print(
-            f"  {warrior.name} has fallen. "
-            f"Replacement warrior '{replacement.name}' joins the team."
-        )
-        return replacement
+    def confirm_replacement(self, slot_idx: int, new_warrior: Warrior) -> bool:
+        """
+        Called when the player finishes building a replacement warrior.
+        Archives the dead warrior as a frozen snapshot, then places the new
+        warrior in the slot. Returns True on success.
+        """
+        if slot_idx < 0 or slot_idx >= len(self.warriors):
+            return False
+        dead = self.warriors[slot_idx]
+        if dead is None or not getattr(dead, "is_dead", False):
+            return False
+
+        # Snapshot the dead warrior for the archives tab
+        snapshot = dead.to_dict()
+        snapshot["archived_killed_by"] = dead.killed_by
+        snapshot["archived_turns"]     = getattr(dead, "turns_active", 0)
+        self.archived_warriors.append(snapshot)
+
+        # Place the replacement
+        self.warriors[slot_idx] = new_warrior
+        if slot_idx in self.pending_replacements:
+            del self.pending_replacements[slot_idx]
+
+        print(f"  {dead.name} archived. {new_warrior.name} joins as replacement.")
+        return True
 
     def retire_warrior(self, warrior: Warrior) -> Optional[Warrior]:
         """
@@ -252,13 +285,16 @@ class Team:
 
     def to_dict(self) -> dict:
         return {
-            "team_name"      : self.team_name,
-            "manager_name"   : self.manager_name,
-            "team_id"        : self.team_id,
-            "warriors"       : [w.to_dict() if w else None for w in self.warriors],
-            "fallen_warriors": self.fallen_warriors,
-            "blood_challenges": [list(bc) for bc in self.blood_challenges],
-            "challenges"     : self.challenges,
+            "team_name"           : self.team_name,
+            "manager_name"        : self.manager_name,
+            "team_id"             : self.team_id,
+            "warriors"            : [w.to_dict() if w else None for w in self.warriors],
+            "fallen_warriors"     : self.fallen_warriors,
+            "blood_challenges"    : [list(bc) for bc in self.blood_challenges],
+            "challenges"          : self.challenges,
+            "archived_warriors"   : self.archived_warriors,
+            "pending_replacements": {str(k): v for k, v in self.pending_replacements.items()},
+            "turn_history"         : self.turn_history[-20:],  # keep last 20 turns
         }
 
     @classmethod
@@ -273,9 +309,12 @@ class Team:
             Warrior.from_dict(w) if w is not None else None
             for w in raw_warriors
         ]
-        team.fallen_warriors  = data.get("fallen_warriors", [])
-        team.blood_challenges = [tuple(bc) for bc in data.get("blood_challenges", [])]
-        team.challenges       = data.get("challenges", {})
+        team.fallen_warriors     = data.get("fallen_warriors", [])
+        team.blood_challenges    = [tuple(bc) for bc in data.get("blood_challenges", [])]
+        team.challenges          = data.get("challenges", {})
+        team.archived_warriors   = data.get("archived_warriors", [])
+        team.pending_replacements= {int(k): v for k, v in data.get("pending_replacements", {}).items()}
+        team.turn_history        = data.get("turn_history", [])
         return team
 
 
@@ -313,27 +352,30 @@ def create_ai_team(
 
 # Each entry: (name, gender, STR, DEX, CON, INT, PRE, SIZ, armor, weapon)
 # Tier 1 = hardest, Tier 10 = easiest.
+# Peasant stats bumped slightly from v1 — they should present a real threat
+# but still be clearly beatable. Target: player wins ~65-70% (was 70-75%).
+# Each stat raised by 2-3 points across the board.
 PEASANT_ROSTER = [
     # Tier 1 — Crom the Bell-Keeper: big and mean, likes to bash
-    ("Crom the Bell-Keeper",  "Male",   16, 13, 15, 10,  9, 16, "Brigandine",  "Morningstar"),
+    ("Crom the Bell-Keeper",  "Male",   19, 15, 17, 11, 10, 17, "Brigandine",  "Morningstar"),
     # Tier 2 — Bawdy Nell: fast and sneaky, dagger in the ribs
-    ("Bawdy Nell",            "Female", 12, 16, 12, 13, 11, 10, "Cuir Boulli", "Short Sword"),
+    ("Bawdy Nell",            "Female", 14, 18, 14, 14, 12, 11, "Cuir Boulli", "Short Sword"),
     # Tier 3 — Vernon the Versifier: surprisingly capable with a spear
-    ("Vernon the Versifier",  "Male",   13, 14, 13, 12, 10, 12, "Leather",     "Boar Spear"),
+    ("Vernon the Versifier",  "Male",   15, 16, 15, 13, 11, 13, "Leather",     "Boar Spear"),
     # Tier 4 — Hilda the Fishmonger: tough as old boots
-    ("Hilda the Fishmonger",  "Female", 14, 11, 15, 10,  9, 13, "Brigandine",  "War Flail"),
+    ("Hilda the Fishmonger",  "Female", 16, 13, 17, 11, 10, 14, "Brigandine",  "War Flail"),
     # Tier 5 — Grub the Coinless: desperate fighter, nothing to lose
-    ("Grub the Coinless",     "Male",   12, 12, 12, 10,  8, 12, "Leather",     "Battle Axe"),
+    ("Grub the Coinless",     "Male",   14, 14, 14, 11,  9, 13, "Leather",     "Battle Axe"),
     # Tier 6 — Mort the Ditch-Digger: slow but surprisingly durable
-    ("Mort the Ditch-Digger", "Male",   13, 10, 13, 9,   8, 14, "Cloth",       "Morningstar"),
+    ("Mort the Ditch-Digger", "Male",   15, 12, 15, 10,  9, 15, "Cloth",       "Morningstar"),
     # Tier 7 — Wandering Wanda: slippery and hard to pin down
-    ("Wandering Wanda",       "Female", 10, 14, 11, 12,  9, 10, "Leather",     "Flail"),
+    ("Wandering Wanda",       "Female", 12, 16, 13, 13, 10, 11, "Leather",     "Flail"),
     # Tier 8 — Oswald the Soothsayer: more prophet than fighter
-    ("Oswald the Soothsayer", "Male",   10, 11, 11, 12, 11, 11, "Cloth",       "Short Sword"),
+    ("Oswald the Soothsayer", "Male",   12, 13, 13, 13, 12, 12, "Cloth",       "Short Sword"),
     # Tier 9 — Crackers McGee: unpredictable but fragile
-    ("Crackers McGee",        "Male",    9, 12, 10, 10,  8,  9, "Cloth",       "Hatchet"),
-    # Tier 10 — Wilbur the Weed-Puller: barely a threat (easiest)
-    ("Wilbur the Weed-Puller","Male",    8,  9,  9,  8,  7,  9, "Cloth",       "Short Sword"),
+    ("Crackers McGee",        "Male",   11, 14, 12, 11,  9, 10, "Cloth",       "Hatchet"),
+    # Tier 10 — Wilbur the Weed-Puller: not totally helpless now
+    ("Wilbur the Weed-Puller","Male",   10, 11, 11, 10,  8, 10, "Cloth",       "Short Sword"),
 ]
 
 # Variance range applied to peasant stats so each fight feels slightly different.

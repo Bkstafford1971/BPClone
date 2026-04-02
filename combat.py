@@ -1,5 +1,5 @@
-# =============================================================================
-# combat.py — Blood Pit Combat Engine v2
+﻿# =============================================================================
+# combat.py — BLOODSPIRE Combat Engine v2
 # =============================================================================
 # CORE MECHANICS:
 #   All rolls: d100 (1-100).
@@ -63,7 +63,14 @@ class FightResult:
     loser_died      : bool
     minutes_elapsed : int
     narrative       : str
-    training_results: dict = field(default_factory=dict)
+    training_results: dict  = field(default_factory=dict)
+    # Per-fighter combat metrics — used by update_recognition v2
+    winner_hp_pct    : float = 1.0   # winner's HP fraction at fight end
+    loser_hp_pct     : float = 0.0   # loser's HP fraction at fight end
+    winner_knockdowns: int   = 0     # knockdowns delivered by winner
+    loser_knockdowns : int   = 0     # knockdowns delivered by loser
+    winner_near_kills: int   = 0     # times winner reduced opponent below 20% HP
+    loser_near_kills : int   = 0     # times loser reduced opponent below 20% HP
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +89,8 @@ class _CState:
     consecutive_ground : int     = 0
     concede_attempts   : int     = 0
     hp_at_last_concede : int     = 9999
+    knockdowns_dealt   : int     = 0   # knockdowns inflicted on opponent
+    near_kills_dealt   : int     = 0   # times this warrior reduced opponent below 20% HP
 
     def to_fighter_state(self) -> FighterState:
         return FighterState(
@@ -175,13 +184,18 @@ def _defense_roll(
     wpn_key   = defender.primary_weapon.lower().replace(" ", "_").replace("&", "and")
     wpn_skill = defender.skills.get(wpn_key, 0)
 
+    # DEX training bonus: each trained DEX point adds to defense rolls
+    # +2.5 per point for dodge (rounded), +2 per point for parry.
+    dex_trained = defender.attribute_gains.get("dexterity", 0)
+
     if is_parry:
         str_b    = max(-5, min(5, (defender.strength - 10) // 2))
         skill_b  = defender.skills.get("parry", 0) * 4
         wpn_b    = wpn_skill * 3
         style_b  = props.parry_bonus * 3
         act_mod  = (5 - strategy.activity) * 2
-        total    = roll + str_b + skill_b + wpn_b + style_b + act_mod + luck_b
+        dex_train_parry = int(dex_trained * 2)   # +2 per trained DEX point
+        total    = roll + str_b + skill_b + wpn_b + style_b + act_mod + luck_b + dex_train_parry
     else:
         dex      = effective_dex(defender.dexterity, defender.armor or "None", defender.helm or "None")
         dex_b    = max(-8, min(8, (dex - 10)))
@@ -191,7 +205,8 @@ def _defense_roll(
         act_mod  = (strategy.activity - 5) * 2
         size_diff= attacker.size - defender.size
         size_b   = 5 if size_diff >= 3 else (-5 if size_diff <= -3 else 0)
-        total    = roll + dex_b + skill_b + wpn_b + style_b + act_mod + size_b + luck_b
+        dex_train_dodge = int(dex_trained * 2.5) # +2.5 per trained DEX point
+        total    = roll + dex_b + skill_b + wpn_b + style_b + act_mod + size_b + luck_b + dex_train_dodge
 
     if strategy.defense_point != "None" and strategy.defense_point == aim_point:
         total += 15
@@ -402,6 +417,56 @@ def _calc_apm(warrior: Warrior, strategy: Strategy, state: _CState) -> int:
 
 
 # ---------------------------------------------------------------------------
+# REFEREE INTERVENTION NARRATIVE POOLS
+# ---------------------------------------------------------------------------
+
+_REF_STONE_EVENTS = [
+    ("The Ref hurls a large rock at {n}",
+     "The rock connects with {n}'s temple — {n} staggers, eyes glazed."),
+    ("The Ref scoops up a fist-sized stone and flings it at {n}",
+     "It cracks hard against {n}'s ribs. {n} doubles over with a grunt."),
+    ("The Ref hurls a jagged chunk of stone at {n}",
+     "It opens a gash above {n}'s eye — {n} blinks through the blood, vision blurring."),
+    ("The Ref seizes a heavy stone and hurls it at {n}",
+     "The stone thuds into {n}'s chest. {n} gasps, the air driven from their lungs."),
+    ("The Ref flings a sharp-edged rock at {n}",
+     "It catches {n} across the shoulder — {n} winces and nearly drops their guard."),
+    ("The Ref grabs a handful of gravel and hurls it straight at {n}'s face",
+     "{n} recoils, blinded for a moment, eyes streaming."),
+    ("The Ref hurls a stone at the back of {n}'s head",
+     "{n} lurches forward, stumbling to keep their footing."),
+    ("The Ref snatches up a loose cobble and sends it spinning at {n}",
+     "It clips {n} across the jaw. {n} spits blood and shakes their head."),
+]
+
+_REF_WEAPON_EVENTS = [
+    ("The Ref snatches up a length of chain and lashes it hard across {n}'s back",
+     "{n} arches in agony, a ragged cry escaping them."),
+    ("The Ref grabs a discarded wooden staff and drives it into {n}'s ribs",
+     "The crack of wood on bone rings out — {n} bends double, wheezing."),
+    ("The Ref seizes a blunted club and crashes it across {n}'s shoulders",
+     "{n} staggers forward, knees buckling under the blow."),
+    ("The Ref picks up a short iron rod and swings it hard into {n}'s thigh",
+     "{n} stumbles badly, leg trembling, nearly losing their footing."),
+    ("The Ref grabs a training sword and slaps the flat of it hard across {n}'s back",
+     "The smack echoes across the pit — {n} flinches and lurches forward."),
+]
+
+_REF_FOLLOWUP_EVENTS = [
+    ("Still unsatisfied, the Ref hurls another stone at {n}",
+     "It clips {n} across the ear. {n} is visibly shaken."),
+    ("The Ref shouts at {n} to fight — then flings a second stone",
+     "The stone drives into {n}'s ribs. The crowd jeers."),
+    ("The Ref storms forward and drives the butt of a spear into {n}'s back",
+     "{n} pitches forward with a cry, barely keeping their feet."),
+    ("Furious with {n}'s passivity, the Ref heaves another stone",
+     "It strikes {n} hard in the kidney. {n} nearly goes down."),
+    ("The crowd howls as the Ref hurls a second stone at {n}",
+     "It catches {n} glancing across the jaw. {n} spits blood and staggers."),
+]
+
+
+# ---------------------------------------------------------------------------
 # COMBAT ENGINE
 # ---------------------------------------------------------------------------
 
@@ -440,6 +505,11 @@ class CombatEngine:
             self.state_b.active_strat_idx = len(warrior_b.strategies)
 
         self._lines: List[str] = []
+        self._prev_attacks_a: int = 0
+        self._prev_attacks_b: int = 0
+        self._used_adv_phrases: set = set()
+        self._last_adv_tier: str = "even"
+        self._last_adv_winner: str = ""
 
     # =========================================================================
     # MAIN LOOP
@@ -456,28 +526,55 @@ class CombatEngine:
 
         minute = 0
         result = None
+        # PRE hesitation check: high-presence warrior may cause opponent to lose minute 1
+        self._apply_presence_hesitation()
         while True:
             minute += 1
+            # Referee intervention: starts minute 7, pressures the losing warrior
+            if minute >= 7:
+                self._throw_stones(minute)
             result  = self._run_minute(minute)
             if result:
                 break
-            if minute >= 30:
+            # 30-minute limit: judge awards decision — but NOT in monster fights,
+            # which must always end in death (no time limit, no mercy).
+            if minute >= 30 and not self.is_monster_fight:
                 pct_a   = self.state_a.current_hp / max(1, self.warrior_a.max_hp)
                 pct_b   = self.state_b.current_hp / max(1, self.warrior_b.max_hp)
                 win_w   = self.warrior_a if pct_a >= pct_b else self.warrior_b
                 los_w   = self.warrior_b if pct_a >= pct_b else self.warrior_a
                 self._emit("")
                 self._emit(f"The Blood Master calls time — {win_w.name.upper()} wins on judges' decision!")
-                result = FightResult(winner=win_w, loser=los_w, loser_died=False,
-                                     minutes_elapsed=minute, narrative="\n".join(self._lines))
+                result = self._make_result(win_w, los_w, False, minute)
+                break
+            # Safety valve for monster fights: after 60 minutes the monster
+            # finishes it — a player warrior cannot outlast a monster forever.
+            if minute >= 60 and self.is_monster_fight:
+                # Monster wins; player warrior dies from exhaustion
+                dw = self.state_a.warrior  # player is always warrior_a
+                kw = self.state_b.warrior
+                dw.injuries.add("chest", 9)
+                self._emit("")
+                self._emit(f"{dw.name.upper()} collapses from sheer exhaustion — the monster is relentless!")
+                self._emit(N.death_line(dw.name, dw.gender))
+                self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
+                result = self._make_result(kw, dw, True, minute)
                 break
 
         training = {}
-        for w in (self.warrior_a, self.warrior_b):
-            res = self._apply_training(w)
+        self._emit("")   # blank line between fight outcome and training block
+        for w, opp, is_opp in [
+            (self.warrior_a, self.warrior_b, False),
+            (self.warrior_b, self.warrior_a, True),
+        ]:
+            # Dead warriors do not train — they're carried out on a shield
+            if result.loser_died and result.loser is w:
+                training[w.name] = []
+                continue
+            res = self._apply_training(w, opponent=opp)
             training[w.name] = res
             if res:
-                self._emit(N.training_summary(w.name, res))
+                self._emit(N.training_summary(w.name, res, is_opponent=is_opp))
 
         result.training_results = training
         result.narrative        = "\n".join(self._lines)
@@ -487,12 +584,101 @@ class CombatEngine:
     # SINGLE MINUTE
     # =========================================================================
 
+    # =========================================================================
+    # RESULT BUILDER
+    # =========================================================================
+
+    def _make_result(self, winner: Warrior, loser: Warrior,
+                     loser_died: bool, minutes_elapsed: int) -> FightResult:
+        """Build a FightResult populated with per-fighter combat metrics."""
+        if winner is self.warrior_a:
+            ws, ls = self.state_a, self.state_b
+        else:
+            ws, ls = self.state_b, self.state_a
+        return FightResult(
+            winner=winner,
+            loser=loser,
+            loser_died=loser_died,
+            minutes_elapsed=minutes_elapsed,
+            narrative="\n".join(self._lines),
+            winner_hp_pct=max(0.0, ws.current_hp / max(1, winner.max_hp)),
+            loser_hp_pct=max(0.0, ls.current_hp / max(1, loser.max_hp)),
+            winner_knockdowns=ws.knockdowns_dealt,
+            loser_knockdowns=ls.knockdowns_dealt,
+            winner_near_kills=ws.near_kills_dealt,
+            loser_near_kills=ls.near_kills_dealt,
+        )
+
+    # =========================================================================
+    # MINUTE ADVANTAGE
+    # =========================================================================
+
+    _END_BRINK_THRESHOLD = 15.0   # endurance below this = potential exhaustion brink
+
+    def _calc_minute_advantage(self) -> tuple:
+        """
+        Returns (tier, winner_name, loser_name) describing the current fight state.
+
+        tier is one of: "even", "slight", "clear", "dominating", "brink", "brink_exhaustion"
+        winner_name / loser_name are empty strings when tier == "even".
+        """
+        hp_a = self.state_a.current_hp
+        hp_b = self.state_b.current_hp
+        end_a = self.state_a.endurance
+        end_b = self.state_b.endurance
+
+        total_hp = max(1, hp_a + hp_b)
+        hp_ratio = hp_a / total_hp   # 0–1; > 0.5 means warrior_a leads
+
+        # Small endurance nudge (max ±0.08 shift on the score)
+        end_adj = (end_a - end_b) / 100.0 * 0.08
+        score = hp_ratio + end_adj
+        score = max(0.0, min(1.0, score))
+
+        if score >= 0.5:
+            winner, loser = self.warrior_a, self.warrior_b
+            winner_state, loser_state = self.state_a, self.state_b
+            magnitude = score
+        else:
+            winner, loser = self.warrior_b, self.warrior_a
+            winner_state, loser_state = self.state_b, self.state_a
+            magnitude = 1.0 - score
+
+        # Endurance brink override: loser is too gassed to continue effectively
+        # Only fires when the loser isn't already winning (magnitude < 0.55 means
+        # the HP difference alone wouldn't call it in the winner's favour clearly)
+        loser_end = loser_state.endurance
+        if loser_end <= self._END_BRINK_THRESHOLD and magnitude < 0.80:
+            return ("brink_exhaustion", winner.name, loser.name)
+
+        # Map magnitude → tier using the user-specified confidence bands
+        if magnitude < 0.56:
+            return ("even", "", "")
+        elif magnitude < 0.66:
+            return ("slight", winner.name, loser.name)
+        elif magnitude < 0.81:
+            return ("clear", winner.name, loser.name)
+        elif magnitude < 0.95:
+            return ("dominating", winner.name, loser.name)
+        else:
+            return ("brink", winner.name, loser.name)
+
     def _run_minute(self, minute: int) -> Optional[FightResult]:
         self._emit(f"\nMINUTE {minute}")
         if minute == 1:
             self._emit(random.choice(N.FIGHT_OPENERS))
-        elif random.random() < 0.15:
-            self._emit(N.crowd_line(self.warrior_a.race.name, self.warrior_b.race.name))
+        else:
+            tier, winner_name, loser_name = self._calc_minute_advantage()
+            adv_line = N.minute_status_line(
+                winner_name, loser_name,
+                tier, self._last_adv_tier, self._last_adv_winner,
+                self._used_adv_phrases,
+            )
+            self._emit(adv_line)
+            self._last_adv_tier = tier
+            self._last_adv_winner = winner_name
+            if random.random() < 0.15:
+                self._emit(N.crowd_line(self.warrior_a.race.name, self.warrior_b.race.name))
 
         fs_a = self.state_a.to_fighter_state()
         fs_b = self.state_b.to_fighter_state()
@@ -562,6 +748,8 @@ class CombatEngine:
             self._emit(ln)
         for ln in _update_endurance(self.state_b, strat_b, act_b, self.state_a):
             self._emit(ln)
+        self._prev_attacks_a = act_a
+        self._prev_attacks_b = act_b
         return None
 
     # =========================================================================
@@ -579,7 +767,7 @@ class CombatEngine:
         try:    weapon = get_weapon(wpn);  cat = weapon.category
         except: weapon = OPEN_HAND;        cat = "Oddball"
 
-        self._emit(N.attack_line(att.name, dfr.name, wpn, cat, ax.style, aim))
+        self._emit(N.attack_line(att.name, dfr.name, wpn, cat, ax.style, aim, att.gender))
 
         atk_r = _attack_roll(att, ax, as_)
         atk_r += get_style_advantage(ax.style, dx.style) * 6
@@ -624,9 +812,15 @@ class CombatEngine:
         prev_hp        = ds_.current_hp
         ds_.current_hp -= dmg
 
+        # Near-kill tracking: attacker reduced defender through the 20% HP threshold
+        nk_threshold = int(dfr.max_hp * 0.20)
+        if prev_hp > nk_threshold >= ds_.current_hp:
+            as_.near_kills_dealt += 1
+
         if _check_knockdown(dfr, ds_, dmg, wcats):
             self._emit(N.knockdown_line(dfr.name, dfr.gender))
             ds_.is_on_ground = True
+            as_.knockdowns_dealt += 1
 
         perm = _check_perm_injury(dfr, dmg, aim)
         if perm:
@@ -638,8 +832,7 @@ class CombatEngine:
                 self._emit(N.death_line(dfr.name, dfr.gender))
                 self._emit("")
                 self._emit(N.victory_line(att.name, dfr.name))
-                return FightResult(winner=att, loser=dfr, loser_died=True,
-                                   minutes_elapsed=minute, narrative="\n".join(self._lines))
+                return self._make_result(att, dfr, True, minute)
 
         if ds_.current_hp <= 0:
             return self._handle_zero_hp(ds_, as_, prev_hp, dmg, minute)
@@ -659,6 +852,12 @@ class CombatEngine:
         self._emit(N.damage_line(dmg, dfr.max_hp))
         prev       = ds_.current_hp
         ds_.current_hp -= dmg
+
+        # Near-kill tracking for counterstrike damage
+        nk_threshold = int(dfr.max_hp * 0.20)
+        if prev > nk_threshold >= ds_.current_hp:
+            as_.near_kills_dealt += 1
+
         if ds_.current_hp <= 0:
             return self._handle_zero_hp(ds_, as_, prev, dmg, minute)
         return None
@@ -674,14 +873,12 @@ class CombatEngine:
             self._emit(f"{dw.name.upper()} collapses — the monster shows no mercy!")
             self._emit(N.death_line(dw.name, dw.gender))
             self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
-            return FightResult(winner=kw, loser=dw, loser_died=True,
-                               minutes_elapsed=minute, narrative="\n".join(self._lines))
+            return self._make_result(kw, dw, True, minute)
         if _death_check(prev, dmg):
             dw.injuries.add("chest", 9)
             self._emit(N.death_line(dw.name, dw.gender))
             self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
-            return FightResult(winner=kw, loser=dw, loser_died=True,
-                               minutes_elapsed=minute, narrative="\n".join(self._lines))
+            return self._make_result(kw, dw, True, minute)
         # Survived: concede system takes over via wants_to_concede
         return None
 
@@ -697,8 +894,7 @@ class CombatEngine:
         self._emit(N.mercy_result_line(dw.name, granted))
         if granted:
             self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
-            return FightResult(winner=kw, loser=dw, loser_died=False,
-                               minutes_elapsed=minute, narrative="\n".join(self._lines))
+            return self._make_result(kw, dw, False, minute)
         return None
 
     # =========================================================================
@@ -708,20 +904,119 @@ class CombatEngine:
     def _check_fatal_injury(self) -> Optional[FightResult]:
         for d, k in [(self.state_a, self.state_b), (self.state_b, self.state_a)]:
             if d.warrior.injuries.is_fatal():
-                return FightResult(winner=k.warrior, loser=d.warrior, loser_died=True,
-                                   minutes_elapsed=0, narrative="\n".join(self._lines))
+                return self._make_result(k.warrior, d.warrior, True, 0)
         return None
 
     # =========================================================================
     # TRAINING
     # =========================================================================
 
-    def _apply_training(self, w: Warrior) -> List[str]:
+    def _apply_training(self, w: Warrior, opponent: Optional[Warrior] = None) -> List[str]:
+        """
+        Apply training. If w is alive and has INT >= 15, there is a chance
+        they pick up a 4th bonus skill observed from the opponent's combat style.
+        """
         res = []
         for sk in w.trains[:3]:
             res.append(w.train_skill(sk))
+
+        # INT 4th train: learn a skill from opponent
+        # Chance = (intelligence - 14) * 5%, triggered when INT >= 15
+        if opponent and w.intelligence >= 15:
+            bonus_chance = (w.intelligence - 14) * 5
+            if random.randint(1, 100) <= bonus_chance:
+                # Derive what skills the opponent actually used this fight
+                candidate_skills = []
+                opp_strats = opponent.strategies or []
+                for s in opp_strats:
+                    if s.style in ("Parry", "Counterstrike"):
+                        candidate_skills.append("parry")
+                    if s.style in ("Strike", "Bash", "Total Kill", "Counterstrike"):
+                        candidate_skills.append("initiative")
+                    if s.style in ("Dodge",):
+                        candidate_skills.append("dodge")
+                # Always include weapon skill and basic skills as observables
+                opp_wpn = (opponent.primary_weapon or "Short Sword").lower().replace(" ","_").replace("&","and")
+                candidate_skills += [opp_wpn, "dodge", "parry", "initiative", "feint"]
+                # Pick one, avoiding skills already at max
+                random.shuffle(candidate_skills)
+                for sk in candidate_skills:
+                    sk_key = sk.lower().replace(" ","_")
+                    if sk_key in w.skills and w.skills[sk_key] < 9:
+                        bonus_result = w.train_skill(sk_key)
+                        if "trained:" in bonus_result:
+                            res.append(f"[OBSERVED] {bonus_result}")
+                        break
+
         w.recalculate_derived()
         return res
+
+    def _apply_presence_hesitation(self):
+        """
+        If warrior_a has high Presence, warrior_b may hesitate at the start
+        of the fight (and vice versa). The hesitation skips their first action.
+        Presence 14 = 0%, 16 = 6%, 18 = 12%, 20 = 18%, 25 = 33%
+        """
+        for attacker_state, defender_state in [
+            (self.state_a, self.state_b),
+            (self.state_b, self.state_a),
+        ]:
+            chance = attacker_state.warrior.presence_hesitate_chance
+            if chance > 0 and random.randint(1, 100) <= chance:
+                defender_state.endurance = max(0.0, defender_state.endurance - 15)
+                self._emit(
+                    f"{attacker_state.warrior.name.upper()}'s commanding presence "
+                    f"makes {defender_state.warrior.name.upper()} hesitate!"
+                )
+
+    def _throw_stones(self, minute: int):
+        """
+        From minute 7 onward the referee intervenes to pressure the losing warrior
+        and keep the fight from becoming a marathon.
+
+        - Monster fights are never slow to end — no intervention needed there.
+        - Target: warrior at lower HP%. Equal HP → random choice.
+        - Damage: (minute - 6) * 2, but the Ref never kills — floor at 1 HP.
+        - No HP numbers shown in the narrative.
+        - If the loser attacked ≤1 times last minute (passive), ~55% chance of
+          a follow-up intervention the same minute.
+        """
+        if self.is_monster_fight:
+            return
+
+        pct_a = self.state_a.current_hp / max(1, self.warrior_a.max_hp)
+        pct_b = self.state_b.current_hp / max(1, self.warrior_b.max_hp)
+        if pct_a < pct_b:
+            target_state = self.state_a
+        elif pct_b < pct_a:
+            target_state = self.state_b
+        else:
+            target_state = random.choice([self.state_a, self.state_b])
+
+        dmg = (minute - 6) * 2
+        n = target_state.warrior.name.upper()
+
+        # Primary intervention — 20% chance the Ref grabs a weapon instead of a stone
+        if random.random() < 0.20:
+            action, effect = random.choice(_REF_WEAPON_EVENTS)
+        else:
+            action, effect = random.choice(_REF_STONE_EVENTS)
+
+        target_state.current_hp = max(1, target_state.current_hp - dmg)
+        self._emit("")
+        self._emit(action.format(n=n))
+        self._emit(effect.format(n=n))
+
+        # Follow-up if the loser was passive last minute (≤1 attacks)
+        losing_attacks = (
+            self._prev_attacks_a if target_state is self.state_a
+            else self._prev_attacks_b
+        )
+        if losing_attacks <= 1 and random.random() < 0.55:
+            action2, effect2 = random.choice(_REF_FOLLOWUP_EVENTS)
+            target_state.current_hp = max(1, target_state.current_hp - dmg)
+            self._emit(action2.format(n=n))
+            self._emit(effect2.format(n=n))
 
     def _emit(self, line: str):
         self._lines.append(line)
@@ -748,6 +1043,11 @@ def run_fight(
     )
     result = engine.resolve_fight()
     if result.winner and result.loser:
-        result.winner.record_result("win",  killed_opponent=result.loser_died)
-        result.loser.record_result("loss")
+        # Only update records for player-team warriors.
+        # Monsters: always show 0-0-0.  Peasants: same — they are arena fodder.
+        npc_races = {"Monster", "Peasant"}
+        if result.winner.race.name not in npc_races:
+            result.winner.record_result("win", killed_opponent=result.loser_died)
+        if result.loser.race.name not in npc_races:
+            result.loser.record_result("loss")
     return result

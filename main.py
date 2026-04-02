@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # =============================================================================
-# main.py — Blood Pit Main Menu & Game Loop
+# main.py — BLOODSPIRE Main Menu & Game Loop
 # =============================================================================
 # Entry point. Run with:  python main.py
 #
@@ -141,7 +141,7 @@ def select_or_create_team(gs: GameState):
                 return
 
         elif options[idx] == "Quit":
-            print("\n  Farewell from the Blood Pit.\n")
+            print("\n  Farewell from the BLOODSPIRE.\n")
             sys.exit(0)
 
 
@@ -239,7 +239,7 @@ MAIN_MENU_OPTIONS = [
 def main_menu(gs: GameState):
     while True:
         clear()
-        header(f"Blood Pit  —  {gs.player_team.team_name}  ({gs.player_team.manager_name})")
+        header(f"BLOODSPIRE  —  {gs.player_team.team_name}  ({gs.player_team.manager_name})")
         idx = choose(MAIN_MENU_OPTIONS, "Action", allow_back=False)
 
         if MAIN_MENU_OPTIONS[idx] == "View team roster":
@@ -269,7 +269,7 @@ def main_menu(gs: GameState):
 
         elif MAIN_MENU_OPTIONS[idx] == "Quit":
             save_team(gs.player_team)
-            print("\n  Your team has been saved. Farewell from the Blood Pit.\n")
+            print("\n  Your team has been saved. Farewell from the BLOODSPIRE.\n")
             sys.exit(0)
 
 
@@ -621,7 +621,7 @@ def main():
     clear()
     print()
     print("  " + "=" * 58)
-    print("  " + " " * 15 + "WELCOME TO THE BLOOD PIT")
+    print("  " + " " * 15 + "WELCOME TO THE BLOODSPIRE")
     print("  " + " " * 12 + "A GAME OF GLADIATORIAL COMBAT")
     print("  " + "=" * 58)
     print()

@@ -1,5 +1,5 @@
-# =============================================================================
-# matchmaking.py — Blood Pit Turn Matchmaking Engine
+﻿# =============================================================================
+# matchmaking.py — BLOODSPIRE Turn Matchmaking Engine
 # =============================================================================
 # Builds the list of fights for a turn:
 #   1. Resolve blood challenges (highest priority).
@@ -189,6 +189,44 @@ def _find_rival_opponent(
 # MAIN MATCHMAKING FUNCTION
 # ---------------------------------------------------------------------------
 
+def _absorb_into_monsters(warrior: Warrior, player_team: Team):
+    """
+    A player warrior who kills a monster is absorbed into The Monsters.
+    Their stats are boosted to reflect their new terrifying role, then they
+    are removed from the player team (replacement arrives as normal).
+    Spec: roughly 0.5% chance of this happening per monster fight.
+    """
+    from warrior import STAT_MAX
+    import random as _r
+
+    # Boost every stat toward monster territory
+    boosts = {
+        "strength"    : _r.randint(3, 6),
+        "dexterity"   : _r.randint(2, 4),
+        "constitution": _r.randint(3, 6),
+        "intelligence": _r.randint(1, 3),
+        "presence"    : _r.randint(2, 4),
+        "size"        : _r.randint(2, 5),
+    }
+    for attr, boost in boosts.items():
+        cur = getattr(warrior, attr)
+        setattr(warrior, attr, min(STAT_MAX, cur + boost))
+
+    # Give them master skills befitting a monster
+    warrior.skills["parry"]     = max(warrior.skills.get("parry",    0), 7)
+    warrior.skills["dodge"]     = max(warrior.skills.get("dodge",    0), 6)
+    warrior.skills["initiative"]= max(warrior.skills.get("initiative",0), 7)
+
+    warrior.recalculate_derived()
+
+    # Remove from player team — kill_warrior issues a replacement
+    player_team.kill_warrior(
+        warrior,
+        killed_by     = "The Monsters",
+        killer_fights = 999,
+    )
+
+
 def build_fight_card(
     player_team : Team,
     rivals      : List[RivalManager],
@@ -226,9 +264,13 @@ def build_fight_card(
             challenger = random.choice(available)
 
         # Find the target in the rival pool
+        player_mgr = getattr(player_team, "manager_name", "")
         target_warrior = None
         target_rival   = None
         for rm in rivals:
+            if rm.manager_name == player_mgr:
+                print(f"  Blood challenge target skipped: '{rm.team_name}' is managed by the same manager.")
+                continue
             for w in rm.team.active_warriors:
                 if w.name.lower() == (bc_target_name or "").lower():
                     target_warrior = w
@@ -320,11 +362,16 @@ def build_fight_card(
 
         for target_name in targets:
             # Try to find target in rival pool
+            player_mgr     = getattr(player_team, "manager_name", "")
             target_warrior = None
             target_rival   = None
 
             for rm in rivals:
                 if rm.manager_id in matched_rivals:
+                    continue
+                if rm.manager_name == player_mgr:
+                    print(f"  Challenge '{challenger_name}' → '{target_name}' blocked: "
+                          f"'{rm.team_name}' is managed by the same manager.")
                     continue
                 # Match against manager name, team name, or warrior name
                 if (target_name.lower() in rm.manager_name.lower()
@@ -383,15 +430,14 @@ def build_fight_card(
 
     # ------------------------------------------------------------------
     # STEP 3: MATCH REMAINING WARRIORS AGAINST RIVALS
-    # Rookies (≤5 fights) skip rival matching and go directly to peasants
+    # All warriors attempt rival matching first; peasants are only used
+    # in Step 4 when no rival is available for a given warrior.
+    # Rookies (≤5 fights) are matched against similarly inexperienced
+    # rivals via _in_bracket(); the bracket relaxes if none are found.
     # ------------------------------------------------------------------
     remaining = [w for w in active_players if w.name not in matched_players]
 
     for player_warrior in remaining:
-        # Rookies always fight peasants — they have no track record yet
-        if player_warrior.total_fights <= ROOKIE_THRESHOLD:
-            continue   # will be picked up in STEP 4 (peasants)
-
         result = _find_rival_opponent(player_warrior, rivals, matched_rivals)
         if result:
             opponent, rival_manager = result
@@ -454,6 +500,7 @@ def run_turn(
     Saves fight logs, updates records, triggers post-fight rival training.
     """
     print(f"\n  === RUNNING TURN — {player_team.team_name} ===\n")
+    print(f"  [run_turn start] archived_warriors={len(getattr(player_team,'archived_warriors',[]))}")
 
     card = build_fight_card(player_team, rivals)
 
@@ -466,12 +513,40 @@ def run_turn(
 
         result = run_fight(
             pw, ow,
-            team_a_name    = player_team.team_name,
-            team_b_name    = bout.opponent_team.team_name,
-            manager_a_name = player_team.manager_name,
-            manager_b_name = bout.opponent_manager,
+            team_a_name      = player_team.team_name,
+            team_b_name      = bout.opponent_team.team_name,
+            manager_a_name   = player_team.manager_name,
+            manager_b_name   = bout.opponent_manager,
+            is_monster_fight = (bout.fight_type == "monster"),
         )
         bout.result = result
+
+        # Inject scout-attendance flavor text if any manager is watching either warrior
+        try:
+            from save import get_all_scouted_warriors, current_turn as _ct
+            # Scouts are stored at (turn - 1) because increment_turn() runs before fights.
+            scouted = get_all_scouted_warriors(_ct() - 1)
+            attending = set()
+            for warrior in (pw, ow):
+                for mgr in scouted.get(warrior.name, []):
+                    attending.add(mgr)
+            if attending:
+                mgr_list = ", ".join(sorted(attending))
+                scout_line = (
+                    f"\n[A scout from {mgr_list}'s stable is in attendance, "
+                    f"watching the proceedings with a keen eye.]\n"
+                )
+                result = result.__class__(
+                    winner          = result.winner,
+                    loser           = result.loser,
+                    loser_died      = result.loser_died,
+                    minutes_elapsed = result.minutes_elapsed,
+                    narrative       = scout_line + result.narrative,
+                    training_results= result.training_results,
+                )
+                bout.result = result
+        except Exception:
+            pass
 
         # Save fight log and capture fight_id for history
         fight_id = None
@@ -492,6 +567,19 @@ def run_turn(
             pw_won    = result.winner and result.winner.name == pw.name
             pw_result = "win" if pw_won else "loss"
             pw.update_popularity(won=pw_won)
+            pw.update_recognition(
+                won=pw_won,
+                killed_opponent=result.loser_died and pw_won,
+                self_hp_pct=result.winner_hp_pct if pw_won else result.loser_hp_pct,
+                opp_hp_pct=result.loser_hp_pct if pw_won else result.winner_hp_pct,
+                self_knockdowns=result.winner_knockdowns if pw_won else result.loser_knockdowns,
+                opp_knockdowns=result.loser_knockdowns if pw_won else result.winner_knockdowns,
+                self_near_kills=result.winner_near_kills if pw_won else result.loser_near_kills,
+                opp_near_kills=result.loser_near_kills if pw_won else result.winner_near_kills,
+                minutes_elapsed=result.minutes_elapsed,
+                max_minutes=60 if getattr(bout, "is_monster_fight", False) else 30,
+                opponent_total_fights=ow.total_fights,
+            )
             from save import current_turn
             pw.fight_history.append({
                 "turn"           : current_turn(),
@@ -506,6 +594,22 @@ def run_turn(
                                    and result.winner.name == pw.name,
             })
 
+            # Also record this fight in the opponent warrior's history so
+            # scouting reports can load the fight log via fight_id.
+            if fight_id and bout.fight_type not in ("monster", "peasant"):
+                ow_result = "loss" if pw_won else "win"
+                ow.fight_history.append({
+                    "turn"           : current_turn(),
+                    "opponent_name"  : pw.name,
+                    "opponent_race"  : pw.race.name if hasattr(pw.race, "name") else str(pw.race),
+                    "opponent_team"  : player_team.team_name,
+                    "result"         : ow_result,
+                    "minutes"        : result.minutes_elapsed,
+                    "fight_id"       : fight_id,
+                    "warrior_slain"  : result.loser_died and result.loser is ow,
+                    "opponent_slain" : result.loser_died and result.loser is pw,
+                })
+
         # Handle player warrior death
         if result.loser_died and result.loser is pw:
             print(f"  *** {pw.name} has been SLAIN! Replacement incoming. ***")
@@ -515,9 +619,17 @@ def run_turn(
                 killer_fights = ow.total_fights,
             )
 
-        # Handle opponent death (update rival team)
+        # Handle opponent death
         if result.loser_died and result.loser is ow:
-            bout.opponent_team.kill_warrior(ow)
+            if bout.fight_type == "monster":
+                # The rarest event: player warrior slays a monster.
+                # The warrior is absorbed into The Monsters with boosted stats.
+                _absorb_into_monsters(pw, player_team)
+                print(f"  !!! {pw.name} has SLAIN a monster and joins The Monsters! !!!")
+            elif bout.fight_type == "peasant":
+                pass   # Peasants have no persistent team — nothing to update
+            else:
+                bout.opponent_team.kill_warrior(ow)
 
         if verbose:
             if result.winner:
@@ -547,6 +659,82 @@ def run_turn(
     # Save everything
     save_team(player_team)
     save_rivals(rivals)
+
+    # Write turn logs (HTML + plain text matchmaking log)
+    from save import write_turn_logs, save_newsletter, load_champion_state, save_champion_state, load_newsletter_voice
+    turn = current_turn()
+    write_turn_logs(turn, card, player_team.team_name)
+
+    # Update team turn_history for last-5-turns newsletter column
+    turn_w = sum(1 for b in card if b.result and b.result.winner
+                 and b.result.winner.name == b.player_warrior.name)
+    turn_l = len(card) - turn_w
+    turn_k = sum(1 for b in card if b.result and b.result.loser_died
+                 and b.result.winner and b.result.winner.name == b.player_warrior.name)
+    player_team.turn_history.append({"turn": turn, "w": turn_w, "l": turn_l, "k": turn_k})
+    save_team(player_team)
+
+    # Generate newsletter — include AI rival teams, exclude Monsters/Peasants
+    from newsletter import generate_newsletter, _update_champion
+    import datetime as _dt
+    processed_date = _dt.date.today().strftime("%m/%d/%Y")
+
+    deaths_this_turn = []
+    for b in card:
+        if b.result and b.result.loser_died and b.result.loser is b.player_warrior:
+            pw = b.player_warrior
+            deaths_this_turn.append({
+                "name"    : pw.name,
+                "team"    : player_team.team_name,
+                "w"       : pw.wins, "l": pw.losses, "k": pw.kills,
+                "killed_by": getattr(pw, "killed_by", b.opponent.name),
+            })
+
+    # Build full team list: player team + AI rivals (skip Monsters/Peasants)
+    _NPC = {"The Monsters", "The Peasants"}
+    print(f"  [nl_prep] {player_team.team_name} archived_warriors={len(getattr(player_team,'archived_warriors',[]))}")
+    all_teams_for_nl = [player_team]
+    for rm in rivals:
+        if hasattr(rm, "team") and rm.team.team_name not in _NPC:
+            all_teams_for_nl.append(rm.team)
+
+    champion_state = load_champion_state()
+
+    # Detect if the reigning champion was defeated this turn
+    _champ_beaten_by   = None
+    _champ_beaten_team = None
+    _cur_champ = champion_state.get("name", "")
+    if _cur_champ:
+        for _b in card:
+            if not _b.result: continue
+            _pw_won = _b.result.winner and _b.result.winner.name == _b.player_warrior.name
+            _winner = _b.player_warrior if _pw_won else _b.opponent
+            _loser  = _b.opponent       if _pw_won else _b.player_warrior
+            _winner_team = (player_team.team_name if _pw_won
+                            else _b.opponent_team.team_name)
+            if _loser.name == _cur_champ:
+                _champ_beaten_by   = _winner.name
+                _champ_beaten_team = _winner_team
+                break
+
+    champion_state = _update_champion(
+        all_teams_for_nl, champion_state, deaths_this_turn,
+        champion_beaten_by=_champ_beaten_by,
+        champion_beaten_team=_champ_beaten_team,
+    )
+    save_champion_state(champion_state)
+
+    voice = load_newsletter_voice()
+    newsletter_text = generate_newsletter(
+        turn_num       = turn,
+        card           = card,
+        teams          = all_teams_for_nl,
+        deaths         = deaths_this_turn,
+        champion_state = champion_state,
+        voice          = voice,
+        processed_date = processed_date,
+    )
+    save_newsletter(turn, newsletter_text)
 
     print(f"\n  Turn complete. {len(card)} fight(s) resolved.")
     return card

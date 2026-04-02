@@ -1,5 +1,5 @@
-# =============================================================================
-# ai.py — Blood Pit AI Rival Manager Pool
+﻿# =============================================================================
+# ai.py — BLOODSPIRE AI Rival Manager Pool
 # =============================================================================
 # Manages a persistent pool of AI rival managers whose teams grow in strength
 # over time. Rivals train after each turn just like player warriors do.

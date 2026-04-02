@@ -1,0 +1,908 @@
+You are an expert game developer and collaborative AI partner. Your job is to help me rebuild **Blood Pit** as a modern, local, text-based game that is virtually identical to the original described in the player’s guide below.
+
+### CORE REQUIREMENTS (minimal changes only)
+- The game must be **100% faithful** to every mechanic in the guide: 6 attributes (Strength, Dexterity, Constitution, Intelligence, Presence, Size), 6 playable races + 2 NPC races, 15 fighting styles, 10 non-weapon skills + 44 weapon skills, permanent injuries (10 levels), strategy system (up to 6 triggers, activity 0-9, fighting style, aiming point, defense point), training, weapons/armor rules, HP formula, presence effects, monster/peasant fights, team fights, blood cries, challenges, replacement warriors, etc.
+- Combat must produce the exact same colorful blow-by-blow English narrative style shown in the sample fight.
+- The **only major change** is the turn structure: there is NO weekly server, no upload/download, no real-time clock. I want to be able to run any number of fights or full turns **whenever I want** (instantly, on-demand). Start as a single-player game with AI-controlled opponents (peasants, monsters, and procedurally-generated rival managers/teams). Later we can add local multiplayer or save-file sharing if I ask.
+- Everything else stays exactly the same: 5-warrior teams, 16 point roll-up limit, 7 max per stat, retirement at 100 fights, blood challenges, etc.
+
+### DOCUMENT (full original player’s guide)
+<Paste the entire <DOCUMENT> content here — everything from “What is Bloodpit?” through the weapon breakdowns and the image references. You can copy the whole thing from your previous message.>
+What is Bloodpit?
+ 
+Blood Pit is a game of gladiatorial combat that is set in a fantasy world. Unlike most computer games today however, Blood Pit does not rely on your reflexes or hand-eye coordination to determine the outcome. Instead, Blood Pit is a game of pure strategy and skill, where you will use your intellect and knowledge of tactics to outwit your opponents. 
+In Blood Pit, you participate as the manager of a team of gladiators. Players may manage from as little as one, up to as many as five teams. Each team always consists of five individual warriors. As veteran warriors retire, or (more likely) die in combat, new recruits join the ranks, ensuring that each team always has exactly five members.
+Combat takes place in the Blood Pit Arena.  Here your gladiators will face opponents from other managers in single or group matchups, as you choose.  Your objective is simple:  through your training and guidance create, the most powerful and fearsome warriors the Pit has ever seen, crush the gladiators of your opponents, and dominate the Arena,
+ 
+The BPClient
+The Front-End program is what you're using now to play Blood Pit. It doesn't actually run the game, but displays your team(s) for you and allows you to make all the choices needed for each of your teams. After you are confident that your teams are ready to compete with others, this program will enable you to create a small instruction file, which you upload to the BPServer where you and the others play. On Saturdays you download your new results, and this program displays them for you.
+ 
+The Back-End Program
+ 
+The Back-End program is a program that runs a complete Blood Pit system. In addition to actually determining the results of the fights, the Back-End program allows the Keeper to start up new players who wish to play, configure the game or games he runs to suit his tastes, even edit information.
+Gameplay
+Blood Pit is a turn based game.  Turns run once per week.  Each turn warriors whose managers submitted orders that week are matched with suitable opponents. Combat occurs, and the results are then distributed back to those managers.  Warriors of managers who do not submit orders for a given week do not fight, they are assumed to be recovering until the next time they play.  The point of this is that you may play Blood Pit as often as you like, and there is no penalty to you or your warriors for missing turns.
+ 
+Blood Pit is a game of strategy, as such the game is text based.  Fights are reported in a plain English blow-by-blow narrative.  Even without fancy graphics the fights are still quite er. . . um . . . colorful.  "The blow lands with flesh-splattering fury!!!" It's not the kind of English you hear everyday anyway.  Here is an example fight.  
+
+Home > SampleFight
+         BURLY BOB (5)          WARRIOR NAME            GEAR HEAD (4)         
+            24-27-0                RECORD                 37-10-9           
+    ETERNAL CHAMPIONS (62)        TEAM NAME          THE HEAD HUNTERS (73)     
+        THE KEEPER (1)          MANAGER NAME            THE WARLORD (23)       
+        HALF-ORC MALE            GENDER/RACE             HUMAN MALE          
+                                                                            
+     is of formidable strength      --->      is of mighty strength         
+          has stable movements      --->      has swift movements           
+      has a tough constitution      --->      has a resilient constitution  
+      has average intelligence      --->      is a quick thinker            
+             is somewhat large      <---      has a wiry frame              
+                                                                            
+      51-POPULAR WITH THE KIDS  POPULARITY    82-HAS HORDES OF ADORING FANS 
+                            80  HEIGHT (IN)   72                            
+                           272  WEIGHT (LBS)  205                           
+                                                                            
+                    BRIGANDINE     ARMOR      CUIR BOULLI                   
+                          NONE      HELM      STEEL CAP                     
+                     WAR FLAIL   MAIN WEAPON  GREAT PICK                    
+                     WAR FLAIL   OFF WEAPON   OPEN HAND                     
+                     OPEN HAND  SPARE WEAPON  GREAT PICK                    
+                                                                            
+ 
+                                                                            
+MINUTE 1                                                                    
+Dark clouds bode ill for the battle                                         
+ * GEAR HEAD switches to strategy 6                                         
+ * BURLY BOB switches to strategy 6                                         
+GEAR HEAD ruthlessly seeks wreckage with his great pick                     
+GEAR HEAD tries to slash BURLY BOB's back                                   
+GEAR HEAD's great pick punches into BURLY BOB's armor!                      
+   Little damage results from the strike                                    
+GEAR HEAD executes a downward strike with his great pick                    
+GEAR HEAD drives a blow toward BURLY BOB's throat                           
+GEAR HEAD's accuracy is rewarded!                                           
+GEAR HEAD's great pick punches into BURLY BOB's headgear!                   
+   The wound delivers terrible agony!                                       
+The drummer loses control and tosses a drumstick away                       
+BURLY BOB tries to hit the mighty GEAR HEAD                                 
+BURLY BOB strikes at GEAR HEAD's left forearm with his war flail            
+   The resulting crunch echoes through the Blood Pit!                       
+GEAR HEAD strikes wantonly at BURLY BOB                                     
+GEAR HEAD hacks away at BURLY BOB's weapon arm                              
+GEAR HEAD's great pick punches into BURLY BOB's armor!                      
+   The strike lands with flesh-splattering fury!                            
+Arena guards hold back rioting fans!                                        
+GEAR HEAD attacks suddenly, startling BURLY BOB!                            
+GEAR HEAD makes an explosive assault with his great pick                    
+GEAR HEAD misses wildly                                                     
+A spectator calls out, 'Hey half-orc!  Grind me a pound!'                   
+BURLY BOB drives suddenly forward, war flail whistling through the air      
+BURLY BOB lashes out at GEAR HEAD's chest with his war flail                
+GEAR HEAD is paying special attention to not being hit there!               
+GEAR HEAD is ready for the strike, and deftly parries it!                   
+GEAR HEAD strikes quickly with his great pick                               
+GEAR HEAD hacks away at BURLY BOB's weapon arm with his great pick          
+GEAR HEAD's great pick punches into BURLY BOB's armor!                      
+   A solid blow has been struck!                                            
+BURLY BOB's desire to win may not be enough                                 
+BURLY BOB directs an attack toward GEAR HEAD                                
+BURLY BOB strikes at GEAR HEAD's rib cage                                   
+GEAR HEAD's plan is not to get hit!                                         
+GEAR HEAD makes an extraordinary effort, and parries the strike!            
+BURLY BOB rampages onward, war flail starved for bloodshed                  
+BURLY BOB lashes out at GEAR HEAD's chest with his war flail                
+GEAR HEAD's defenses are particularly strong!                               
+BURLY BOB narrowly gets past GEAR HEAD's defenses!                          
+   Great gobs of gore gush from the gash!                                   
+GEAR HEAD steps threateningly close to the stable BURLY BOB                 
+GEAR HEAD chops at BURLY BOB's right leg                                    
+GEAR HEAD's great pick punches into BURLY BOB's armor!                      
+   The blow lands with bone-breaking force!                                 
+BURLY BOB plummets downward with great speed!!                              
+BURLY BOB has been permanently injured in the primary leg!!!                
+BURLY BOB's main leg is bleeding!                                           
+BURLY BOB's leg spasms in pain, causing him to roll around in the dirt, wracked with extreme pain!!                                                 
+BURLY BOB is fighting with pure will power!                                 
+The ref saves the pitiable BURLY BOB!                                       
+GEAR HEAD has won this affair of honor!                                     
+                                                                            
+GEAR HEAD has trained in dodge and dodge                                    
+BURLY BOB has trained in war flail                
+ 
+Cost
+Blood Pit is completely FREE to play.  There are no startup fees and no per turn fees.  The game will remain free to play as long as I am able to do so.  See this page for information on how  to get started.
+How to get started.
+ 
+Now that you know what the game is, let's talk about how to get started.  By now you should have downloaded the latest version of Java, and also the Bloodpit Client (commonly referred to as "the Client", or BPClient) software.  The first thing that you need to do is create your account.  Find the file called BPClient.jar and double click.  A login screen should appear.  Click the New Player tab.  You must read the User Agreement that details account limitations (i.e. One account per player), as well as the number of teams that you can have, and accept the terms.  Next, fill in your Manager name.  This is a field where you can be creative.  Please refrain from the use of obscene names.  Next fill in your e-mail address, and choose a password that you will remember.  Once you have verified your password, click the create account, and you are in.  From this point on, when you open the client, you will login in using your account number, and password.
+ 
+Now it is time to create your first team.  All new managers will receive the same initial team roll-up, so creating new accounts in order to obtain a better roll-up is pointless.  To create your team, click on any one of the 5 warrior roll-ups you have, and the attributes will appear at the bottom of the creation screen.  You now need to add numbers to the pre-generated warrior.  You may add to any of the attributes listed, but you are limited to 16 total points to add, and you may not add more than 7 points to any one attribute.  Now you need to give the warrior a name, race, and assign a gender, and click save.  You need to do this for all 5 pre-generated roll-ups.  Once all warriors are done, enter a team name, and click the NEW button next to the Create team as area.  Pretty simple stuff.
+ 
+Now you can see that you have your first team listed on the left side of the screen under your chosen manager name.  To access the individual warriors on that team, click the magnifying glass icon next to the team name to "expand" the warrior tree.  Click on one of those warriors, and it will open the Stats/strats screen.  This is where you assign armor, weapons, and strategies to your warrior, which will be detailed later in this document.
+ 
+After you have assigned everything to each of your new gladiators, you need to upload for the upcoming turn.  If you do not upload, you do not fight that turn.  To upload your strategies, click the Action option   in the menu, and choose upload. That is all there is to getting started.  Every Saturday after the turn has processed, you follow this same procedure to download each turn from the server.  Instead of choosing upload, choose download.
+Races
+There are 6 playable races in Bloodpit and 2 NPC races.  They are
+Playable                                    NPC
+Human                                      Monster
+Half-Orc                                   Peasants
+Halfling
+Dwarf
+Half-Elf
+Elf
+ 
+All races have 1 favored enemy, and 1 enemy they do poorly against. This creates a vicious circle in the race relations. I'm not going to say which are which, discovering this is part of the fun for a new player and relatively easy to do. Races favor certain weapons.
+Gender
+Warriors in the Blood Pit may be either male or female.  While there are cosmetic differences between the two (can you say "Bobbit"?), there are no differences when they fight.  Males are not stronger than females (with the same strength), even though they will be listed as weighing somewhat more or being a little taller to a female with identical stats.
+Home > Races > Monsters
+Monsters
+One of the two teams in each arena of Blood Pit controlled only by the game program is The Monsters (the other is The Peasants).  The monsters are used to clear out the dead wood (so to speak) from your team roster.  Think of it as retiring the hard way...the really, really hard way.
+ 
+One of the Special Options available to you for each warrior each turn is Monster Warrior.  This means that instead of joining his or her fellow warriors in the arena to fight the other regular warriors, your warrior is consigned instead to fight one of the most hideous and loathsome creatures ever to set foot, slither, leap, meander or otherwise move into the Blood Pit.
+ 
+Be warned:  In the entire history of the current Pitt, less than a dozen warriors have escaped a monster fight with their lives intact, and were given special assignment as new Monsters.  Give it a try, you'll see...
+ 
+Note:  When one or more warriors on your team are killed, you receive an equal number of beginners as replacements.  Thus, you'll always fight each turn with a team of five warriors.
+Peasants
+The second of the two teams in the arena of Blood Pit controlled only by the game program is The Peasants (the other is The Monsters).  The peasants are used to make sure every warrior entered into a turn has an opponent, and that each warrior's opponent is suitably matched against you.
+ 
+If, for example, there were three extremely experienced warriors fighting in a Blood Pit arena on a turn, far above the others also running, one would probably fight another.  The third warrior would probably fight a peasant.
+ 
+The computer automatically scales the power of the peasants you face to approximately your toughness.  At the lower levels, peasants are relatively easy to beat, especially in team fights.  At the upper levels, however, they can become quite, shall we say, nasty.
+ 
+Unlike the other teams in the arena, you may never directly challenge the peasants.  The computer will take them at random to ensure good fight matchups, and the same peasant can fight any number of times on a turn.  Even if permanently injured or killed, they're never quite eliminated.
+ 
+Current Peasant Warriors
+ 
+Klud the Bell-Ringer
+Sally Strumpet
+Peter the Poet
+Fiona Fishwife
+Beggar Barleycorn
+Stu the Gravedigger
+Gypsy Jezebel
+Perceval the Prophet
+Madman Muttermuck
+Roger the Shrubber
+ DWARVES
+•	Dwarves are rugged customers. Imagine the toughest mountain man, caught in a snowstorm while pushing his way through the wilderness. He's forced to survive without rations for 30 days in a wind-blown cave, which he shares with two hungry grizzly bears. That mountain man would die, but the average Dwarf would be warmed by bear coats and would feast on bear meat as he trudged through the snow to make his next fight in the Pit!
+•	Dwarves get a bonus to Parry, increased armor carrying capacity and a bonus to HP and damage.  Dwarves have the most HP in the game.  They also get a bonus when using a shield.  
+•	Dwarves have a slight penalty to attack rate and dodging ability
+•	Preferred Weapons: Axes! Axes! Axes! Then again, the Dwarven champion, Nord, used two war hammers. Dwarves also seem to be effective with spears.  Dwarves tend to fail with large Pole Arms such as the Halberd and the Pole Axe.
+•	Opponents: Dwarves prefer to fight against really little guys or really big guys. When the opponent is smaller, a dwarf revels in his height. When an opponent's really big, a Dwarf has something to prove.
+ 
+ELVES 
+•	When Elves announced their intention to enter the Pit they brought only small weapons like knives and the epee with them. Veteran warriors laughed. What could a peace-loving race of singing and dancing faeries accomplish in the Pit? Veterans soon learned, the hard way, that the Elves expected to win. Sure, some of them sang battle hymns and danced little ditties around their foes, but they turned out to be elusive opponents. It's no longer a disgrace to lose to an Elf, but it is shameful to go singing and dancing with them afterward
+•	Elves get a slight dodge bonus, an also a bonus when using dual weapons.  There is also a bonus to attack rate.
+•	Elves have a slight HP penalty
+•	Preferred Weapons: Elves prefer small, light and fast weapons against almost any opponent. Elves are also renowned for their excellence with thrown weapons.
+•	Opponents: Elves have a hard time against most large and powerful opponents - the guys who can't be taken out with small weapons
+HALF-ORC  
+•	Opponents often claim that Half-Orcs try to "stink them" or "stupid them" to death. These brutes don't need odor or indecipherable strategies to down their foes. Of the mind that "the best finesse is a good offense" (or something like that), Half-Orcs give no quarter. They've earned respect as warriors who come back from the brink of defeat, to win with one solid blow. Of course it doesn't hurt that they smell of sweat and rotten meat, and make such tactically stupid moves that opponents often pause and puzzle at their strategy.
+•	Half-Orcs get a very high damage bonus, and a moderate HP bonus
+•	Big attack rate penalty and slight dodge and parry penalties
+•	Preferred Weapons: Give 'em big bashing weapons and watch the blood wash foes red.
+•	Opponents: Half-Orcs fare well against very small opponents, but are somewhat lacking against anyone with quick thrusting weapons and perhaps a good dodge ability.
+ 
+HALFLING 
+•	
+•	Have you ever tried hitting a fast, 33-inch tall warrior? Have you ever fought a foe that can disappear behind the width of your weapon if you hold it at the wrong angle? Halflings are considered "shorties" by some, but calling them such only marks a warrior as a novice. Those who have met Halflings in the Pit called them "rats." They skitter and hop about, poking in the gut when lost in the blind spot of an opponent's helm.
+•	Halflings get a big dodge bonus, a large action rate bonus and a decent Martial Combat bonus
+•	Halflings have a major damage penalty and a average parrying penalty
+•	Preferred Weapons: Halflings should avoid only the largest and heaviest of weapons.
+•	Opponents: Halflings are balanced both offensively and defensively, so they have few benefits against a certain kind of opponent. They just need to be wary of those who fight well against small opponents (as Dwarves do).
+Home > Races > Human
+HUMANS 
+•	Humans are thought of as average, the "base" from which all other races can be described. They hate that. How would you like to hear that "Half-Orcs are stronger than Humans" or "Elves use swords better than Humans"? In response, some humans refer to themselves as "big Halflings", "clean Orcs" "cultured Dwarves" and "hardy Elves". Social scientists worry that this definition retards Human culture’s rural identity, but they don't dare criticize warriors for it.
+•	Humans tend to train stats better and take fewer permanent injuries
+•	Preferred Weapons: Humans have no real preferences, or at least have no particular advantage with one weapon over another. Basically, they're average
+•	Opponents: Humans fight well against opponents of all races.
+Home > Races > Half-Elf
+HALF-ELVES 
+•	Half-Elves resent their name. They're an angry race because of it. They believe Half-Orcs benefit from their half nature. Half-Orcs are accepted into civilized lands and at the same time gain respect (and their own tavern tables) from the easily intimidated. By contrast, Half-Elves are thrown out of Elven society to live among Humans, and Humans assume they're dancing, singing, love-mad fools. It's nothing a good sword in the gullet won't cure, that's why Half-Elves entered the Pit.
+•	Slight bonus to wielding bigger weapons
+•	Preferred Weapons: Half-Elf weapon selection is limited more by racial preference than size and strength. They favor bladed weapons (swords, not axes) and have the same talent with thrown weapons as their full-bred Elf cousins.
+•	Opponents: Half-Elves typically fare badly against warriors who can take and dish out a lot of damage. They complain about this reputation, though, for who doesn't fare badly against such opponents?
+•	ATTRIBUTES
+•	The following six attributes describe the base abilities of all warriors. These values describe the physical and mental qualities of the warrior. By and large, warriors get better at what they do by training in skills, however improving attributes makes a warrior more capable in general.
+•	Note: For base aspects of the PITT, most things are comparing your stat against your opponent’s stat. So dodge for example takes your dexterity subtracting your opponent’s dexterity as a bonus. Most of these are squared in some manner, so the bigger the difference, the more pronounced in what you see.
+
+Strength:
+Strength represents your warrior's physical power as demonstrated by their ability to move objects. It also affects, to a limited extent, your warrior's ability to take damage and recover from exhaustion. The primary determiner of damage. Strength greater than your opponents gives you a bonus to parry. Has a major effect on weapon minimums and carrying capacity. Has a minor effect on endurance and hit points.  
+ 
+•	Strong warriors can successfully use weapons meant for two hands (a great sword, for example) with only one hand, though they probably do better with two hands firmly in place. 
+ Dexterity:
+This attribute represents both hand-eye coordination and a warrior's ability to control their gross body motion. Dexterity affects both your warrior's ability to hit and ability to avoid being hit. Dexterity is also a key factor in determining initiative in an exchange of blows. Base dexterity increases the number of attacks/actions you have per minute. A dexterity that is greater than your opponents gives you a bonus to both Dodge and Aiming. Dexterity is also the stat that determines your armor fumble chance using a style.  Overall, Dexterity is an extremely vital characteristic of most finesse oriented warriors.
+•	Armor slows a warrior down and minimizes the benefits of Dexterity. But on the other hand, a high Dexterity warrior can wear armor, be as speedy as his naturally slower opponent, and have better protection to boot.
+Constitution:
+This is an indicator of a warrior's general toughness, health and resistance to pain. Constitution affects a warrior's ability to take damage, recover from exhaustion and carry large loads. This attribute also determines how easily a warrior can improve other attributes through rigorous training and patience.
+•	  It is often worthwhile to add a couple extra points to Constitution during roll-up, even if they would be used more aesthetically elsewhere. With a higher Constitution, a warrior can make up for initial losses with effective training. One warrior with a 25 Constitution trained a Strength of three to 20!
+ 
+Intelligence:
+Intelligence measures many things, not the least of which is the ability to think quickly. It governs the learning of all skills (as opposed to attributes). Intelligence also partially determines whether your warrior decides to conserve energy in the midst of a fight.  It also increases the number of attacks/actions you have per minute.
+Intelligence has a double-edge, as it were. High-Intelligence warriors are weaker in physical attributes, but are able to gain skills more quickly.
+Presence:
+This represents your warrior's inherent impressiveness. This is also known as the mystery stat. Ask 10 different managers what benefits there are to presence, and you will most likely get 10 very different answers. In a nutshell, no one is really sure what effect presence has.
+•	A high-Presence warrior can be very intimidating and might "psyche out his opponent
+ 
+(New Information, courtesy of the Keeper. Thanks to Nemesis for using his prize for this)
+ 
+Presence's function in the game is to determine what others reaction to your warrior will be when a reaction check is called for. Obviously a higher Presence score will be more likely to result in an outcome that is favorable to the warrior in question. Along these lines, Presence is the primary determiner of weather the Blood Master will show mercy to your dying warrior, or allow him to go home in a pine box. Presence also influences an opponent’s reaction to your warrior during the fight. Lastly, a higher Presence score allows a warrior to influence matching to his advantage - making his challenges more likely to go through, and his refusals more likely to be honored.
+
+Presence has the following specific in-game effects:
+
+(Note - for the following discussions, assume that the average warrior has about 75 Hit Points).
+
+SURRENDER
+Warriors with higher Presence have a greater chance of a favorable reaction when appealing to the Blood Master for mercy. Warriors with a higher Presence are allowed to attempt surrender more frequently, approximately once for every (6 - (Presence/6)) Hit Points lost. The chance of receiving mercy on any given attempt when you are dying and your opponent is not is approximately proportional to (23 + (Presence / 1.5)) percent. Lastly, when you AND your opponent are both dying, mercy will be granted to the warrior with the lowest total of (CurrentHitPoints + Presence). Presence has by far the largest impact on surrender reaction apart from luck (which obviously influences everything greatly).
+
+OPPONENT REACTIONS
+When using certain strategies, your warrior will have an opportunity to Scare, Shake Up, or Unnerve his opponent thereby causing various harmful effects - most commonly loss of an attack. The chance to successfully scare an opponent (when the opportunity arises) is approximately proportional to ((Presence - OpponentPresence) / 4) ^ 2 Percent. Presence strongly influences the success rate of a scare attempt, but does not influence chance of getting the opportunity to scare in the first place. Regardless, you must have a higher Presence than your opponent to scare effectively.
+
+MATCHING
+Selecting matchups involves a reaction check, and consequently warriors with a higher Presence have a greater chance of getting the challenges they request and avoiding opponent challenges with a refusal. A warriors base challenge success chance is adjusted upwards by adding (Presence - OpponentPresence) percent. An opponents challenge success percent is reduced by applying a (22 / (22 - (OpponentPresence - Presence)) multiplier to the base chance. Basically warriors with a higher Presence get more favorable outcomes from STANLEY THE SCRIBE who creates the matchups for the week.
+
+Presence is either a warrior’s most important stat or his least important stat depending on what your goals are for him. If all you are looking for is a guy who fells oxen with each and every blow, and is dumb as bag of War Hammers - then Presence is probably not all that important. However, if you want to create a champion to stand the test of time, and defeat those who cannot be beaten by brute strength alone, Presence will be an important part of the equation.
+Size:
+This attribute, along with Constitution, determines your warrior's height and weight. In addition, Size influences how much damage they can dish out, and how easily they are knocked over by a shield bash.  Size is the most important stat for hit points. Your base hit points are calculated on 2 x SIZE+(CON x 1.5) +1/2 STR with a maximum of 100 HP.   In addition to that, size affects carrying capacity and weapon minimums. Has a minor effect to damage, appears to be relevant when a weapon is used two handed (even if weapon is only 1 handed, lack of offhand still gives the bonus). Unlike other stats, Small size actually holds some advantages. You get a dodge bonus when your size is smaller than your opponent. You also get an aim bonus when your size is smaller than your opponent.
+•	This is one attribute that you cannot train, so make sure it has a starting rating that you'll be happy with later.
+ 
+Attribute point descriptions
+ 
+STRENGTH
+ 
+•	 Jelly-fish like: 3
+•	 Is of feeble strength: 4-6
+•	 Is of weak strength: 7,8
+•	 Is of ordinary strength: 9,10,11
+•	 Is of sturdy strength: 12,13
+•	 Is of muscular strength: 14,15,16
+•	 Is of formidable strength: 17,18
+•	 Is of powerful strength: 19,20,21
+•	 Mighty strength: 22,23
+•	 Beastly strengths: 24,25
+ 
+DEXTERITY  
+•	Has inert movements: 3
+•	Has sluggish movements: 4,5,6
+•	Has slow movements: 7,8
+•	Has stable movements: 9,10,11
+•	Has quick movements: 12,13
+•	Has agile movements: 14,15,16
+•	Has nimble movements: 17,18
+•	Has swift movements: 19,20,21
+•	Has blur-like movements: 22,23
+•	Has lightning quick movements: 24,25
+ 
+CONSTITUTION  
+•	Flimsy constitution: 3
+•	Has a puny constitution: 4,5,6
+•	Has a frail constitution: 7,8
+•	Has a delicate constitution: 9,10,11
+•	Has a healthy constitution: 12,13
+•	Has a tough constitution: 14,15,16
+•	Has a brawny constitution: 17,18
+•	Has a resilient constitution: 19,20,21
+•	Has a rugged constitution: 22,23
+•	Has iron-like constitution: 24,25
+  
+INTELLIGENCE  
+•	Dumb as a bedpost: 3
+•	Sometimes forgets to breathe: 4,5,6
+•	Is just plain dumb: 7,8
+•	Depends on muscle over mind: 9,10,11
+•	Has average intelligence: 12,13
+•	Is fairly bright: 14,15,16
+•	Is a quick thinker: 17,18
+•	Is a gifted strategist: 19,20,21
+•	Possesses great intellect: 22,23
+•	Is a genius: 24,25
+ 
+SIZE  
+•	Is grossly thin: 3
+•	Could blow away in the wind: 4,5,6
+•	Has a slight build: 7,8
+•	Has a wiry frame: 9,10,11
+•	Is of average build: 12, 13
+•	Is somewhat large: 14,15,16
+•	Has a large frame: 17,18
+•	Is a huge and imposing figure: 19,20,21
+•	Is built like a gorilla: 22,23
+•	Is bigger than a barn: 24, 25
+ 
+Another thing to note is that when it compares stats between two warriors, it will say they are equal if the stat is within 2 of each other. If it's 3 or more, it gives the advantage arrow to the higher.
+STRATEGY 
+Stats
+The first section of the strategy sheet is the Stats section.  Within this section you will find the warriors name, race/gender, record, and "measurables" such as the Height and Weight.  You will also find the main attributes, or "stats" which they are most commonly called,  of your warrior.  Also in this section, you will find the area where you assign armor and weapons to your warrior, as well as trains.  Trains are the areas your warrior is going to focus his studies on for the week.  Trains can be either increases to current attributes, or any one of the skill areas described in the Skills section of this document.
+
+Stats/Strats    Fight Options    Fights    Challenges    Replacement
+
+Warrior
+
+Name             ZHENGYI
+Record           0-2-0
+
+Race             Half-Orc
+Gender           Male
+
+Height           6' 10"
+Weight           338 lbs
+
+Strength         16
+Dexterity        10
+Constitution     10
+Intelligence     8
+Presence         8
+Size             19
+
+Armor
+Cuir Boulli
+Helm
+Steel Cap
+
+Primary
+Trident
+
+Secondary
+Open Hand
+
+Backup
+
+Trains
+1st              Constitution
+2nd              Constitution
+3rd              Constitution
+
+ Although weapons and armor are certainly part of an overall warrior's strategy in the Blood Pit, Strategy refers to actual strategic choices you make for your warriors before each fight. A game plan, if you will, for them to follow. Like a coach of a football team, you don't actually play, but you use your experience to give your team and its players a strategy with which to play by. The same goes for Blood Pit.
+There are five separate, but interlocking areas of strategy detailed below. These values are qualifiers of the tactics you use
+
+TRIGGERS -which detail when or under what conditions a particular strategy is to be used.
+
+ACTIVITY LEVELS -which give the pace of activity used for this particular strategy.
+
+FIGHTING STYLES -which are the actual tactics used for this strategy.
+
+AIMING POINTS -which are locations on your foe, which you'd like your warrior to target.
+
+DEFENSE POINTS – The location you want your warrior to protect the most.
+
+You have a maximum of six strategies for each warrior to follow in any particular fight. You determine what each of his or her one or more strategies will be and in which order they have precedence (in short, which is the most important, the next most important, etc.). One thing to note is that the program reads the triggers from top to bottom, so you want to be strategic in what order you use certain triggers. (i.e. don’t have trigger 1 be a minute 2 strategy and trigger 3 be your taken Heavy Damage strategy, as it will stay on trigger 2 for the duration of minute 2 regardless of anything else)
+
+
+Just because you can use up to 6 triggers doesn't mean you always want to use 6. Taking fewer than 6 Triggers limits your warriors’ versatility and flexibility, but some warriors, and strategies may require only 3 Triggers. Maybe even one does the trick. Make sure it's a good strategy though.
+
+
+Activity Levels
+This is a number on a scale of 0-9, which represents the total activity (i.e. movement, attacks and dodges) for your warriors under this strategy. Lower levels indicate passive stature (such as waiting for your opponent to strike), while the higher levels show aggressive movement and more strikes. The higher your activity level, the higher your endurance burn.
+
+Warriors with a low dexterity and little or no skill in initiative may need a high activity level in order to get any attacks in on their opponent.
+Here is an example of the strategy sheet, and not necessarily a good one either.
+
+Strategies
+
+| # | Trigger                     | Style         | Activity | Aiming Point | Defense Point |
+|---|-----------------------------|---------------|----------|--------------|---------------|
+| 1 | You are very tired          | Counterstrike | 2        | None         | Chest         |
+| 2 | You are on the ground       | Wall of Steel | 6        | None         | Chest         |
+| 3 | You have taken medium damage| Strike        | 7        | None         | Chest         |
+| 4 | Your foe is on the ground   | Total Kill    | 7        | Head         | Chest         |
+| 5 | Your foe is very tired      | Strike        | 6        | Head         | Chest         |
+| D | Always                      | Total Kill    | 8        | Head         | Chest         |
+
+Activity Levels in the Pitt have several ranging effects. But interestingly enough, the most important aspect of an activity level isn't PURELY the number, but the difference between your activity level, and your opponents.
+Note: A bonus is probably some equation that is a square with a divisor, so the bigger the difference, the greater the effect.
+•	Parry bonus: You get a parry bonus (or penalty) related to how much LESS your activity is to your opponent.
+•	Dodge bonus: you get a dodge bonus (or penalty) related to how much MORE your activity is to your opponent.
+•	Bonus actions: Higher activity = faster attack rate.  High activity seems to help intimidate.  
+•	Bonus damage: Lower activity = higher damage
+•	Endurance Burn: Your rate of endurance burn is related primarily to style, but activity level adds in.
+•	Endurance Drain: Below a 6 activity, some styles will drain the endurance off your foe.  How many points LESS you are than your opponent
+•	Penalty Actions:  High activity can make you clumsy.  High activity can cause issues with the armor.  High activity makes you take more dmg, more likely to be permed, more likely to die, most people drop activity on Heavy injured trigger
+Note:  "Anxiously awaits" - These descriptive lines only appear on some strategies, and then, only when using an activity level of 6 or less.  It is believed that these lines hurt the opponent's endurance, much like the parry lines.  This is useful when trying to set strategies that are effectively used when your opponent's endurance gets lower.
+Aiming and Defense Points
+ 
+This represents the point at which your fighter is aiming, or defending in the case of your defense point. Having no aiming or defense point indicates that your warrior is simply defending his entire body equally. A specific defense point indicates heightened defense of that area, but slightly less elsewhere. Primary hand/leg indicates the hand in which your warrior (or your opponent) holds his weapon. His Primary leg is the opposite leg (because of your stance). Secondary hand/leg is the opposite hand/leg. The Aiming and Defense points are listed below.
+  
+Head
+Chest
+Abdomen
+Primary Arm
+Secondary Arm
+Primary Leg
+Secondary Leg
+None
+ 
+Permanent Injuries
+Permanent injuries (often referred to as "Perms") are devastating wounds taken over the course of your warrior's career.  Unlike all other damage taken during a fight, perms stay with you your entire career.  They can act up during subsequent fights (or even later in the same fight where you received the perm), giving your opponent an advantage.
+ 
+You can be permed in each of the seven body locations (both arms, head, chest, abdomen, both legs).
+There are 10 levels of permanent injuries.  Level 0 indicates no permanent injury.  Levels 1-8 indicate various worsening levels of injury.  If a perm reaches level 9, it will result in that warrior being slain.  Depending on the severity of the strike, your warrior might take more than one level of perm from a single attack.
+ 
+Permanent Injury Severity Chart:
+ 
+Level        Description
+   1            Annoying
+   2            Bothersome
+   3            Irritating
+   4            Troublesome
+   5            Painful
+   6            Dreadful
+   7            Incapacitating
+   8            Devastating
+   9            Fatal
+Fighting Styles
+There are 15 fighting styles in Blood Pit. Choice of a Fighting Style for a warrior depends on a combination of everything else that defines that warrior, especially the attributes and weapon choices. An Orc might be successful lunging with its Maul, but not consistently so. Below are descriptions of each fighting style
+
+When choosing Fighting Style under a certain strategy, imagine how your weapon is wielded. An Epee is a good lunging weapon, but probably doesn't bash too well. It therefore doesn't make sense to choose Bash as a Fighting Style.
+For each style, there is its counter.  Some styles have more than one counter style.  Each style also has a set of advantages and drawbacks.
+Total Kill -
+Total berserk raging dementia. This represents the only style with no style. It tends to scare the hell out of opponents and it uses your warrior's endurance at a terrific rate. No attention is paid to defense, and parries usually happen only by accident. Any weapon is suitable, but total kill with a Stiletto looks very silly. A warrior using total kill will seldom notice that he/she is getting tired until it is too late.
+Advantages:
+•	Bonus to attack rate
+•	High bonus to damage
+•	Intimidate chance against *all* styles
+•	Special 'berserk' lines, purpose not clear
+Drawbacks:
+•	Lacks 'anxiously awaits' feature
+•	Lacks strategic statements (only style that doesn't get 'circles around grave', etc), these statements probably represent a skill use so their absence is notable.
+•	Regardless of defense skills, only has ~5% chance to parry or dodge
+•	Very high endurance burn
+Wall of Steel -
+ 
+A very active style where the warrior creates a constant, moving wall of weaponry. Dexterity and Constitution will be the most valuable here. If you are clumsy or untrained, then you are doomed. Wall of Steel maximizes attack opportunities, thus improving initiative greatly. It consumes endurance very rapidly.
+ 
+Advantages:
+•	Greatly increased attack rate
+•	Increased parry chance
+•	Moderate charge bonus (nice for spear users)
+•	Increased Initiative rate
+•	Decent intimidation chance
+Drawbacks:
+•	Very high endurance burn
+•	Does not have the 'Anxiously awaits' lines
+•	Very vulnerable to one of the popular styles
+•	High armor fumble rates when stats aren't in the nominal range
+•	Damage penalty.  You will hit more often, but with less damage per hit
+Note: Fumbles refer to descriptive lines in a fight that show deficiencies in either your warriors attribute levels.  These can range from activity level fumbles to armor and weapon fumbles.  For example, "Shaman Gorg trips over an invisible hedgehog and throws his weapon over the arena wall!" could be an indication of a lack of Dexterity, making this warrior clumsy, or it could show a lack of Strength for the weapon that was used.  These are determinations you, as a manager, will have to make.
+Lunge -
+The lunge is the "small surprise" attack. In this style, a warrior needs an all-purpose weapon with a point. An active defense must be maintained while looking for the chance to get in a good lunge. Due to the rapid changes in activity required from moment to moment, lunge is just a bit on the high side of endurance cost to the warrior.
+Advantages:
+•	Increased attack rate when warrior gets into a "rhythm"
+•	Moderate endurance burn for the high attack rate
+•	High dodge bonus
+•	Counters 2 of the most popular styles incredibly well
+Drawbacks
+•	Does not have the "Anxiously Awaits" feature
+•	Slight damage penalty, or requires more skills to utilize damage potential
+Bash -
+This is an attempt to overcome any defense through the use of brute force. A warrior so inclined may bash through parries, armor, helmets, shields and bones! It uses up a lot of energy and cuts down on the defense of the warrior. Blunt weapons work best, putting a dent in your foe's armor, and a matching dent in your foe. Avoid thrusting weapons.
+Advantages:
+•	Good damage bump
+•	Counters one of the most popular styles moderately well, and counters a specialty style to devastating effect
+Drawbacks:
+•	Countered by two very popular styles
+•	Does not have 'anxiously awaits' feature
+•	High endurance burn
+Slash -
+Obviously, slash requires a weapon with as much blade on it as possible. The idea is to draw the blade across the foe in a slashing motion, with as much momentum as possible. It is difficult to find an opening for a good slash attack, as one must draw back for the blow while avoiding the enemy's advances. Therefore, although it uses endurance moderately, it slows down a warrior's initiative. However, the bloody results are often worth the heavy disadvantages.
+Advantages
+•	Special Slash feature that does higher damage
+Drawbacks
+•	Poor defense
+•	Greatly reduced attack rate
+•	Does Not have the "Anxiously Awaits" feature
+Strike – 
+The most basic style, it is also the easiest to predict. It is in all ways average, including damage, endurance use, offense, defense, etc. A warrior who is well balanced can do well with this style.
+ 
+Advantages:
+•	Has 'anxiously awaits' feature
+•	Can counter or has decent performance against several popular styles
+•	Gains endurance back in most strategy sets
+Drawbacks:
+•	Easily countered by several popular styles
+•	Ineffective at higher levels of the game.
+Engage & Withdraw – 
+This style is much like lunge except that defense takes a higher priority over offense. Any good parrying/thrusting weapon will do well. It features a low endurance cost.
+ 
+Advantages:
+•	Very high dodge
+•	Counters a specialty style to devastating effect
+•	Has 'anxiously awaits' feature
+•	With right armor/activity, can gain back endurance
+Drawbacks:
+•	Countered by one of the most popular styles in the PITT.
+Counterstrike – 
+With quick reflexes and some skill, this is a deadly combat style. The counterstrike takes advantage of clumsy attacks by a foe. Use a good parrying weapon, as a counterstrike attack is almost always made off of a parried blow. Endurance is conserved fairly well, since this style waits for a foe to make errors before requiring much activity.
+ 
+Advantages:
+•	Special counter strike when you parry (no defense allowed, doesn't work when your on the ground)
+•	Does well against the popular styles of the PITT.
+•	Most people run relatively high activity, a low activity counterstrike can often outdo someone who is at style advantage but high activity.
+•	Has 'anxiously awaits' feature
+•	Low endurance burn if using lower activity levels
+Drawbacks:
+•	Low inherit attack rate (counters compensate greatly for this)
+•	Low parry/dodge bonus (requires skills and low activity level to be effective)
+Decoy – 
+The concept behind the decoy style is to engage your enemy's attention elsewhere, while you strike with your main weapon. Most often this will mean catching the enemy's weapon with your parrying weapon and refusing to let her/him withdraw until you've gotten in a blow. Decoy represents, more than anything, the combat style and skill of fighting face-to-face with weapons that are meant to be used at arms' length. If your warrior is good at it, it offers a number of advantages against a foe using conventional styles. The in-fighting techniques disallow the opportunity for you foe to parry if used properly. It also becomes difficult for her/him to dodge effectively. Decoy is a medium level endurance burner, with Parry and Feint being useful skills in applying it.
+ 
+Advantages:
+•	Negates protect area save chance
+•	Can actually prevent an opponent from being able to parry.  Very effective against certain styles
+Drawbacks:
+•	Lower attack rate
+•	Performs poorly against most popular styles.
+Sure Strike -
+This is a style of very deliberately conserving one's strength while looking for a chance to land a "sure strike". The warrior won't attack until he is quite certain that it will hit. Such a hit is not guaranteed to do much damage, though. Sure strike requires little endurance and works with all weapons.
+ 
+Advantages:
+•	Highest hit % of any style
+•	Has 'anxiously awaits' feature
+•	Gains back endurance most the time
+Drawbacks:
+•	Low attack rate
+•	Mixed damage performance (seems either really high, or really low)
+ 
+Calculated Attack – 
+ As opposed to Sure Strike, calculated attack is concerned with the location of a hit, rather than the certainty of a hit. The Calculated attack often lands in critical areas, and/or those areas not covered with much armor. When fighting with smaller weapons against armored foes, a warrior probably needs this style. Clumsy or random weapons (great picks, battle flails) do not work well for this. This style is a bit low on endurance use.
+ 
+Advantages:
+•	Has 'anxiously awaits' feature
+•	Has special 'hits accurate area' ability
+•	Counters one of the most popular styles in the pit
+•	With correct act level/armor, can gain back endurance
+Drawbacks:
+•	Lower hit success rate than other styles
+•	Greatly reduced attack rate
+•	Is countered by another most popular style in the pit.
+Opportunity Throw -
+A warrior using this style is concerned with maintaining a good offense and defense while looking for an opportunity to throw any throwable weapons she/he is carrying. It is a somewhat erratic version of Strike with throwing added in. If a warrior with this style has no more weapons, she/he may be reduced to throwing rocks. Rarely will a warrior with to use this style for more than one minute during a battle. Once the warrior has thrown all of the weapons she/he carries that are listed as throwing weapons, she/he will stop throwing. This means that if your warrior carries any non-throwing weapons, she/he will not be disarmed by using this combat option.
+Advantages
+•	Special throw attack that has its own damage chart
+Drawbacks:
+•	Once your weapons are thrown, you have to switch to another style
+Martial Combat -
+For those warriors who, for one reason or another (usually insanity) choose to fight without weapons, this is their combat style. It will also work with Stilettos, Daggers, and Cesti. Martial combat is a hodge-podge of several different oriental martial arts styles, allowing the warrior to kick, punch, and/or throw her/his enemy. The initiative skills employed in using the martial combat style will usually make up for the loss in weapon-length advantage.
+Advantages:
+•	Special sweep rate
+•	Special brawl attacks with separate damage chart
+•	Counters commonly used specialty style in the early game
+•	Lower endurance burn
+Drawbacks:
+•	Requires dedicated special skill set
+•	Weapon selection, skills, and stats prevent easy use of other styles
+•	Limited weapon selection
+•	Lacks 'anxiously awaits' feature
+Parry -
+The opposite of total kill, this combat style is purely defensive and physically undemanding. The spectators hate it. Any attacks made are fairly weak and uninspired. The goal of using it is to regain your endurance, and/or let the enemy waste his/hers. Any weapon will do, but light mobile ones (or shields) are best.
+Advantages:
+•	Regardless of activity, has a burn endurance chance on the opponent
+•	Counters or is neutral to almost all popular styles
+•	Partial deflect ability that negates damage
+•	Gains endurance in most cases
+Drawbacks:
+•	Very low attack rate
+•	Very low damage
+Defend -
+A less boring version of the Parry style, this one at least lets the warrior make an occasional successful attack. While nearly as disabling to your warrior's offense as Parry, it will not cause her/him to miss as many opportunities. The main difference is that with this style, a warrior will attack when it's convenient, while with Parry she/he may not even risk that. It uses very little endurance
+Advantages:
+•	Nominal increase in disarm and sweep
+•	Has 'anxiously awaits' feature
+•	Gains endurance in most cases
+Drawbacks:
+•	Very low attack rate
+•	Very low damage rate
+•	Counter to style appears to be particularly bad.
+Fight Options
+Team Fighting
+A team fight is when two or more of your warriors (up to all five, the entire team) fight together in the same fight at the same time against a similar number of opposing warriors.  This is called a team fight.  The fate of the Win / Loss records for every warrior in the fight rests on who wins.  If your team wins, all of your warriors gets a win (even if a particular warrior on your team was knocked out).  If you lose...well, you all get a loss.  
+Monster Warrior
+When you don't like how a warrior of yours is performing, this option will cause him or her to challenge The Monsters.  The Monsters is a team run by the computer with severely overpowered warriors.  In a fight with a monster, it always ends with the death of either the monster (unlikely in the extreme) or your warrior (see ya!).  Still, they can be amusing to watch...
+Retiring
+After a warrior has hit the 100-fight mark, you may choose to retire the warrior and start another in his or her place.  At the current time, it works the same as if the warrior has fallen (ie you just get a new warrior rollup to replace the retiring warrior), but that warrior will be immortalized in the Shady Pines retirement home on Pitt forum.  In the future there are plans to create a Hall of Fame for retired warriors.
+Blood Cries
+A blood cry is something you instruct your warriors to say during a particular point in a fight.  Since you get to determine exactly when this statement will be screamed / yelled / whatever, you use a similar system to the trigger system to specify when it is to be used.
+Blood cries are limited to 50 characters in length (including spaces) and no offensive language.
+Challenges
+Let's say one of your warriors just got beat pretty badly and you'd like to return the favor.  You could have that warrior (or another, or even a bunch of your warriors) challenge that warrior's team.  When the turn is being processed and the warriors being matched, it will look to see if any of your warriors would be a good match for any of the warriors on the target team.  If this is the case, and the target warrior is not in a team fight (see below) or otherwise occupied already, your warrior may get to fight him or her.
+ 
+When placing challenges, you have 3 options.  You can Challenge by Manager, by Team, or Individual warrior.  To challenge a specific manager, simply go to the Challenges tab, select your warrior from the list on the left, find the manager you want to challenge and click on their name.  Once the manager name is "highlighted", click the arrow under challenge1, challenge 2, or challenge 3.  You can use as many as all 3 challenge slots for the same challenge.  
+ 
+Let's say you just want to challenge any available warrior from a specific team.  You would use the same process as above, but instead of clicking on just the manager name, you would click the specific team.  The same holds true if you want to challenge a specific warrior.  Simply find that warrior in the ranking list and follow the process above.
+ 
+ 
+Blood Challenges
+ 
+Blood challenges, or BC's,  are special challenges reserved to avenge a fallen warrior.  A blood challenge can be made by any member of the team of the fallen warrior.  The killer must have at least 5 fights before you may blood challenge them.  To see if you are able to send a BC against a killer, simply click on the Blood Challenge tab of a member of the deceased team, and you will see the "killer" in RED text.  To send a BC, it is done in the same manner as a normal challenge, but should have a higher chance of going through.
+Replacement warriors
+When a warrior on one of your teams is killed, the gladiatorial commission will send a replacement for you to modify.  To create your replacement warrior, click on the deceased warrior, and click the replacement tab.  You will then proceed to add points to whatever attributes you desire, remembering that you may only add 16 points to a warrior, and no more than 7 to any one attribute.  Once you have set your numbers how you like them, you will then need to name your replacement and assign a race and gender to them, and click save.  You will notice that the replacement warrior fills in the slot where the deceased warrior was.
+ 
+ Don't forget to assign a strategy, armor, and weapons to your new warrior before you upload for the next turn.
+SKILLS
+Skills are concepts that warriors learn, to make them better fighters. In Blood Pit there are 10 non-weapon skills and 44 weapon skills (one for each weapon). Weapon skills increase rate of attack with a weapon and damage with a weapon. It may also help when parrying offhand with it and helps with overall defense with that weapon, while non-weapon skills increase your ability in the following areas:
+Dodge
+Parry
+Throw
+Charge
+Lunge
+Disarm
+Initiative
+Feint
+Brawl
+Sweep
+ 
+Note: There really is no 'to hit' skill. Certain skills can negate defenses actively like a lunge through the parry, but one trend that is loud and clear is the older a warrior gets, the more dodges/parries occur, indicating that no trained skill actually helps you on the raw 'to hit' number.
+Dodge :
+The basic dodge is a simple thing - always be where your foe's weapon isn't. Any warrior may duck the occasional blow, but only a skilled gladiator can leave opponents hacking clumsily at shadows. As skill improves, dodging becomes an art form, allowing incredible feats of acrobatic prowess, eventually allowing warriors to cartwheel away from attacks.
+Parry :
+Dodge and Parry together comprise the basic forms of active defense. A third basic form, running (also called the "perpetual dodge" ), is prevented by the Pit's stone walls. Unlike Dodge, Parry is not much hindered by armor, but you should have something in hand to parry with - never, ever intentionally block a great sword with your bare hands.
+Throw :
+Not to be confused with "martial throw" maneuvers (in which you try to make opponent and planet collide), this skill helps you to hit a gladiator with a missile weapon. Devastating blows can be delivered, even through armor, as throwing skill can lend a missile deadly accuracy - striking at joints and other less protected areas.
+ Charge :
+So you don't have the strength to drive a steel blade betwixt your opponent's ribs? What if you put your weight behind it? Even a weak-limbed giant can put his weight behind an effort and punch a big hole. Imagine having both size and strength and using the two in combination!
+Increases your chance of throwing 'intimidates'. Adds a special attack when using a spear that does a great amount of damage. This may also help with chances of certain style specific abilities.  Charge can make your attacks more predictable and clumsy
+Lunge :
+ 
+This skill supplements almost all combat styles. If your warrior can't learn to use it, get yourself a smarter warrior. Any warrior can try to dart in, strike a deadly blow, and dart back out. Without some skill, however, the lunger may get skewered while airborne.
+Increases the lunge attack abilities effectiveness and damages. Can negate a parry occasionally. This may also help with chances of certain style specific abilities. This may also help protect you against initiative thefts.
+Disarm :
+This skill neither de-limbs nor de-foliates your enemy. Instead it gives you improved odds of tearing a weapon from an enemy's grasp. If your foe has no weapons, you don't need this skill (or any other, in all likelihood), unless he's a trained martial artist, in which case you need to remove his hands and feet.
+Initiative :
+An exercise in escalation, this skill helps your warrior make more attacks. It can also turn a foe's offensive strategy against him, robbing the fool of an attack, while preventing foes from stealing your opportunities. A sustained initiative can sometimes dominate an entire fight. However, watch out if your foe survives to make his attack...
+Increases your actions per minute. Gives you a chance at initiative thefts where you can steal full actions, and allows you to sustain initiative.
+Feint :
+ 
+The dodger moves where the attack isn't. With a Feint, lure your opponent in one direction and strike from another. And parries? You suddenly turn that slash into a thrust - with your off hand, no less. Get the buffoon to zig when you zag, and skewer him! The misdirection skills involved in feinting can also help throw off a sustained initiative.
+Decreases the amount of damage you take on strikes (to minor extent). Gives you a chance to feint and negate a defense. This may also help with chances of certain style specific abilities.
+Brawl :
+Learn to fight nature's way - tooth and nail. Brawling adds punch to your punch and kick to your kick. You may laugh at the damage a mere open hand delivers, but not after you take a few well placed cracks to the sternum. Brawl helps clumsy warriors get back on their feet.
+Effects your MC damage and MC sweeps. Also helps you stand after being swept.
+Sweep :
+Get a big, long weapon and send 'em careening to the ground in an avalanche of blood, sweat and tears. If foes tend to be uncooperative and bounce back up, the skilled sweeper learns to hit 'em while they're down. Falling down doesn't feel good, either. A half dozen sweeps can have an opponent begging the ref for salvation.
+Sweeps do cause damage, but the damage doesn't seem to be related to the sweep skill value. This is hard to tell without differentiating damage statements when a sweep occurs.
+Skill Levels
+All skills in Blood Pit can be trained up to nine times. The first time you train in a skill, you are noted as having "Novice" ability with it. After two trains in a skill you will have "some skill," say in Morningstar (in the case of a weapon skill). The complete chart goes like this:
+ # Of Trains Skill Level
+•	1- Novice Skill
+•	2- Some Skill
+•	3- Skilled
+•	4- Good Skill
+•	5- Very Skilled
+•	6 -Excellent Skill
+•	7- Expert Skill
+•	8- Incredible Skill
+•	9- Master Skill
+ 
+Each level of skill is more difficult to accomplish than the last. Each level also bestows greater benefits upon your warrior. Thus, the difference between no skill at all and Novice Skill isn't great, but the difference between Incredible Skill and Master level skill is much greater.
+Weapons/Armor
+The to hit location lines (flails at so and so's left arm) are grouped by weapon type. Certain lines are shared among weapon types.  Others are exclusive. This is how we are able to group weapons like the Cestus in the spear category. This may simply be flavor text and logical grouping, but for whatever reason they are distinct.
+There are a few weapons out there that punch through armor. These weapons do more damage against Scale, chain, half-plate, and plate than they do against others.
+They are:  Stiletto, Scythe, Small Pick, Military Pick, Great Pick, and Pick Axe
+ 
+There are weapons that can be used with the Martial Combat style.
+They are:  Stiletto, Dagger, Knife, Quarterstaff, Net, Great Staff, Open Hand
+ 
+Charge Attacks:
+All spears (save the Cestus) can throw the special charge attack, which is based off the charge skill. This attack misses more often than other attacks but does good damage when it hits.
+ 
+Flail around shields:
+The flails can bypass shield blocks
+ 
+Shield Blocks:
+Seem distinct from parries, but still allow counterstrikes.
+ 
+Note:    Weapons favor styles, races, and characters differently. There have been several clones of stats and race that have liked weapons differently, so it is important to experiment with weapons and styles.
+Armor & Helms 
+ 
+You may (and probably should) equip each of your warriors with armor and helm. There are a wide variety to choose from, as listed below:
+
+Armor Requirements
+
+| Armor         | Weight |
+|---------------|--------|
+| Cloth         | 8      |
+| Leather       | 12     |
+| Cuir Boulli   | 17     |
+| Brigandine    | 24     |
+| Scale         | 35     |
+| Chain         | 44     |
+| Half-Plate    | 63     |
+| Full-Plate    | 80     |
+
+Helm Requirements
+
+| Helm          | Weight |
+|---------------|--------|
+| Leather Cap   | 1      |
+| Steel Cap     | 3      |
+| Helm          | 5      |
+| Camail        | 7      |
+| Full Helm     | 9      |
+
+Swords and Knives
+The order of swords and knives on the weapon chart (see below) designate the increasing blade length, the Great Sword being the longest (about six feet). The Bastard Sword is designed to be used either one- or two-handed, depending on your strength and the power you put behind your swing. The Epee is a relatively flimsy sword, but quick and artful. The Stiletto has a very sharp blade that's capable of piercing armor. All other swords have common enough names and may be thought of as any combination of single- or double-edged, straight or curved blades. These weapons tend to rely on higher Dexterity to use effectively.
+Because there are so many choices of bladed weapons a warrior's best choice depends on her Strength. Go bigger if you can wield it properly (or lighter if speed is important).
+Axes and Picks
+Axes are for cleaving and picks are for hole-punching. That's about all there is to say, except that the larger the weapon number, the larger the weapon. Picks can do horrendous damage in the right hands. Generally these weapons require higher Strength and Dexterity to wield effectively
+It is unwise to attempt to throw anything from this category that's larger than a Hatchet, unless you have some strange reason for ridding yourself of your main weapon.
+Hammers and Maces
+This category is entirely populated by sticks with lumps of metal at one end. The Mace and Morningstar have sharp protruding flanges at every possible angle. The hammer's head is typically unadorned, intended to crush rather than tear the target. The maul is the monster of the group, consisting of a few feet of thick wood with a brick fastened at the top. If a powerful warrior gets a hold of one of these, things can get very ugly, very quickly.  Larger strength and Size should be considered when using these weapons.
+Remember, none of these weapons have blades, so fighting styles like Slash are probably not your best choice.
+Pole arms
+These are basically jabbers and pokers. The pole axe is a medium pole arm, but is varied in its size. As the name implies, the weapon consists of an axe blade attached to a six-foot pole. Also on the business end of the stick is a spike. The Halberd is the same as a pole axe, only larger.  Most of these weapons require moderate Size and Dexterity and high Strength.
+All pole arms are big weapons, so make sure your warrior has the strength to use one before you spend time training in its use. 
+Flails
+A flail is any configuration of a stick, a length of rope or chain, and some bits of metal dangling on the end. The Bladed Flail is graced with a number of flat, jagged pieces of metal. The war flail has longer-than-average straps and the Battle Flail is a huge conglomeration of chains, spiked balls, bladed chunks of metal and anything else the warrior can attach, all welded together to the end of a long iron bar -- terribly gruesome. You will see increased damage from these weapons if your warrior has a larger size.
+ Flails are unique in that they can sometimes wrap around shields and other blocking weapons and still hit their target.
+Staves
+In a class by itself, the quarterstaff, in skilled hands, makes Little John proud. A Quarterstaff is usually a professionally carved piece of wood wielded with two hands. Light and maneuverable, the quarterstaff can make strikes at either end.
+The Great Staff is a larger, more hefty version of the Quarterstaff
+The quarterstaff is perfectly suited to fighters who desire balanced offensive and defensive capability.
+Shields
+Shields are made to be interposed between a fighter and the weapons of his opponent. The list goes from small to large. A Buckler is about a foot across. A Target Shield is twice that. A Tower Shield is an awkward but effective "iron wall."
+The length of a warrior's career is a measure of the shield she uses. At the beginning, the lighter Buckler works, but the Tower Shield is the only one that may help against extremely skilled warriors.
+Facing a foe skilled with a shield or high Parry and you just can't hit him? Try a flail. A flail's extensions can sometimes wrap around the edge of a shield or weapon and strike your opponent anyway.
+Oddballs
+ 
+This is a catch-all category for weapons that can't easily be located elsewhere.
+For example, consider the Cestus. This odd device is the answer for warriors who want to fight barehanded, but don't want to accept the rather ugly consequences of punching into armor... or parrying a great sword with knuckles! It consists of any sort of heavy leather glove, or straps, possibly covered with a metal mesh sheath; the metal parts include some nasty spikes or flanges. Wearing a cestus makes it impossible to wield another weapon in that hand.
+
+The Trident is a three-pronged pole used two-handed unless your warrior is very strong.
+The Net's primary function is to entangle and disarm your foe, yet it also possesses dozens of sharp barbs that deliver a potent slash to the lightly armored.
+The Net and Trident combination was very popular of old, but only with managers : managers didn't have to lug the cumbersome combination onto the field.
+The Scythe is a long, curved blade with one extremely sharp edge. The blade is attached to the end of a short, bent, wooden pole. It is traditionally used to reap wheat, but in the right hands is renowned as a good slashing and disarming tool. The Scythe is sharp enough to pierce armor if swung point-first.
+Great Picks are in the odd-ball category because, unlike other picks, they are too large and heavy to be used for anything but slaughtering people. This is not a tool for mining.
+
+Too short for a pole arm and too long for a toothpick, the Javelin is primarily a throwing weapon. It can easily be wielded in one hand.
+
+Typically used by former prisoners entering the arena for the first (and last) time, there is the Ball & Chain. This curious weapon resembles the better half of a monstrous mega-flail. It can perform flailing maneuvers. It can disarm. It can sweep. It can even create record-breaking divots if swung properly. It performs amazing, but terribly awkward, feats. It is very heavy; the ball and chain are made entirely of metal.
+
+Last, and perhaps strangest of all, is the Sword Breaker. Roughly the size and shape of a short sword, with deep notches along the length of its blade and a sturdy crossbar, this little demon of destruction exists only to catch hold of poorly swung swords, shattering them.
+Using a Sword Breaker in your off-hand deprives you of a shield or second weapon, but increases your odds of disarming your opponent (the hard way), if she's using an appropriate weapon.
+ 
+To use a weapon two-handed, assign the weapon to the primary hand and assign "open hand" to the secondary
+Weapon Breakdowns
+Swords & Knives
+•	Stiletto - Very high attack rate, good in the hands of weak warriors against heavier armor, but ultimately does far too little damage to be good later in a warriors career. Halflings seem to like this weapon.
+•	Knife - Attack rate is under whelming for the size. Few warriors have been very effective with the knife,
+•	Dagger - Very high attack rate, good in the hands of Elves, but like all smaller weapons it does too little damage at the high end to be effective.
+•	Short Sword - One of the ultimate weapons, in the hands of almost any warrior using the popular styles the Short Sword can wreak havoc. Seems particularly effective with small size, high STR/DEX Halflings, Elves, and just about anyone else. Dual Short Sword  Elves running wall of steel are a tried and true cookie cutter design that still holds well to this day. The Pocket Rocket ™ Halfling using a single Short Sword is another good design.
+•	Long Sword - Attack rate is a little slower than expected.  Damage also seems a bit low until skilled in the weapon.  Elves, Half-Elves and Humans appear most effective with this weapon.
+•	Epee - Good attack rate, seems decent at disarm, but has the same problem as other lighter weapons over time. Can be effective in the first 50 fights when played right.
+•	Scimitar - This looks to be the natural weapon of the Elf.   With the proper Dexterity, the attack rate is more than adequate, and damage seems to be in the mid range for weapons.  Overall a good weapon for agile warriors.
+•	Broadsword -  Not a bad weapon, not a good weapon, just a weapon. Attack rate is nothing to write home about. Seems to like high dexterities and Elves or Half-Elves. Does also seem to need a little more than nominal strength to fully utilize.
+•	Bastard Sword - High attack rate for a heavy weapon, good with the slash tactic, and likes a decent amount of the popular styles.  It suffers from what appears to be a critical lack of consistent high damage hits for its size. Half-Elves seem fond of this weapon.
+•	Great Sword -  This weapon, in the hands of Half-Orcs, can do incredible things. The stat requirements are pretty high, but if you can make this weapon work its well worth it.
+ 
+Axes & Picks
+•	Hatchet - Falls into the category of light weapons that do great due to high attack rate early on, but fail to deliver later in life. Halflings seem to like the hatchet.
+•	Fransisca - Seems consistently average in all but the hands of Dwarves, who seem to be able to rock with it more often than not.
+•	Battle Axe- On its face damage wise this weapon isn't bad, but its attack rate is a tick too slow to be super effective. Good in the hands of warriors who are counter-striking or otherwise not relying on a high attack rate to win.  Greatly effective with lower Dex, higher Strength Dwarves.
+•	Great Axe - Much like the Great Sword, the Great Axe can do nasty things in the hands of a Half-Orc.  Attack rate is low due to its size, but damage numbers can be off the charts.  The stat requirements are very high for this weapon.
+•	Small Pick - Again, another light weapon that below 50 fights is great, but  then starts to become significantly ineffective.  Best among Humans and Halflings.
+•	Military Pick - A Human favorite for sure, Military picks are very effective in the higher fights once people have graduated to wearing scale and above. Well worth waiting for, works in a variety of popular styles well.
+•	Pick Axe - New.  Not enough data known to comment.
+ 
+Hammers & Maces
+•	Hammer - The jury is out whether the Hammer is viable in the later fights, its performance, damage, and attack rate are all above average.  Halflings and Humans use the hammer effectively.  Can also be an effective throwing weapon.
+•	Mace - A terribly inconsistent weapon. It's the Epee of the hammer family.
+•	Morningstar - One of the great weapons, it seems to have a consistent high damage once its minimums are met. This weapon has been effective for all races.
+•	War Hammer - A Half-Orc favorite, the War Hammer is a good weapon in the right hands. It requires a 20+ strength to truly 'sing'.
+•	Maul - Too slow to be effective and lacks the defenses to boot.  Requires very high Strength to wield.
+ 
+Pole Arms
+•	Boar Spear - Arguably the best weapon in the game, it can be used in Lunge, Wall of Steel, and Strike very effectively, can be thrown, or used with a shield. It has a great attack rate and good damage.  Favored by all races..
+•	Long Spear - This weapon is good in the hands of Half-Elves and some Half-Orcs.  It has a lot of the same advantages as the Boar Spear once your weapon skill gets you to 7 Attacks Per Minute (APM). Its damage has more kick than the Boar Spear.
+•	Pole Axe- A Half-Elf favorite, the poleaxe does really well for that race, and fails for others outside the bonus range. Whether it is the extra APM Half-Elves seem to get with it or some other bonus, other races just don't tend to do as well with it.  Half-Orcs have had a decent success rate with the Pole Axe
+•	Halberd - A tough weapon to use, but there have been certain Half-Orcs that devastate their opponents with the Halberd. Well worth using if you can make it work. Requires very high Strength to use effectively.  Has also been known to be effective as an Engage & Withdraw weapon.
+ 
+Flails
+•	Flail - A unique weapon in that most of its damage effect appears to be based on Size (unlike the other Flails which are also effected by strength). Elves like Flails, but generally the rest of the races do well with the Flail.
+•	Bladed Flail - Halflings and Half-Orcs love the Bladed Flail, it does great damage against lighter armor and then has a HUGE drop-off against Scale Armor or higher,  making it difficult as a top tier weapon.
+•	War Flail - One of the best weapons in the game, particularly in the hands of  Half-Orcs. It was once truly legendary but it has since had it's damage doing ability toned down a bit.
+•	Battle Flail - A favorite of Half-Elves that get an extra attack with it.  The Battle Flail's overall attack rate is too low when compared with its damage rate to be as effective as its faster cousin the War Flail. Half-Orcs have been very successful using the Battle Flail as well.
+ 
+Staves
+•	Quarterstaff - A Halfling favorite.  Also an effective weapon for use with the Martial Combat style.  This is truly under whelming in the current pit.
+•	Great Staff - Similar to the Quarterstaff in that it is under whelming.  The attack rate is much lower than expected, and seems a bit too slow to be an effective parrying weapon.
+ 
+Shields
+•	Buckler - Seems to be a fairly weak shield, not really worth using.
+•	Target Shield - A current 'sweet spot' shield for dwarves.
+•	Tower Shield - Once legendary, its been toned down a bit. Half-Orcs seem to favor it over the target shield.
+ 
+Oddballs
+•	Cestus - outside of being used in MC, an under whelming weapon. Some Half-Elf Martial Artists are using this and getting incredible damage with it.
+•	Trident - Once a lot better than it was, it seems to get good results with both Dwarves and Half-Elves, but compared to the Boar Spear it no longer is competitive.
+•	Net - A specialty weapon that has seen success with Dwarves.  It works well with Sure Strike and Wall of Steel and throws a frustrating entangle attack. Its performance is hit and miss.
+•	Scythe - Sings in the hands of Elves.  This armor punching blade can also use slash effectively and can be truly devastating in the hands of almost any warrior except Half-Orcs,  which for some reason don't perform up to the other races (might be their low attack rate).
+•	Great Pick - In the hands of the right Half-Orc or Dwarf, you have an unstoppable killing machine. Just don't fight anyone in CB or leather.  Its like hitting your opponent with a whiffle bat.
+•	Javelin - A really great weapon in the 50 fights or less range, has many of the benefits of the Boar Spear with a higher attack rate. Halflings and Elves both like the Javelin.
+•	Ball & Chain - Very high damage rate, but is countered by a very low attack rate.  This is a weapon that can take an opponent out in 2 hits, but you may get hit 10 times before that.
+•	Sword breaker - The lack of blade use in the PITT decreases the value of this weapon. Can be very effective if you know your opponent is using a bladed weapon.
+•	Open Hand - Oddly enough it works great in strike as well as MC, but its damage is so anemic that outside of the brawl skill you can't last long with the open hand.
+
+**Table of Weapons**
+
+| Weapon           | Weight | Throw? | 2-Hand | Category        |
+|------------------|--------|--------|--------|-----------------|
+| Stiletto         | 1.0    | Yes    | No     | Sword/Knife     |
+| Cestus           | 1.5    | No     | No     | Oddballs        |
+| Knife            | 2.0    | Yes    | No     | Sword/Knife     |
+| Dagger           | 2.3    | Yes    | No     | Sword/Knife     |
+| Javelin          | 2.5    | Yes    | No     | Oddballs        |
+| Hatchet          | 2.8    | Yes    | No     | Axes/Picks      |
+| Short Sword      | 3.0    | No     | No     | Sword/Knife     |
+| Epee             | 3.0    | No     | No     | Sword/Knife     |
+| Hammer           | 3.0    | No     | No     | Hammers/Maces   |
+| Net              | 3.0    | No     | No     | Oddballs        |
+| Small Pick       | 3.2    | No     | No     | Axes/Picks      |
+| Buckler          | 3.2    | No     | No     | Shields         |
+| Swordbreaker     | 3.2    | No     | No     | Oddballs        |
+| Longsword        | 3.2    | No     | No     | Sword/Knife     |
+| Scythe           | 3.5    | No     | No     | Oddballs        |
+| Flail            | 3.6    | No     | No     | Flails          |
+| Francisca        | 3.8    | Yes    | No     | Axes/Picks      |
+| Mace             | 4.0    | No     | No     | Hammers/Maces   |
+| Boar Spear       | 4.0    | Yes    | No     | Polearms/Spears |
+| Quarterstaff     | 4.0    | No     | Yes    | Staves          |
+| Trident          | 4.3    | No     | No     | Oddballs        |
+| Military Pick    | 4.5    | No     | No     | Axes/Picks      |
+| Scimitar         | 4.5    | No     | No     | Sword/Knife     |
+| Broad Sword      | 5.0    | No     | No     | Sword/Knife     |
+| Morningstar      | 5.0    | No     | No     | Hammers/Maces   |
+| War Hammer       | 5.0    | No     | No     | Hammers/Maces   |
+| Target Shield    | 5.2    | No     | No     | Shields         |
+| Bladed Flail     | 5.6    | No     | No     | Flails          |
+| War Flail        | 6.0    | No     | No     | Flails          |
+| Bastard Sword    | 6.5    | No     | Yes    | Sword/Knife     |
+| Pick Axe         | 6.8    | No     | Yes    | Axes/Picks      |
+| Long Spear       | 7.2    | No     | Yes    | Polearms/Spears |
+| Tower Shield     | 7.2    | No     | No     | Shields         |
+| Battle Axe       | 7.5    | No     | No     | Axes/Picks      |
+| Battle Flail     | 7.5    | No     | Yes    | Flails          |
+| Great Staff      | 7.5    | No     | Yes    | Staves          |
+| Pole Axe         | 8.0    | No     | Yes    | Polearms/Spears |
+| Great Sword      | 8.5    | No     | Yes    | Sword/Knife     |
+| Ball & Chain     | 8.5    | No     | Yes    | Oddballs        |
+| Great Axe        | 9.0    | No     | Yes    | Axes/Picks      |
+| Maul             | 9.0    | No     | Yes    | Hammers/Maces   |
+| Great Pick       | 9.0    | No     | Yes    | Axes/Picks      |
+| Halberd          | 9.5    | No     | Yes    | Polearms/Spears |
+
+Strength Requirements
+
+| Strength | Weight |
+|----------|--------|
+| 3        | 0      |
+| 4-6      | 1      |
+| 7-8      | 2      |
+| 9-11     | 3      |
+| 12-13    | 4      |
+| 14-16    | 5      |
+| 17-18    | 6      |
+| 19-21    | 7      |
+| 22-23    | 8      |
+| 24-25    | 9      |
+
+*Note: A 9 strength warrior will have a hard time swinging a weight 9 weapon, even with both hands. At best a 9 str warrior can use a 5 weight weapon in both hands. Normally a 3 weight one handed is used, not always. As a general rule to follow I made this chart*
+
+### DEVELOPMENT RULES
+We will build this step-by-step in Python (console application using only standard library + optional simple file-based saves — no external frameworks unless I approve).  
+You MUST:
+1. Never write more than one major component at a time.
+2. After every step (architecture outline, class design, combat engine, UI, etc.) ask me at least 2-3 targeted questions to confirm we are still making the exact game I want.
+3. Wait for my explicit “OK, proceed” or answers before moving to the next piece of code.
+4. Always show me the current plan in plain English before any code.
+5. Keep the code clean, heavily commented, and modular so I can later expand it.
+
+### STARTING INSTRUCTIONS
+First, confirm that you have fully read and understood the entire player’s guide and my exact requirements (especially the on-demand turn change and 100% mechanic fidelity).  
+
+Then give me:
+- A high-level architecture overview (main classes/modules you plan to create).
+- Your recommended save format (JSON files? SQLite? plain text?).
+- Suggested first milestone (e.g., “Warrior class + attribute/roll-up system”).
+
+After that, ask your first round of clarifying questions so we make sure every detail (racial bonuses, presence surrender math, style counters, narrative generation rules, etc.) is implemented exactly as in the original Blood Pit.
+
+Begin now.

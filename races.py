@@ -1,5 +1,5 @@
-# =============================================================================
-# races.py — Blood Pit Race Definitions
+﻿# =============================================================================
+# races.py — BLOODSPIRE Race Definitions
 # =============================================================================
 # Contains all 6 playable races and 2 NPC races with their modifiers.
 #
@@ -71,7 +71,7 @@ class RacialModifiers:
 
 @dataclass
 class Race:
-    """Defines a single race in Blood Pit."""
+    """Defines a single race in BLOODSPIRE."""
 
     name: str
     is_playable: bool

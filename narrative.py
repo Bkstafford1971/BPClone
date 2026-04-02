@@ -1,5 +1,5 @@
-# =============================================================================
-# narrative.py — Blood Pit Narrative Text Engine
+﻿# =============================================================================
+# narrative.py — BLOODSPIRE Narrative Text Engine
 # =============================================================================
 # Generates all fight text: the side-by-side header, blow-by-blow lines,
 # perm injury announcements, surrender/mercy text, crowd flavor, and the
@@ -57,6 +57,56 @@ def _left_col(text: str, width: int) -> str:
     return text.ljust(width)
 
 
+def _warrior_report_block(w: Warrior) -> list:
+    """
+    Return prose description lines for one warrior: height, weight,
+    popularity, armor, helm, and weapons. No strategy table.
+    """
+    h_ft = w.height_in // 12
+    h_in = w.height_in % 12
+    pronoun = "his" if w.gender == "Male" else "her"
+
+    lines = []
+    lines.append(f"{w.name.upper()} is {h_ft}'{h_in}\"")
+    lines.append(f"{w.name.upper()} weighs {w.weight_lbs} lbs.")
+    lines.append(f"{w.name.upper()} {popularity_desc(w.popularity).title()}.")
+
+    armor_part = f"in {w.armor.upper()}" if w.armor else "unarmored"
+    helm_part  = f"and will wear a {w.helm.upper()}" if w.helm else "and wears no helm"
+    lines.append(f"{w.name.upper()} enters the arena {armor_part} {helm_part}.")
+
+    main = w.primary_weapon.upper() if w.primary_weapon else "OPEN HAND"
+    off  = w.secondary_weapon.upper() if w.secondary_weapon else None
+    bak  = w.backup_weapon.upper() if w.backup_weapon else None
+
+    if off and off.upper() != "OPEN HAND":
+        lines.append(f"{w.name.upper()} fights using a {main} with an off-hand {off}.")
+    else:
+        lines.append(f"{w.name.upper()} fights using a {main}.")
+
+    if bak and bak.upper() != "OPEN HAND":
+        lines.append(f"{w.name.upper()} has a spare {bak} strapped to {pronoun} side.")
+
+    return lines
+
+
+def _strategy_table(w: Warrior) -> list:
+    """Return the strategy table lines for the player warrior."""
+    if not w.strategies:
+        return []
+    hdr = f"{'TRIGGER':<32}{'FIGHTING STYLE':<20}{'LEVEL':>5}  {'AIMING POINT':<16}{'DEFENSE POINT'}"
+    sep = "-" * len(hdr)
+    lines = ["", hdr, sep]
+    for i, s in enumerate(w.strategies, 1):
+        is_default = (not s.trigger) or s.trigger.lower() == "always"
+        trig = "D: Always" if is_default else f"{i}: {s.trigger}"
+        aim  = s.aim_point    if s.aim_point    else "None"
+        dfe  = s.defense_point if s.defense_point else "None"
+        sty  = s.style        if s.style        else "None"
+        lines.append(f"{trig:<32}{sty:<20}{s.activity:>5}  {aim:<16}{dfe}")
+    return lines
+
+
 def build_fight_header(
     warrior_a : Warrior,
     warrior_b : Warrior,
@@ -64,72 +114,47 @@ def build_fight_header(
     team_b_name   : str,
     manager_a_name: str,
     manager_b_name: str,
-    pos_a: int = 1,   # Position on team (1-5)
+    pos_a: int = 1,
     pos_b: int = 1,
 ) -> str:
     """
-    Generate the side-by-side fight header exactly like the sample in the guide.
-    Left column = warrior A (home), right column = warrior B (away).
-    Middle column = field labels.
+    Generate the fight header in report/narrative style.
+    Layout:
+      - Matchup / team / race header
+      - Warrior A (player) prose block
+      - Warrior B (opponent) prose block
+      - Warrior A strategy table only (opponent strategies are hidden)
     """
-    COL = 22    # Width of each side column
-    MID = 14    # Width of middle label column
+    SEP = "=" * LINE_WIDTH
 
-    def row(left: str, label: str, right: str) -> str:
-        l = left.upper().rjust(COL)
-        m = label.upper().center(MID)
-        r = right.upper().ljust(COL)
-        return l + m + r
+    lines = [SEP]
 
-    h_ft_a, h_in_a = warrior_a.height_in // 12, warrior_a.height_in % 12
-    h_ft_b, h_in_b = warrior_b.height_in // 12, warrior_b.height_in % 12
+    # Matchup title
+    left  = f"{warrior_a.name.upper()} ({warrior_a.record_str})"
+    right = f"{warrior_b.name.upper()} ({warrior_b.record_str})"
+    lines.append(f"{left}   vs   {right}")
+    lines.append(f"{team_a_name.upper()} ({manager_a_name.upper()})"
+                 + "   vs   " +
+                 f"{team_b_name.upper()} ({manager_b_name.upper()})")
+    lines.append(f"{warrior_a.race.name} {warrior_a.gender}"
+                 + "   vs   " +
+                 f"{warrior_b.race.name} {warrior_b.gender}")
+    lines.append(SEP)
+    lines.append("")
 
-    pop_a = f"{warrior_a.popularity}-{popularity_desc(warrior_a.popularity)}"
-    pop_b = f"{warrior_b.popularity}-{popularity_desc(warrior_b.popularity)}"
+    # Player warrior prose
+    lines.extend(_warrior_report_block(warrior_a))
+    lines.append("")
 
-    lines = [
-        " " * LINE_WIDTH,
-        row(f"{warrior_a.name} ({pos_a})", "WARRIOR NAME", f"{warrior_b.name} ({pos_b})"),
-        row(warrior_a.record_str, "RECORD", warrior_b.record_str),
-        row(f"{team_a_name}", "TEAM NAME", f"{team_b_name}"),
-        row(f"{manager_a_name}", "MANAGER NAME", f"{manager_b_name}"),
-        row(
-            f"{warrior_a.race.name} {warrior_a.gender}",
-            "GENDER/RACE",
-            f"{warrior_b.race.name} {warrior_b.gender}",
-        ),
-        " " * LINE_WIDTH,
-    ]
+    # Opponent warrior prose
+    lines.extend(_warrior_report_block(warrior_b))
+    lines.append("")
 
-    # Stat comparison rows
-    stat_pairs = [
-        ("strength", "dexterity", "constitution", "intelligence", "size"),
-    ]
-    for attr in ("strength", "dexterity", "constitution", "intelligence", "size"):
-        val_a = warrior_a.get_attr(attr)
-        val_b = warrior_b.get_attr(attr)
-        arrow = compare_stats(val_a, val_b)
-        desc_a = warrior_a.stat_desc(attr)
-        desc_b = warrior_b.stat_desc(attr)
-        lines.append(row(desc_a, arrow, desc_b))
+    # Player strategy table only
+    lines.extend(_strategy_table(warrior_a))
 
-    lines.append(" " * LINE_WIDTH)
-
-    # Popularity, height, weight
-    lines.append(row(pop_a, "POPULARITY", pop_b))
-    lines.append(row(str(warrior_a.height_in), "HEIGHT (IN)", str(warrior_b.height_in)))
-    lines.append(row(str(warrior_a.weight_lbs), "WEIGHT (LBS)", str(warrior_b.weight_lbs)))
-
-    lines.append(" " * LINE_WIDTH)
-
-    # Gear
-    lines.append(row(warrior_a.armor or "NONE",           "ARMOR",       warrior_b.armor or "NONE"))
-    lines.append(row(warrior_a.helm or "NONE",            "HELM",        warrior_b.helm or "NONE"))
-    lines.append(row(warrior_a.primary_weapon,            "MAIN WEAPON", warrior_b.primary_weapon))
-    lines.append(row(warrior_a.secondary_weapon,          "OFF WEAPON",  warrior_b.secondary_weapon))
-    lines.append(row(warrior_a.backup_weapon or "NONE",   "SPARE WEAPON",warrior_b.backup_weapon or "NONE"))
-
-    lines.append(" " * LINE_WIDTH)
+    lines.append("")
+    lines.append(SEP)
     return "\n".join(lines)
 
 
@@ -145,7 +170,7 @@ FIGHT_OPENERS = [
     "Thunder rumbles ominously in the distance",
     "The afternoon sun beats down on the bloodstained sand",
     "The crowd jeers as the combatants approach each other",
-    "An eerie silence settles over the Blood Pit",
+    "An eerie silence settles over the BLOODSPIRE",
     "The torches flicker as a cold wind sweeps through the arena",
     "The Blood Master raises his fist — the fight begins!",
 ]
@@ -299,66 +324,64 @@ AIM_POINT_LABELS = {
     "None"          : ["body", "midsection", "torso"],   # generic when no aim point
 }
 
-# Attack verbs by weapon category
+# Attack verbs by weapon category — third-person singular, complete phrases
 ATTACK_VERBS: dict[str, list[str]] = {
-    "Sword/Knife"  : ["slash", "cut", "hack", "slice", "drive a blow toward", "thrust at"],
-    "Axe/Pick"     : ["chop at", "hack at", "cleave at", "swing at"],
-    "Hammer/Mace"  : ["bash", "smash at", "bludgeon", "hammer at", "pound"],
-    "Polearm/Spear": ["thrust at", "drive a blow toward", "jab at", "lunge at"],
-    "Flail"        : ["lash out at", "whip at", "flail at", "swing at"],
-    "Stave"        : ["strike at", "thrust at", "jab at", "swing at"],
-    "Shield"       : ["bash", "slam into", "smash at"],
-    "Oddball"      : ["strike at", "attack", "swing at", "lash out at"],
+    "Sword/Knife"  : ["slashes at", "cuts at", "hacks at", "slices at",
+                      "drives a blow toward", "thrusts at"],
+    "Axe/Pick"     : ["chops at", "hacks at", "cleaves at", "swings at"],
+    "Hammer/Mace"  : ["bashes at", "smashes at", "bludgeons", "hammers at", "pounds at"],
+    "Polearm/Spear": ["thrusts at", "drives a blow toward", "jabs at", "lunges at"],
+    "Flail"        : ["lashes out at", "whips at", "flails at", "swings at"],
+    "Stave"        : ["strikes at", "thrusts at", "jabs at", "swings at"],
+    "Shield"       : ["bashes at", "slams into", "smashes at"],
+    "Oddball"      : ["strikes at", "swings at", "lashes out at"],
 }
 
-# Extra style-flavored attack verbs
+# Extra style-flavored attack verbs — third-person singular
 STYLE_ATTACK_PREFIX: dict[str, list[str]] = {
     "Total Kill"       : ["tries to demolish", "savagely attacks", "hacks away at",
                           "makes an explosive assault on"],
-    "Bash"             : ["tries to bash", "pounds at", "hammers"],
+    "Bash"             : ["tries to bash", "pounds at", "hammers away at"],
     "Slash"            : ["tries to slash", "draws a cut at", "rakes at"],
-    "Lunge"            : ["lunges at", "makes a quick thrust at", "darts in and attacks"],
+    "Lunge"            : ["lunges at", "makes a quick thrust at", "darts in at"],
     "Calculated Attack": ["executes a downward strike at", "makes a precise attack on",
-                          "targets the exposed", "aims a calculated blow at"],
+                          "aims a calculated blow at"],
     "Sure Strike"      : ["carefully aims at", "takes a measured swing at"],
-    "Counterstrike"    : ["strikes quickly with", "counters with a blow at",
-                          "retaliates against"],
+    "Counterstrike"    : ["counters with a blow at", "retaliates against",
+                          "fires back at"],
     "Wall of Steel"    : ["attacks relentlessly at", "relentlessly targets"],
 }
 
 
 def attack_line(
-    attacker_name : str,
-    defender_name : str,
-    weapon_name   : str,
+    attacker_name  : str,
+    defender_name  : str,
+    weapon_name    : str,
     weapon_category: str,
-    style         : str,
-    aim_point     : str,
+    style          : str,
+    aim_point      : str,
+    attacker_gender: str = "Male",
 ) -> str:
     """Generate the attack declaration line."""
-    # Choose aim location string
     loc_pool = AIM_POINT_LABELS.get(aim_point, AIM_POINT_LABELS["None"])
     location = random.choice(loc_pool)
+    pronoun  = "his" if attacker_gender == "Male" else "her"
 
-    # Choose verb — style-flavored first, then category default
+    # Style-flavored variant — always ends with weapon reference
     if style in STYLE_ATTACK_PREFIX and random.random() < 0.5:
         verb = random.choice(STYLE_ATTACK_PREFIX[style])
         return (
             f"{attacker_name.upper()} {verb} {defender_name.upper()}'s "
-            f"{location} with {his_her_its(weapon_name)}"
+            f"{location} with {pronoun} {weapon_name.lower()}"
         )
     else:
+        # Category verb variant — weapon mentioned at the end
         cat_verbs = ATTACK_VERBS.get(weapon_category, ATTACK_VERBS["Oddball"])
         verb = random.choice(cat_verbs)
         return (
             f"{attacker_name.upper()} {verb} "
-            f"{defender_name.upper()}'s {location}"
+            f"{defender_name.upper()}'s {location} with {pronoun} {weapon_name.lower()}"
         )
-
-
-def his_her_its(weapon_name: str) -> str:
-    """Return 'his {weapon}' placeholder — used in attack line variants."""
-    return f"{weapon_name.lower()}"
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +478,7 @@ DAMAGE_LINES: dict[str, list[str]] = {
     ],
     "solid": [
         "   A solid blow has been struck!",
-        "   The resulting crunch echoes through the Blood Pit!",
+        "   The resulting crunch echoes through the BLOODSPIRE!",
         "   A telling hit!",
         "   The blow has real authority behind it!",
         "   That one will leave a mark!",
@@ -683,8 +706,9 @@ def perm_injury_lines(warrior_name: str, location: str, level: int, gender: str)
             w=warrior_name.upper(), his=pronoun, him=him_her
         )
 
+    announcement = fmt(PERM_ANNOUNCEMENTS, location)
     lines = [
-        fmt(PERM_ANNOUNCEMENTS,  location),
+        f"*** {announcement} ***",   # bold-style marker for perm injury
         fmt(PERM_BLEEDING_LINES, location),
         fmt(PERM_PAIN_LINES,     location),
     ]
@@ -749,7 +773,7 @@ MERCY_DENIED = [
 ]
 
 DEATH_LINES = [
-    "{warrior} has perished in the Blood Pit!!!",
+    "{warrior} has perished in the BLOODSPIRE!!!",
     "{warrior} breathes {his} last on the arena floor!!!",
     "The {warrior} is dead. The crowd erupts!!!",
     "{warrior} falls, never to rise again!!!",
@@ -832,6 +856,167 @@ RACE_TAUNTS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# MINUTE STATUS LINE  (who is winning at each minute boundary)
+# ---------------------------------------------------------------------------
+
+_ADVAN_EVEN = [
+    "Both warriors appear evenly matched, with neither willing to give ground.",
+    "The fight remains dead even, neither combatant claiming a clear edge.",
+    "At this point, the contest could still go either way.",
+    "Neither warrior has managed to separate themselves from the other.",
+    "The crowd watches closely as the fight remains finely balanced.",
+    "So far, there is little to distinguish the two in this tightly contested battle.",
+    "The momentum swings back and forth, with no clear leader emerging.",
+    "Both gladiators continue to test each other, still searching for an opening.",
+    "Despite several close calls, neither warrior has seized control.",
+    "The margin between victory and defeat remains razor-thin.",
+]
+
+_ADVAN_EVEN_CONT = [   # used when tier unchanged from last minute
+    "The fight remains stubbornly even, with neither warrior conceding ground.",
+    "Nothing has changed — both combatants continue on level footing.",
+    "The balance holds; neither fighter has found the breakthrough they need.",
+]
+
+_ADVAN_SLIGHT = [
+    "{winner} appears to have a slight advantage.",
+    "{winner} is beginning to edge ahead in the exchange.",
+    "{winner} has started to gain the upper hand, though the fight remains close.",
+    "Momentum seems to be slowly shifting toward {winner}.",
+    "{winner} looks marginally sharper at this stage of the fight.",
+    "While still competitive, {winner} seems just a step ahead.",
+    "{winner} is finding more success, but the outcome is far from decided.",
+    "The balance tips ever so slightly in favor of {winner}.",
+    "It's a narrow lead, but {winner} may be starting to pull ahead.",
+    "Small advantages are beginning to stack up for {winner}.",
+]
+
+_ADVAN_SLIGHT_CONT = [
+    "{winner} continues to hold a narrow advantage.",
+    "The slight edge remains with {winner}, though little has changed.",
+    "{winner} maintains the lead, but nothing is decided yet.",
+]
+
+_ADVAN_CLEAR = [
+    "{winner} is winning the fight.",
+    "At this point, {winner} has seized control of the contest.",
+    "{winner} now holds a clear advantage over their opponent.",
+    "The fight has begun to tilt decisively in {winner}'s favor.",
+    "{winner} is firmly in control of the action.",
+    "It's becoming evident that {winner} has the upper hand.",
+    "{winner} is dictating the pace and flow of the fight.",
+    "The tide has clearly turned in favor of {winner}.",
+    "The crowd responds as {winner} takes command of the fight.",
+    "The advantage is unmistakable now, and it belongs to {winner}.",
+]
+
+_ADVAN_CLEAR_CONT = [
+    "{winner} remains in control, pressing their advantage.",
+    "The situation is unchanged — {winner} continues to dictate the fight.",
+    "{winner} holds firm command of the contest.",
+]
+
+_ADVAN_DOMINATING = [
+    "{winner} is dominating the fight.",
+    "This has become a one-sided affair in favor of {winner}.",
+    "{winner} is completely overwhelming their opponent.",
+    "The gap between the two warriors is widening rapidly.",
+    "{winner} is imposing their will with authority.",
+    "This fight is slipping badly away from {loser}.",
+    "{winner} is in full command, leaving little room for resistance.",
+    "The contest has turned brutal, with {winner} firmly on top.",
+    "Only a dramatic reversal could save {loser} now.",
+    "{winner} is dismantling their opponent piece by piece.",
+]
+
+_ADVAN_DOMINATING_CONT = [
+    "{winner} shows no sign of relenting — the onslaught continues.",
+    "{loser} remains unable to slow {winner}'s dominance.",
+    "{winner} stays firmly in control with no answer from {loser}.",
+]
+
+_ADVAN_BRINK = [
+    "{loser} appears to be on the verge of defeat.",
+    "This fight looks moments away from being decided.",
+    "{winner} smells blood and presses the advantage.",
+    "It's hard to see how {loser} survives much longer at this pace.",
+    "Unless something changes quickly, this fight is all but over.",
+    "{loser} is hanging on by sheer will alone.",
+    "The end may be near as {winner} continues their assault.",
+]
+
+_ADVAN_BRINK_EXHAUSTION = [
+    "{loser} is running on empty — their body is beginning to betray them.",
+    "The effort has taken a severe toll on {loser}; they can barely keep pace.",
+    "{loser} is visibly fading, their endurance all but spent.",
+    "Exhaustion is closing in on {loser}, and {winner} senses the opening.",
+    "{loser}'s legs are heavy, their arms slower — they cannot keep this up much longer.",
+]
+
+_ADVAN_SWING_TO = [
+    "The fight has taken a surprising turn, with {winner} now pressing the advantage.",
+    "After earlier struggles, {winner} has clawed their way back into control.",
+    "A shift in momentum — {winner} has suddenly taken charge.",
+    "The tide turns: {winner} seizes the upper hand after a close exchange.",
+]
+
+
+def minute_status_line(
+    winner_name: str,
+    loser_name: str,
+    tier: str,
+    prev_tier: str,
+    prev_winner: str,
+    used: set,
+) -> str:
+    """
+    Return a fight-status line for the start of a minute.
+
+    tier / prev_tier: one of "even", "slight", "clear", "dominating", "brink", "brink_exhaustion"
+    winner_name / loser_name: the leading fighter (empty strings when tier == "even")
+    prev_winner: the name of the winner last minute (empty string if none)
+    used: mutable set of already-used lines this fight (updated in-place)
+    """
+    # Detect momentum swing: tier changed OR same tier but winner flipped
+    swung = (tier != "even" and prev_tier != "even" and
+             tier == prev_tier and prev_winner and prev_winner != winner_name)
+
+    if swung:
+        pool = _ADVAN_SWING_TO
+    elif tier == prev_tier:
+        # Unchanged — use softer continuation lines
+        cont_map = {
+            "even":            _ADVAN_EVEN_CONT,
+            "slight":          _ADVAN_SLIGHT_CONT,
+            "clear":           _ADVAN_CLEAR_CONT,
+            "dominating":      _ADVAN_DOMINATING_CONT,
+            "brink":           _ADVAN_BRINK,
+            "brink_exhaustion": _ADVAN_BRINK_EXHAUSTION,
+        }
+        pool = cont_map.get(tier, _ADVAN_EVEN_CONT)
+    else:
+        main_map = {
+            "even":            _ADVAN_EVEN,
+            "slight":          _ADVAN_SLIGHT,
+            "clear":           _ADVAN_CLEAR,
+            "dominating":      _ADVAN_DOMINATING,
+            "brink":           _ADVAN_BRINK,
+            "brink_exhaustion": _ADVAN_BRINK_EXHAUSTION,
+        }
+        pool = main_map.get(tier, _ADVAN_EVEN)
+
+    # Pick a line not used yet this fight; fall back to full pool if exhausted
+    available = [l for l in pool if l not in used]
+    if not available:
+        available = list(pool)
+
+    line = random.choice(available)
+    used.add(line)
+
+    return line.format(winner=winner_name.upper(), loser=loser_name.upper())
+
+
 def crowd_line(warrior_a_race: str = "", warrior_b_race: str = "") -> str:
     """Return a random crowd flavor line, occasionally race-specific."""
     if random.random() < 0.2:
@@ -865,15 +1050,49 @@ def anxious_line(warrior_name: str, foe_name: str) -> Optional[str]:
 # POST-FIGHT TRAINING SUMMARY
 # ---------------------------------------------------------------------------
 
-def training_summary(warrior_name: str, results: list[str]) -> str:
-    """Generate the post-fight training line shown at the end of the fight report."""
+_BASE_STATS = {"strength", "dexterity", "constitution", "intelligence", "presence", "size"}
+
+
+def training_summary(warrior_name: str, results: list[str], is_opponent: bool = False) -> str:
+    """
+    Post-fight training summary.
+      successes:  "<n> has trained in X and Y"
+      none:       "<n> has trained in nothing"
+      observed 4th train: appended as separate line
+
+    is_opponent: When True, hide the specific skill/stat names — show "Skill" or
+    "Stat" instead.  The one exception is the observed/learned bonus, which always
+    names the actual skill (that is the whole point of the intelligence report).
+    """
     if not results:
-        return f"{warrior_name.upper()} did not train this turn"
-    # Result strings look like: "War Flail trained: Level 0 → Level 1 (Novice)"
-    # Extract just the skill name (everything before " trained:" or " trained")
-    skills = []
+        return f"{warrior_name.upper()} has trained in nothing"
+
+    trained  = []
+    observed = []
     for r in results:
-        # Strip the " trained: ..." suffix to get just the skill name
-        name = r.split(" trained")[0].strip().lower()
-        skills.append(name)
-    return f"{warrior_name.upper()} has trained in {' and '.join(skills)}"
+        if r.startswith("[OBSERVED]") and "trained:" in r:
+            skill_name = r.split("[OBSERVED]")[1].split(" trained:")[0].strip().title()
+            observed.append(skill_name)
+        elif "trained:" in r:
+            skill_name = r.split(" trained:")[0].strip()
+            if is_opponent:
+                trained.append("Stat" if skill_name.lower() in _BASE_STATS else "Skill")
+            else:
+                trained.append(skill_name.title())
+
+    lines = []
+    if trained:
+        lines.append(f"{warrior_name.upper()} has trained in {' and '.join(trained)}")
+    else:
+        lines.append(f"{warrior_name.upper()} has trained in nothing")
+
+    if observed:
+        # Always reveal the actual skill — this is the scouting intelligence payoff
+        for obs_skill in observed:
+            lines.append(
+                f"{warrior_name.upper()} observed and learned a {obs_skill} skill"
+                f" from their opponent"
+            )
+
+    return "\n".join(lines)
+

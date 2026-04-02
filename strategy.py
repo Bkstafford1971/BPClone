@@ -1,5 +1,5 @@
-# =============================================================================
-# strategy.py — Blood Pit Strategy & Trigger Evaluation
+﻿# =============================================================================
+# strategy.py — BLOODSPIRE Strategy & Trigger Evaluation
 # =============================================================================
 # Evaluates the trigger list for a warrior each minute and returns the
 # active Strategy. Implements all trigger conditions from the guide.
