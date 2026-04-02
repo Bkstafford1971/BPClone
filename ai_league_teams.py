@@ -25,6 +25,10 @@ AI_MANAGER_ROSTER = [
     ("Zara Quickblade",    "The Quickblades",      "aggressive", ["Elf","Halfling"],         2),
     ("Magistra Corvina",   "Corvina's Chosen",     "defensive",  ["Human","Dwarf"],          3),
     ("The Unnamed One",    "Shadows of the Pit",   "berserker",  ["Half-Orc","Elf"],         1),
+    ("Snegg Ironbolts",    "The Sneaky Daggers",   "aggressive", ["Goblin","Halfling"],      2),
+    ("Gnomester Tick",     "Ticktock's Tinkers",   "tactician",  ["Gnome","Human"],          3),
+    ("K'rathis the Scaled", "The Scaled Predators", "balanced",   ["Lizardfolk","Human"],     2),
+    ("Shadowpouncer Vale",  "Velvet Claws",        "aggressive", ["Tabaxi","Elf"],           2),
 ]
 
 # ---------------------------------------------------------------------------
@@ -159,6 +163,81 @@ _NAMES = {
             "Chrystal","Daffodil","Fennel","Gilia","Hollyhock","Larkspur","Mallow",
         ],
     },
+    "Goblin": {
+        "Male": [
+            "Bograt","Cracktooth","Dribbles","Fizzwick","Gnarls","Hobgrin",
+            "Jigglesnick","Klugrot","Lurch","Mumbleguts","Nicker","Ogglesnort",
+            "Prickleface","Quirk","Ragtag","Snaggle","Twitchfinger","Ump",
+            "Vortex","Weaselbite","Xyzzz","Yammer","Zazza","Ankler","Bungrat",
+            "Crackle","Durbak","Eggwick","Fink","Giggles","Hinkson","Izzak",
+            "Jitter","Klunk","Lumbag","Mumbak","Nuzzle","Oink","Pickle",
+            "Quirker","Rattle","Snick","Trickle","Umble","Vex","Wiggler",
+        ],
+        "Female": [
+            "Aggle","Bisket","Cackle","Dibble","Essie","Fizzle","Gigget",
+            "Hickle","Idget","Jibble","Kickel","Lickle","Miggle","Nibble",
+            "Oogle","Pickle","Quibble","Ribbon","Sickle","Tickle","Umble",
+            "Vickle","Wiggle","Xickle","Yibble","Ziggle","Ample","Buckle",
+            "Cribble","Dribble","Edgel","Fickle","Giggle","Hackle","Ickle",
+            "Jiggle","Kiggle","Lattle","Moggle","Niggle","Oodle","Prickle",
+            "Quibble","Rittle","Scribble","Ticklet","Uzzle","Vrittle","Wattle",
+        ],
+    },
+    "Gnome": {
+        "Male": [
+            "Aldron","Brasswick","Cogsworth","Dinkledorf","Enormus","Fizzlebop",
+            "Gadgetson","Hinckley","Ironfoot","Jubblewick","Kneematcher","Lodrick",
+            "Metalsmith","Nozzlewig","Overton","Perpetuum","Quickspark","Ratchet",
+            "Sprocket","Tinkertop","Umbrash","Velverton","Widgetson","Xanderbuck",
+            "Yardworth","Zimmerson","Ashwick","Boltwick","Clockson","Dundersmith",
+            "Epicson","Firkin","Gearwick","Hummingwick","Inchworth","Jobsworth",
+            "Kindlebug","Lowinton","Metalwick","Noddertop","Owlerson","Potlewick",
+        ],
+        "Female": [
+            "Alatrice","Bristlethorn","Copperglow","Dinkledame","Earnestine","Fizzleberta",
+            "Gadgetina","Hinckley","Ironfoot","Justicia","Kindlewick","Lodrina",
+            "Metalshire","Nozzlewing","Overlee","Perpetuine","Quicksilva","Ratchella",
+            "Sprocketine","Tinkertree","Umbrella","Velvetwine","Widgetina","Xandra",
+            "Yardbottom","Zimmerlina","Ashwicke","Boltina","Clockwin","Dundertop",
+            "Epicine","Firkinella","Gearwin","Hummingtop","Inchley","Jobina",
+            "Kindlebright","Lowin","Metaltine","Nodderlee","Owlette","Potlina",
+        ],
+    },
+    "Lizardfolk": {
+        "Male": [
+            "Ssarask","Kzzarak","Thessak","Vvessik","Krrassik","Thissik","Vzzessik",
+            "Rrassak","Sszarak","Krzzask","Thessik","Vrrassak","Kzzzash","Thrassik",
+            "Vsszashi","Rzzhask","Szzarak","Krrash","Thessik","Vrrhash","Kzzhash",
+            "Thrask","Vsshak","Rzzhak","Szzak","Krash","Thask","Vrash","Kzhak",
+            "Tharak","Vshak","Rzhak","Szak","Krah","Tha","Vra","Kza",
+            "Thaskan","Vrasskan","Krithan","Thesskan","Vrithak","Krissak","Thissak","Vrathak",
+        ],
+        "Female": [
+            "Sssara","Kzzzara","Thessara","Vvvessa","Krrassa","Thissa","Vzzhessa",
+            "Rrassa","Sszessa","Krrassa","Thessara","Vrassa","Kzzassa","Thrassa",
+            "Vssha","Rzzassa","Szzara","Krassa","Thessa","Vrrassa","Kzzhassa",
+            "Thassa","Vsshassa","Rzhassa","Szassa","Krassa","Thassa","Vrassa","Kzassa",
+            "Tharassa","Vshassa","Rzhassa","Szassa","Krassa","Thassa","Vrassa","Kzassa",
+            "Thassia","Vrassia","Krithra","Thessia","Vrithia","Krissa","Thissa","Vratha",
+        ],
+    },
+    "Tabaxi": {
+        "Male": [
+            "Alder","Bladewing","Clawstrike","Duskpaw","Emberclaw","Fang",
+            "Gideon","Hawkstrike","Ironpaw","Jadewhisker","Kingsmane","Lionclaw",
+            "Moonwhisker","Nightstalker","Ocelot","Pantherfang","Quietstep","Razorpaw",
+            "Shadowpounce","Tigerclaw","Understalker","Velvetpaw","Whiskerwind","Xeric",
+            "Yelloweye","Zenith","Arzak","Blacktail","Crescent","Darkclaw","Echowing",
+            "Firemane","Golden","Huntmaster","Ivory","Jaguarjaw","Killdark",
+        ],
+        "Female": [
+            "Astraea","Blaze","Cinnamon","Dapple","Ebony","Felicity","Gold",
+            "Henna","Iris","Jade","Kestrel","Luna","Midnight","Nyx",
+            "Opal","Peony","Quicksilver","Ruby","Sienna","Topaz","Umber",
+            "Velvet","Whisper","Xandra","Yarrow","Zephyr","Ashilotte","Bramble",
+            "Cora","Dove","Evernice","Finch","Giselle","Hazel","Iris",
+        ],
+    },
 }
 
 # Fallback for any unlisted race
@@ -236,15 +315,53 @@ def _build_ai_warrior(style: str, races: List[str], used_names: set) -> dict:
 
     w = Warrior(name=name, race_name=race, gender=gender, **final)
     w.luck           = random.randint(1, 30)
-    w.primary_weapon = random.choice(_STYLE_WEAPONS[style])
-    w.armor          = _STYLE_ARMOR[style]
+    
+    # Race-specific weapon selections
+    base_weapons = _STYLE_WEAPONS[style]
+    if race == "Goblin":
+        # Goblins prefer light, thrown weapons and dirty-fighting tools
+        w.primary_weapon = random.choice(["Short Sword","Dagger","Javelin","Hatchet","Stiletto","Bola","Club"])
+    elif race == "Gnome":
+        # Gnomes prefer swords and hammers
+        w.primary_weapon = random.choice(["Short Sword","Hammer","Morningstar","Mace"])
+    elif race == "Lizardfolk":
+        # Lizardfolk favor martial combat and light-to-mid weapons
+        w.primary_weapon = random.choice(["Open Hand","Dagger","Short Sword","Hammer"])
+    elif race == "Tabaxi":
+        # Tabaxi prefer speed-focused weapons and mobile tactics
+        w.primary_weapon = random.choice(["Dagger","Short Sword","Scimitar","Stiletto","Bola","Heavy Barbed Whip"])
+    else:
+        w.primary_weapon = random.choice(base_weapons)
+    
+    # Race-specific armor selections
+    base_armor = _STYLE_ARMOR[style]
+    if race == "Goblin":
+        # Goblins need light armor for speed
+        w.armor = "Leather" if base_armor != "Cloth" else "Cloth"
+    elif race == "Lizardfolk":
+        # Lizardfolk keep light armor due to natural scales
+        w.armor = "Cloth" if style != "defensive" else "Leather"
+    elif race == "Tabaxi":
+        # Tabaxi keep minimal armor for maximum agility
+        w.armor = "Cloth" if style != "defensive" else "Leather"
+    else:
+        w.armor = base_armor
 
+    # Race-specific style/strategy adjustments
     sp = _STYLE_STRATEGIES[style]
+    if race == "Lizardfolk" and style not in ("berserker", "aggressive"):
+        # Lizardfolk excel with Martial Combat
+        sp = {"style": "Martial Combat", "activity": 5, "aim_point": "Chest", "defense_point": "Chest"}
+    elif race == "Gnome" and style == "tactician":
+        # Gnomes excel with Counterstrike
+        sp = {"style": "Counterstrike", "activity": 5, "aim_point": "Chest", "defense_point": "Chest"}
+    
     w.strategies = [Strategy(
         trigger=("Always"), style=sp["style"], activity=sp["activity"],
         aim_point=sp["aim_point"], defense_point=sp["defense_point"],
     )]
 
+    # Race-specific training pools
     trains_pool = {
         "aggressive": ["strength","constitution","initiative"],
         "berserker":  ["strength","initiative"],
@@ -252,6 +369,17 @@ def _build_ai_warrior(style: str, races: List[str], used_names: set) -> dict:
         "balanced":   ["strength","dexterity","dodge"],
         "tactician":  ["intelligence","dexterity","feint","dodge"],
     }.get(style, ["strength"])
+    
+    # Adjust training based on race
+    if race == "Goblin":
+        trains_pool = ["dexterity","initiative","dodge"]
+    elif race == "Gnome":
+        trains_pool = ["parry","counterstrike","dodge"]
+    elif race == "Lizardfolk":
+        trains_pool = ["constitution","martial_combat","dodge"]
+    elif race == "Tabaxi":
+        trains_pool = ["dexterity","dodge","initiative"]
+    
     w.trains = random.sample(trains_pool, min(3, len(trains_pool)))
 
     return w.to_dict()

@@ -289,26 +289,61 @@ def can_wear_armor(
     )
 
 
-def effective_dex(base_dex: int, armor_name: str, helm_name: str) -> int:
+def effective_dex(base_dex: int, armor_name: str, helm_name: str, warrior_race: Optional[str] = None) -> int:
     """
     Return effective Dexterity after armor and helm dex penalties are applied.
     Used by the combat engine for dodge and initiative calculations.
     Minimum effective DEX is 1 (can't be penalized below 1).
+    
+    For Lizardfolk with natural armor layering, special reduced penalties apply.
     """
     armor = get_armor(armor_name or "None")
     helm  = get_armor(helm_name  or "None")
     total_penalty = armor.dex_penalty + helm.dex_penalty
+    
+    # Lizardfolk armor layering: reduced DEX penalties for light/medium armor
+    if warrior_race and warrior_race.lower() == "lizardfolk":
+        if armor_name and armor_name.lower() != "none" and armor_name.lower() != "cloth":
+            if armor_name.lower() == "leather":
+                # Leather on scales: -1 DEX penalty (instead of full armor penalty)
+                total_penalty = 1 + helm.dex_penalty
+            elif armor_name.lower() == "cuir boulli":
+                # Cuir Boulli on scales: -2 DEX penalty (instead of full armor penalty)
+                total_penalty = 2 + helm.dex_penalty
+            # Brigandine and above: use full penalty
+    
     return max(1, base_dex - total_penalty)
 
 
-def total_defense_value(armor_name: str, helm_name: str) -> int:
+def total_defense_value(armor_name: str, helm_name: str, warrior_race: Optional[str] = None) -> int:
     """
     Sum of armor + helm defense values.
     Used as input to the damage reduction calculation in combat.
+    
+    For Lizardfolk, natural scales provide baseline defense equivalent to Scale armor.
+    Layered armor adds to this protection.
     """
     armor = get_armor(armor_name or "None")
     helm  = get_armor(helm_name  or "None")
-    return armor.defense_value + helm.defense_value
+    defense = armor.defense_value + helm.defense_value
+    
+    # Lizardfolk natural armor: scales equivalent to Scale armor (def: 5)
+    if warrior_race and warrior_race.lower() == "lizardfolk":
+        # Base: natural scales (no armor equipped or Cloth)
+        if not armor_name or armor_name.lower() == "none" or armor_name.lower() == "cloth":
+            defense = 5 + helm.defense_value  # Scale equivalent (5) + helm
+        else:
+            # Layered armor: scales (5) + armor on top
+            # Leather on scales = Chain equivalent (6)
+            # Cuir Boulli on scales = Half-Plate equivalent (8)
+            if armor_name.lower() == "leather":
+                defense = 6 + helm.defense_value  # Chain equivalent
+            elif armor_name.lower() == "cuir boulli":
+                defense = 8 + helm.defense_value  # Half-Plate equivalent
+            # Brigandine and above: just add armor to scales
+            # Brigandine (4) + scales (5) = 9, etc.
+    
+    return defense
 
 
 def is_ap_vulnerable(armor_name: str) -> bool:
