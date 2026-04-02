@@ -590,12 +590,19 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
         champ_team=champ_t.upper() if champ_t else "",
     )
 
-    paragraphs = []
+    # Track paragraphs by type (name) for structured formatting
+    intro_para = None
+    team_paras = []
+    warrior_paras = []
+    meta_para = None
+    champ_para = None
+    death_para = None
+    outro_para = None
 
     # ------------------------------------------------------------------
     # 1. INTRO
     # ------------------------------------------------------------------
-    paragraphs.append(_pick_block(_BLK_INTRO, used, ctx))
+    intro_para = _pick_block(_BLK_INTRO, used, ctx)
 
     # ------------------------------------------------------------------
     # 2. TEAM PERFORMANCE  (up to 2 blocks — best team then worst team)
@@ -606,7 +613,7 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
             team=tn.upper(), record=_rec(td), rank_change=_rank_change(td),
             team2=worst_team[0].upper() if worst_team else tn.upper(),
         )
-        paragraphs.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
+        team_paras.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
 
     if worst_team and best_team and worst_team[0] != best_team[0]:
         tn, td = worst_team
@@ -614,7 +621,7 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
             team=tn.upper(), record=_rec(td), rank_change=_rank_change(td),
             team2=best_team[0].upper(),
         )
-        paragraphs.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
+        team_paras.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
 
     # ------------------------------------------------------------------
     # 3. WARRIOR HIGHLIGHTS  (up to 2 blocks from notable fights)
@@ -627,7 +634,7 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
             opponent=loser.name.upper(),
             points=str(getattr(winner, "recognition", 0)),
         )
-        paragraphs.append(_pick_block(_BLK_WARRIOR_HI, used, ctx))
+        warrior_paras.append(_pick_block(_BLK_WARRIOR_HI, used, ctx))
 
     # ------------------------------------------------------------------
     # 4. META / AVOIDANCE  (1 block, conditional)
@@ -638,20 +645,20 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
             warrior=most_chal.upper(),
             team=best_team[0].upper() if best_team else "",
         )
-        paragraphs.append(_pick_block(_BLK_META_WARRIOR, used, ctx))
+        meta_para = _pick_block(_BLK_META_WARRIOR, used, ctx)
     elif hot_teams or cold_teams:
         featured = (hot_teams or cold_teams)[0]
         ctx.update(team=featured.upper())
-        paragraphs.append(_pick_block(_BLK_META_TEAM, used, ctx))
+        meta_para = _pick_block(_BLK_META_TEAM, used, ctx)
 
     # ------------------------------------------------------------------
     # 5. CHAMPION  (1 block, conditional on champion_state)
     # ------------------------------------------------------------------
     if champ:
         pool = _BLK_CHAMP_NEW if champ_src == "beat_champion" else _BLK_CHAMP_HOLDS
-        paragraphs.append(_pick_block(pool, used, ctx))
+        champ_para = _pick_block(pool, used, ctx)
     else:
-        paragraphs.append(_pick_block(_BLK_CHAMP_VACANT, used, ctx))
+        champ_para = _pick_block(_BLK_CHAMP_VACANT, used, ctx)
 
     # ------------------------------------------------------------------
     # 6. DEATH  (1 block — only if deaths occurred this turn)
@@ -661,14 +668,82 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
         rec_str = f"{d.get('w', 0)}-{d.get('l', 0)}-{d.get('k', 0)}"
         killer  = d.get("killed_by", "an unknown foe")
         ctx.update(warrior=d["name"].upper(), opponent=killer.upper(), record=rec_str)
-        paragraphs.append(_pick_block(_BLK_DEATH, used, ctx))
+        death_para = _pick_block(_BLK_DEATH, used, ctx)
 
     # ------------------------------------------------------------------
     # 7. OUTRO
     # ------------------------------------------------------------------
-    paragraphs.append(_pick_block(_BLK_OUTRO, used, ctx))
+    outro_para = _pick_block(_BLK_OUTRO, used, ctx)
 
-    return "\n\nArena Happenings\n\n" + "\n\n".join(paragraphs)
+    # ====================================================================
+    # Build formatted Arena Report with template structure lines
+    # ====================================================================
+    report_sections = []
+    
+    # Report header with dividers
+    report_sections.append("=" * 75)
+    report_sections.append("BLOODSPIRE ARENA REPORT".center(75))
+    report_sections.append(f"Turn {turn_num} Official Commentary".center(75))
+    report_sections.append("=" * 75)
+    report_sections.append("")
+    
+    # Intro section
+    if intro_para:
+        report_sections.append(intro_para)
+        report_sections.append("")
+    
+    # Team Performance section
+    if team_paras:
+        report_sections.append("-" * 75)
+        report_sections.append("TEAM PERFORMANCE".center(75))
+        report_sections.append("-" * 75)
+        report_sections.append("")
+        report_sections.append("\n\n".join(team_paras))
+        report_sections.append("")
+    
+    # Warrior Highlights section
+    if warrior_paras:
+        report_sections.append("-" * 75)
+        report_sections.append("NOTABLE CONTESTS".center(75))
+        report_sections.append("-" * 75)
+        report_sections.append("")
+        report_sections.append("\n\n".join(warrior_paras))
+        report_sections.append("")
+    
+    # Arena Dynamics section
+    if meta_para:
+        report_sections.append("-" * 75)
+        report_sections.append("ARENA DYNAMICS".center(75))
+        report_sections.append("-" * 75)
+        report_sections.append("")
+        report_sections.append(meta_para)
+        report_sections.append("")
+    
+    # Championship Status section
+    if champ_para:
+        report_sections.append("-" * 75)
+        report_sections.append("CHAMPIONSHIP STATUS".center(75))
+        report_sections.append("-" * 75)
+        report_sections.append("")
+        report_sections.append(champ_para)
+        report_sections.append("")
+    
+    # The Fallen section (only if deaths occurred)
+    if death_para:
+        report_sections.append("-" * 75)
+        report_sections.append("THE FALLEN".center(75))
+        report_sections.append("-" * 75)
+        report_sections.append("")
+        report_sections.append(death_para)
+        report_sections.append("")
+    
+    # Closing with dividers
+    report_sections.append("=" * 75)
+    if outro_para:
+        report_sections.append(outro_para)
+    report_sections.append("=" * 75)
+    
+    return "\n" + "\n".join(report_sections)
 
 
 # ---------------------------------------------------------------------------
