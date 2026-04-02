@@ -340,6 +340,56 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             self.send_json({"success": True, "turn": turn, "selections": selections,
                             "slots_used": len(selections), "slots_left": 3 - len(selections)})
 
+        elif p == "/api/challenge/targets":
+            from save import load_all_teams
+            from accounts import get_account
+            from ai_league_teams import get_or_create_ai_teams
+            q          = self.qs()
+            manager_id = int(q.get("manager_id", 0))
+            team_id    = int(q.get("team_id", 0))
+            acc        = get_account(manager_id)
+            own_ids    = set(acc.get("team_ids", [])) if acc else set()
+            if team_id:
+                own_ids.add(team_id)
+            _NPC = {"The Monsters", "The Peasants"}
+            warriors = []
+
+            # Player teams — use Team objects (already fully parsed)
+            for t in load_all_teams():
+                if t.team_id in own_ids or t.team_name in _NPC:
+                    continue
+                for w in t.active_warriors:
+                    warriors.append({
+                        "name"        : w.name,
+                        "team_name"   : t.team_name,
+                        "race"        : w.race.name if hasattr(w.race, "name") else str(w.race),
+                        "total_fights": w.total_fights,
+                        "wins"        : w.wins,
+                        "losses"      : w.losses,
+                        "kills"       : w.kills,
+                    })
+
+            # AI teams — read raw dicts to avoid any Warrior.from_dict failures
+            for at in get_or_create_ai_teams():
+                team_name = at.get("team_name", "")
+                if team_name in _NPC:
+                    continue
+                for wd in at.get("warriors", []):
+                    if not wd or wd.get("is_dead"):
+                        continue
+                    warriors.append({
+                        "name"        : wd.get("name", "Unknown"),
+                        "team_name"   : team_name,
+                        "race"        : wd.get("race", "Human"),
+                        "total_fights": wd.get("total_fights", 0),
+                        "wins"        : wd.get("wins", 0),
+                        "losses"      : wd.get("losses", 0),
+                        "kills"       : wd.get("kills", 0),
+                    })
+
+            warriors.sort(key=lambda x: x["total_fights"])
+            self.send_json({"success": True, "warriors": warriors})
+
         elif p == "/api/scout/targets":
             from save import load_all_teams, current_turn
             from accounts import get_account
@@ -1387,6 +1437,7 @@ def _slim_team_for_upload(team_json: dict) -> dict:
             "kills"         : w.get("kills", 0),
             "total_fights"  : w.get("total_fights", 0),
             "popularity"    : w.get("popularity", 50),
+            "recognition"   : w.get("recognition", 0),
             "attribute_gains": w.get("attribute_gains", {}),
             "training_weight_bonus": w.get("training_weight_bonus", 0),
             "is_dead"            : w.get("is_dead", False),
@@ -1619,6 +1670,13 @@ def _apply_league_results(body: dict) -> dict:
             local_w.kills         = server_w.kills
             local_w.total_fights  = server_w.total_fights
             local_w.popularity    = server_w.popularity
+            # Take the higher of local (historical) and server (this turn) values.
+            # Then enforce minimum floor: kills×5 + non-kill-wins×3 + losses×1.
+            local_w.recognition   = max(local_w.recognition, server_w.recognition)
+            _min_rec = (local_w.kills * 5
+                        + (local_w.wins - local_w.kills) * 3
+                        + local_w.losses)
+            local_w.recognition   = max(local_w.recognition, _min_rec)
             local_w.streak        = server_w.streak
             local_w.turns_active  = server_w.turns_active
             local_w.injuries      = server_w.injuries

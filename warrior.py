@@ -847,7 +847,7 @@ class Warrior:
         """
         Update recognition rating after a fight (formula v2).
 
-        Total = Base + Underdog Bonus + Dominance Bonus − Upset Penalty
+        Total = Base + Underdog Bonus + Dominance Bonus + Flashy Loss Bonus
                      + Popularity Bonus + Luck Bonus
         Clamped 1–15 per fight.  Lifetime total capped at 99.
 
@@ -899,38 +899,20 @@ class Warrior:
             elif dominance_score >= 25: dominance_bonus = 1
 
         # ------------------------------------------------------------------
-        # 4. Upset Penalty (losses only when this warrior was the favorite)
+        # 4. Flashy Loss Bonus (losses only — rewarded for going down fighting)
         # ------------------------------------------------------------------
-        upset_penalty = 0
-        if not won and self_exp > opp_exp:
-            gap_pct = (self_exp - opp_exp) / self_exp * 100
-            if gap_pct >= 25:       base_penalty = 2
-            elif gap_pct >= 15:     base_penalty = 1
-            else:                   base_penalty = 0
-
-            if base_penalty > 0:
-                exp_factor = min(self_exp / 8.0, 3.0)
-
-                # Loss Quality Score (0–100): higher = loss was more heroic/close
-                duration_pct = minutes_elapsed / max(1, max_minutes)
-                lqs = 40
-                if self_near_kills > 0:   lqs += 30   # came close to winning
-                if duration_pct >= 0.80:  lqs += 20   # went the distance
-                if self_hp_pct >= 0.40:   lqs += 15   # still standing at defeat
-                lqs += self_knockdowns * 10            # heroic moments
-                if duration_pct <= 0.30:  lqs -= 15   # quick KO
-                lqs = max(0, min(100, lqs))
-
-                closeness_mult = (100 - lqs) / 100.0
-                upset_penalty  = round(base_penalty * exp_factor * closeness_mult)
+        flashy_loss_bonus = 0
+        if not won:
+            duration_pct = minutes_elapsed / max(1, max_minutes)
+            if self_near_kills >= 2:    flashy_loss_bonus += 2
+            elif self_near_kills == 1:  flashy_loss_bonus += 1
+            if duration_pct >= 0.80:    flashy_loss_bonus += 1   # went the distance
 
         # ------------------------------------------------------------------
-        # 5. Popularity Bonus (wins only — crowd recognises fan favourites)
+        # 5. Popularity Bonus (all outcomes — crowd recognises fan favourites)
         # ------------------------------------------------------------------
-        popularity_bonus = 0
-        if won:
-            if self.popularity >= 70:   popularity_bonus = 2
-            elif self.popularity >= 50: popularity_bonus = 1
+        popularity_bonus = max(0, (self.popularity - 30) // 20)
+        # pop 50 → +1, pop 70 → +2, pop 90 → +3
 
         # ------------------------------------------------------------------
         # 6. Luck Bonus (probabilistic — lucky warriors occasionally shine)
@@ -945,7 +927,7 @@ class Warrior:
         # ------------------------------------------------------------------
         # Final tally
         # ------------------------------------------------------------------
-        points = base + underdog_bonus + dominance_bonus - upset_penalty + popularity_bonus + luck_bonus
+        points = base + underdog_bonus + dominance_bonus + flashy_loss_bonus + popularity_bonus + luck_bonus
         points = max(1, min(15, points))
         self.recognition = min(99, self.recognition + points)
 

@@ -228,6 +228,7 @@ const S = {
   savedManagerName: null, // last-used manager name for login auto-fill
   savedPassword:    null, // saved password for auto-login (from session)
   savedRememberMe:  true, // whether Remember Me was checked last time
+  challengeTargets: null, // null = not loaded; [] = loaded list of warriors
   runNextTurn:     {},    // {team_id: bool} per-team run flags
   replacingTeam:   null,  // {old_team_id, manager_id} when replacing
   league: {               // league server connection settings
@@ -526,6 +527,7 @@ function buildTree() {
    ============================================================ */
 function setWTab(tab) {
   S.wTab = tab;
+  if (tab === 'challenges' && S.challengeTargets === null) loadChallengeTargets();
   refreshContent();
 }
 function treeSelectManager() {
@@ -988,6 +990,16 @@ async function loadScoutTargets() {
       });
     }
   } catch(e) { S.scout.targets = []; }
+  refreshContent();
+}
+
+async function loadChallengeTargets() {
+  const mid    = (S.account || {}).id || 0;
+  const teamId = S.sel.teamId || 0;
+  try {
+    const r = await API.get(`/api/challenge/targets?manager_id=${mid}&team_id=${teamId}`);
+    S.challengeTargets = r.success ? (r.warriors || []) : [];
+  } catch(e) { S.challengeTargets = []; }
   refreshContent();
 }
 
@@ -1516,22 +1528,21 @@ function buildChallengesTab(team, w) {
   // Blood challenges relevant to this warrior
   const bloodList = (team.blood_challenges || []).filter(bc => bc[0] === w.name || bc[0] === null);
 
-  // Collect eligible opponents from all OTHER locally loaded teams
+  // Collect eligible opponents from the server-provided target list (includes AI teams)
+  if (S.challengeTargets === null) {
+    return '<div style="padding:20px; color:#555;">Loading challenge targets...</div>';
+  }
   const opponents = [];
-  for (const [tid, t] of Object.entries(S.teams || {})) {
-    if (Number(tid) === team.team_id) continue;
-    for (const ow of (t.warriors || [])) {
-      if (!ow || ow.is_dead) continue;
-      const owFights = ow.total_fights || 0;
-      if (owFights >= minFights && owFights <= maxFights) {
-        opponents.push({
-          name     : ow.name,
-          teamName : t.team_name,
-          race     : ow.race || '—',
-          record   : fmtRecord(ow),
-          fights   : owFights,
-        });
-      }
+  for (const ow of S.challengeTargets) {
+    const owFights = ow.total_fights || 0;
+    if (owFights >= minFights && owFights <= maxFights) {
+      opponents.push({
+        name     : ow.name,
+        teamName : ow.team_name,
+        race     : ow.race || '—',
+        record   : `${ow.wins||0}-${ow.losses||0}-${ow.kills||0}`,
+        fights   : owFights,
+      });
     }
   }
   opponents.sort((a, b) => a.fights - b.fights || a.name.localeCompare(b.name));
@@ -2079,6 +2090,7 @@ function attachEvents() {
     S.savedPassword = null;
     try { await API.post('/api/session/save', { manager_name: S.savedManagerName || '', password: '' }); } catch(e) {}
     S.account = null; S.teams = {}; S.sel = {type:null};
+    S.challengeTargets = null;
     S.newsletters = null; S.newsletterText = null;
     S.ct = null;
     S.view = 'login'; S.loginTab = 'new'; S.msg = '';

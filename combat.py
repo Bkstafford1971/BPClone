@@ -675,6 +675,7 @@ class CombatEngine:
                 self._used_adv_phrases,
             )
             self._emit(adv_line)
+            self._emit("")
             self._last_adv_tier = tier
             self._last_adv_winner = winner_name
             if random.random() < 0.15:
