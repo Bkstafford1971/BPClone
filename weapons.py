@@ -874,6 +874,50 @@ WEAPONS: dict[str, Weapon] = {
         preferred_styles=["Counterstrike", "Decoy"],
     ),
 
+    "club": Weapon(
+        skill_key     = "club",
+        display       = "Club",
+        weight        = 2.7,
+        throwable     = False,
+        two_hand      = False,
+        category      = HAMMER_MACE,
+        notes=(
+            "A simple length of heavy wood, sometimes reinforced with metal bands. "
+            "Brutal and straightforward. Favored by dirty fighters and beginners alike."
+        ),
+        preferred_styles=["Bash", "Strike"],
+    ),
+
+    "bola": Weapon(
+        skill_key     = "bola",
+        display       = "Bola",
+        weight        = 3.1,
+        throwable     = True,
+        two_hand      = False,
+        category      = ODDBALL,
+        can_sweep     = True,
+        notes=(
+            "Weighted cords with heavy balls. Can be thrown to entangle legs and cause falls, "
+            "or swung in melee like a crude flail. Deals only bludgeoning damage."
+        ),
+        preferred_styles=["Opportunity Throw", "Bash", "Strike"],
+    ),
+
+    "heavy_whip": Weapon(
+        skill_key     = "heavy_whip",
+        display       = "Heavy Barbed Whip",
+        weight        = 2.1,
+        throwable     = False,
+        two_hand      = False,
+        category      = ODDBALL,
+        can_sweep     = True,
+        notes=(
+            "A long, heavy whip with barbs or hooks. Can lash to slash or wrap around limbs "
+            "to trip an opponent. Deals a mix of blunt and slashing damage."
+        ),
+        preferred_styles=["Slash", "Engage & Withdraw"],
+    ),
+
     "open_hand": OPEN_HAND,
 }
 

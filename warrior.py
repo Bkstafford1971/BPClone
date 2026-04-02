@@ -455,6 +455,7 @@ class Warrior:
         self.primary_weapon  : str           = "Open Hand"
         self.secondary_weapon: str           = "Open Hand"
         self.backup_weapon   : Optional[str] = None
+        self.favorite_weapon : str           = ""           # Hidden favorite; assigned at creation
 
         # --- Strategies (1-6 entries + implicit "Always" fallback) ---
         self.strategies: List[Strategy] = [
@@ -1330,6 +1331,101 @@ def ai_rollup(base_stats: Dict[str, int], race_name: str) -> Dict[str, int]:
     return validate_additions(base_stats, additions)
 
 
+# ---------------------------------------------------------------------------
+# FAVORITE WEAPON ASSIGNMENT
+# ---------------------------------------------------------------------------
+
+def assign_favorite_weapon(warrior: "Warrior") -> None:
+    """
+    Assign a hidden favorite weapon to a warrior based on race and stats.
+    Respects race conventions and avoids absurd combinations.
+    
+    Race preferences:
+      Tabaxi: light/fast (Dagger, Short Sword, Scimitar, Hatchet, Javelin, Stiletto, Bola, Heavy Barbed Whip)
+      Half-Orc: big damage (War Flail, Great Axe, Great Sword, War Hammer, Great Pick, Battle Flail, Maul)
+      Dwarf: axes, hammers, spears, shields
+      Elf: small/fast blades, thrown weapons
+      Halfling: small/light weapons, martial-friendly
+      Human: balanced weapons
+      Goblin: light/dirty fighting (Dagger, Short Sword, Hatchet, Javelin, Bola)
+      Gnome: swords & hammers
+      Lizardfolk: martial + light/medium
+    """
+    race_pools = {
+        "Tabaxi": [
+            "Dagger", "Short Sword", "Scimitar", "Hatchet", "Javelin",
+            "Stiletto", "Bola", "Heavy Barbed Whip"
+        ],
+        "Half-Orc": [
+            "War Flail", "Great Axe", "Great Sword", "War Hammer",
+            "Great Pick", "Battle Flail", "Maul"
+        ],
+        "Dwarf": [
+            "Hatchet", "Battle Axe", "Hammer", "Mace", "War Hammer",
+            "Short Spear", "Boar Spear", "Target Shield", "Morningstar"
+        ],
+        "Elf": [
+            "Stiletto", "Dagger", "Short Sword", "Scimitar", "Javelin",
+            "Rapier", "Epee", "Quarterstaff"
+        ],
+        "Halfling": [
+            "Dagger", "Knife", "Short Sword", "Hatchet", "Javelin",
+            "Open Hand", "Cestus"
+        ],
+        "Human": [
+            "Short Sword", "Longsword", "Military Pick", "Morning Star",
+            "Boar Spear", "Hammer", "Epee", "Broadsword"
+        ],
+        "Goblin": [
+            "Dagger", "Short Sword", "Hatchet", "Javelin", "Bola", "Club"
+        ],
+        "Gnome": [
+            "Short Sword", "Hammer", "Mace", "Longsword", "Morningstar", "Dagger"
+        ],
+        "Lizardfolk": [
+            "Open Hand", "Dagger", "Short Sword", "Hammer", "Claw",
+            "Martial Combat", "Quarterstaff"
+        ],
+    }
+    
+    race_name = warrior.race.name
+    pool = race_pools.get(race_name, ["Short Sword"])  # Fallback
+    
+    # Apply stat bias: Higher STR favors heavier weapons
+    strength_bias = warrior.strength - 10  # -7 to +15 typical range
+    dexterity_bias = warrior.dexterity - 10
+    
+    # Categorize weapons by weight for stat-based adjustments
+    heavy_weapons = [
+        "War Flail", "Great Axe", "Great Sword", "War Hammer", "Great Pick",
+        "Battle Flail", "Maul", "Battle Axe", "Halberd", "Pole Axe"
+    ]
+    light_weapons = [
+        "Dagger", "Knife", "Stiletto", "Short Sword", "Scimitar", "Hatchet",
+        "Javelin", "Bola", "Epee", "Rapier"
+    ]
+    
+    # Create weighted choices: slightly bias based on warrior's STR/DEX
+    weighted_pool = list(pool)  # Make a copy
+    
+    # If high strength, favor heavier weapons that are in the race pool
+    if strength_bias > 2:
+        for w in heavy_weapons:
+            if w in weighted_pool:
+                # Add extra copies to increase weight
+                weighted_pool.extend([w, w])
+    
+    # If high dexterity, favor lighter weapons
+    if dexterity_bias > 2:
+        for w in light_weapons:
+            if w in weighted_pool:
+                weighted_pool.extend([w, w])
+    
+    # Select favorite weapon
+    favorite = random.choice(weighted_pool)
+    warrior.favorite_weapon = favorite
+
+
 def create_warrior_interactive(base_stats: Dict[str, int] = None) -> Optional["Warrior"]:
     """
     Interactive CLI roll-up flow for a human player.
@@ -1448,6 +1544,7 @@ def create_warrior_interactive(base_stats: Dict[str, int] = None) -> Optional["W
         name=name, race_name=race_name, gender=gender, **final_stats
     )
     warrior.luck = random.randint(1, 30)
+    assign_favorite_weapon(warrior)
 
     print("\n" + warrior.stat_block())
     print(f"  Luck factor: {warrior.luck}/30")
@@ -1478,4 +1575,5 @@ def create_warrior_ai(
 
     w = Warrior(name=name, race_name=race_name, gender=gender, **final)
     w.luck = random.randint(1, 30)
+    assign_favorite_weapon(w)
     return w
