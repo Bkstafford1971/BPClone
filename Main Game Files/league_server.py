@@ -250,6 +250,121 @@ def _run_turn(request_password, rerun_turn=None):
     all_results = {}
     done_count  = 0
 
+    # Load champion state once (shared by all managers)
+    try:
+        from save import load_champion_state
+        champ_state = load_champion_state()
+    except Exception:
+        champ_state = {}
+
+    # ===========================================================================
+    # PRE-PASS: Guarantee each player warrior fights exactly once per turn.
+    #
+    # Problem: build_fight_card() is called independently per manager, so a
+    # player warrior can appear as pw in their own manager's card AND as ow in
+    # another manager's card — fighting twice, producing duplicate newsletter
+    # entries.
+    #
+    # Solution:
+    #   1. Build fight cards for all non-AI managers up front.
+    #   2. For every player-vs-player pair found, run the fight ONCE and store
+    #      the result keyed by both warrior names (_pvp_by_warrior).
+    #   3. In the main loop, when a warrior's name is in _pvp_by_warrior, inject
+    #      the pre-computed (possibly mirrored) result instead of fighting again.
+    # ===========================================================================
+
+    # warrior_name -> manager_id for all non-AI player warriors
+    player_warrior_to_mid = {}
+    for _mid, _upl in uploads.items():
+        if not _mid.startswith("ai_"):
+            for _wd in (_upl["team"].get("warriors") or []):
+                if _wd and _wd.get("name"):
+                    player_warrior_to_mid[_wd["name"]] = _mid
+
+    # Pre-build non-AI fight cards
+    _fight_cards   = {}   # manager_id -> List[ScheduledFight]
+    for _mid, _upl in uploads.items():
+        if _mid.startswith("ai_"):
+            continue
+        try:
+            _pt = Team.from_dict(_upl["team"])
+            _pt.manager_name = _upl["manager_name"]
+        except Exception:
+            continue
+        _this_real = _upl.get("manager_id", _mid)
+        _r_list = [
+            r for mid2, r in rival_map.items()
+            if mid2 != _mid and getattr(r, "real_manager_id", mid2) != _this_real
+        ]
+        _fight_cards[_mid] = (_pt, build_fight_card(_pt, _r_list, champion_state=champ_state))
+
+    # Run each unique P-vs-P fight exactly once; track by warrior name
+    _pvp_by_warrior = {}  # warrior_name -> pvp_data dict (shared between both fighters)
+    for _mid, (_pt, _card) in _fight_cards.items():
+        _mname = uploads[_mid]["manager_name"]
+        for _bout in _card:
+            _pw  = _bout.player_warrior
+            _ow  = _bout.opponent
+            if player_warrior_to_mid.get(_ow.name) is None:
+                continue  # ow is not a player warrior
+            # Skip if either warrior is already assigned to a pre-fought match
+            if _pw.name in _pvp_by_warrior or _ow.name in _pvp_by_warrior:
+                continue
+            # Pre-assign fight ID so both managers share the same narrative ID
+            _pre_fid = _next_fid(cfg)
+            _result  = run_fight(
+                _pw, _ow,
+                team_a_name    = _pt.team_name,
+                team_b_name    = _bout.opponent_team.team_name,
+                manager_a_name = _mname,
+                manager_b_name = _bout.opponent_manager,
+                is_monster_fight = False,
+            )
+            # Scout flavor text injection
+            try:
+                from save import get_all_scouted_warriors
+                _scouted = get_all_scouted_warriors(turn_num)
+                _attending = set()
+                for _ww in (_pw, _ow):
+                    for _mgr in _scouted.get(_ww.name, []):
+                        _attending.add(_mgr)
+                if _attending:
+                    _scout_line = (
+                        f"\n[A scout from {', '.join(sorted(_attending))}'s stable is in "
+                        f"attendance, watching the proceedings with a keen eye.]\n"
+                    )
+                    from combat import FightResult as _FR
+                    _result = _FR(
+                        winner=_result.winner, loser=_result.loser,
+                        loser_died=_result.loser_died, minutes_elapsed=_result.minutes_elapsed,
+                        narrative=_scout_line + _result.narrative,
+                        training_results=_result.training_results,
+                    )
+                # Persist scout narrative
+                for _ww in (_pw, _ow):
+                    if _ww.name in _scouted:
+                        _store_scout_narrative(_ww.name, _result.narrative, turn_num)
+            except Exception:
+                pass
+            _pvp_data = {
+                "result"         : _result,
+                "fid"            : _pre_fid,
+                "canonical_pw"   : _pw.name,
+                "canonical_ow"   : _ow.name,
+                "pw_team"        : _pt.team_name,
+                "ow_team"        : _bout.opponent_team.team_name,
+                "pw_manager"     : _mname,
+                "ow_manager"     : _bout.opponent_manager,
+                "fight_type"     : _bout.fight_type,
+                "pw_race"        : _pw.race.name,
+                "ow_race"        : _ow.race.name,
+                "pw_trained_dict": _pw.to_dict(),
+                "ow_trained_dict": _ow.to_dict(),
+            }
+            _pvp_by_warrior[_pw.name] = _pvp_data
+            _pvp_by_warrior[_ow.name] = _pvp_data
+            print(f"  PRE-FIGHT (P-vs-P): {_pw.name} vs {_ow.name} — fid={_pre_fid}")
+
     for manager_id, upload in uploads.items():
         mname = upload["manager_name"]
         done_count += 1
@@ -266,34 +381,133 @@ def _run_turn(request_password, rerun_turn=None):
         this_real_mid = upload.get("manager_id", manager_id)
         is_ai_manager = manager_id.startswith("ai_")
         if is_ai_manager:
-            # AI teams only fight other AI teams — player warriors must not
-            # appear as opponents here because they already fight once in their
-            # OWN team's fight card.  Allowing AI cards to use player warriors
-            # as rivals causes each player warrior to fight twice per turn.
+            # AI teams only fight other AI teams
             rivals = [
                 r for mid, r in rival_map.items()
                 if mid != manager_id and mid.startswith("ai_")
             ]
+            card = build_fight_card(player_team, rivals, champion_state=champ_state)
         else:
-            rivals = [
-                r for mid, r in rival_map.items()
-                if mid != manager_id
-                and getattr(r, "real_manager_id", mid) != this_real_mid
-            ]
-        
-        # Load champion state for challenge matching
-        try:
-            from save import load_champion_state
-            champ_state = load_champion_state()
-        except Exception:
-            champ_state = {}
-        
-        card   = build_fight_card(player_team, rivals, champion_state=champ_state)
+            # Non-AI: remap pre-built card so player_warrior objects point into
+            # the fresh player_team (ensures all in-place updates land on the
+            # right warrior objects when we call player_team.to_dict() later).
+            from matchmaking import ScheduledFight as _SF
+            _pre_pt, _pre_card = _fight_cards.get(manager_id, (None, []))
+            card = []
+            for _b in _pre_card:
+                _fresh_pw = player_team.warrior_by_name(_b.player_warrior.name)
+                if _fresh_pw is None:
+                    continue
+                card.append(_SF(
+                    player_warrior   = _fresh_pw,
+                    opponent         = _b.opponent,
+                    player_team      = player_team,
+                    opponent_team    = _b.opponent_team,
+                    opponent_manager = _b.opponent_manager,
+                    fight_type       = _b.fight_type,
+                ))
+            if not card:
+                # Fallback: build fresh card (shouldn't normally happen)
+                rivals = [
+                    r for mid, r in rival_map.items()
+                    if mid != manager_id
+                    and getattr(r, "real_manager_id", mid) != this_real_mid
+                ]
+                card = build_fight_card(player_team, rivals, champion_state=champ_state)
 
         fight_logs, bouts = {}, []
         for bout in card:
             pw  = bout.player_warrior
             ow  = bout.opponent
+
+            # ------------------------------------------------------------------
+            # P-vs-P INJECTION: if pw was pre-fought in the pre-pass, inject
+            # the stored result rather than running a second fight.
+            # ------------------------------------------------------------------
+            _pvp = _pvp_by_warrior.get(pw.name)
+            if _pvp is not None:
+                result = _pvp["result"]
+                fid    = _pvp["fid"]
+                _is_canonical_pw = (pw.name == _pvp["canonical_pw"])
+                if _is_canonical_pw:
+                    opp_name    = _pvp["canonical_ow"]
+                    opp_race    = _pvp["ow_race"]
+                    opp_team    = _pvp["ow_team"]
+                    opp_manager = _pvp["ow_manager"]
+                    opp_tf      = _pvp["ow_trained_dict"]["total_fights"]
+                    trained_d   = _pvp["pw_trained_dict"]
+                    training_key= "warrior_a"
+                else:
+                    opp_name    = _pvp["canonical_pw"]
+                    opp_race    = _pvp["pw_race"]
+                    opp_team    = _pvp["pw_team"]
+                    opp_manager = _pvp["pw_manager"]
+                    opp_tf      = _pvp["pw_trained_dict"]["total_fights"]
+                    trained_d   = _pvp["ow_trained_dict"]
+                    training_key= "warrior_b"
+
+                # Copy fight-modified fields (record_result + training) from the
+                # pre-pass warrior onto the fresh pw in player_team.
+                pw.wins           = trained_d.get("wins",           pw.wins)
+                pw.losses         = trained_d.get("losses",         pw.losses)
+                pw.kills          = trained_d.get("kills",          pw.kills)
+                pw.total_fights   = trained_d.get("total_fights",   pw.total_fights)
+                pw.streak         = trained_d.get("streak",         pw.streak)
+                pw.skills         = trained_d.get("skills",         pw.skills)
+                pw.attribute_gains= trained_d.get("attribute_gains",pw.attribute_gains)
+                pw.strength       = trained_d.get("strength",       pw.strength)
+                pw.dexterity      = trained_d.get("dexterity",      pw.dexterity)
+                pw.constitution   = trained_d.get("constitution",   pw.constitution)
+                pw.intelligence   = trained_d.get("intelligence",   pw.intelligence)
+                pw.presence       = trained_d.get("presence",       pw.presence)
+                pw.recalculate_derived()
+
+                pw_won = result.winner is not None and result.winner.name == pw.name
+                killed = result.loser_died and pw_won
+                slain  = result.loser_died and not pw_won
+                pwr    = "win" if pw_won else "loss"
+
+                _champ_name = champ_state.get("name", "") if isinstance(champ_state, dict) else ""
+                fight_type_to_record = (
+                    "champion" if (_champ_name and (
+                        opp_name == _champ_name or pw.name == _champ_name
+                    )) else _pvp["fight_type"]
+                )
+
+                fight_logs[str(fid)] = result.narrative
+
+                pw.update_popularity(won=pw_won)
+                pw.update_recognition(
+                    won=pw_won,
+                    killed_opponent=killed,
+                    self_hp_pct=result.winner_hp_pct if pw_won else result.loser_hp_pct,
+                    opp_hp_pct=result.loser_hp_pct   if pw_won else result.winner_hp_pct,
+                    self_knockdowns=result.winner_knockdowns if pw_won else result.loser_knockdowns,
+                    opp_knockdowns=result.loser_knockdowns   if pw_won else result.winner_knockdowns,
+                    self_near_kills=result.winner_near_kills if pw_won else result.loser_near_kills,
+                    opp_near_kills=result.loser_near_kills   if pw_won else result.winner_near_kills,
+                    minutes_elapsed=result.minutes_elapsed,
+                    opponent_total_fights=opp_tf,
+                )
+                pw.fight_history.append({
+                    "turn": turn_num, "opponent_name": opp_name,
+                    "opponent_race": opp_race, "opponent_team": opp_team,
+                    "result": pwr, "minutes": result.minutes_elapsed, "fight_id": fid,
+                    "warrior_slain": slain, "opponent_slain": killed, "is_kill": killed,
+                    "fight_type": fight_type_to_record,
+                })
+                if slain:
+                    player_team.kill_warrior(pw, killed_by=opp_name, killer_fights=opp_tf)
+                bouts.append({
+                    "warrior_name": pw.name, "opponent_name": opp_name,
+                    "opponent_race": opp_race, "opponent_team": opp_team,
+                    "opponent_manager": opp_manager, "fight_type": fight_type_to_record,
+                    "result": pwr.upper(), "minutes": result.minutes_elapsed, "fight_id": fid,
+                    "warrior_slain": slain, "opponent_slain": killed,
+                    "training": result.training_results.get(training_key, []),
+                })
+                continue  # skip the normal run_fight path below
+
             result = run_fight(
                 pw, ow,
                 team_a_name    = player_team.team_name,
