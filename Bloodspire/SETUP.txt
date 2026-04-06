@@ -1,0 +1,96 @@
+﻿================================================================
+  BLOODSPIRE — PLAYTESTER SETUP GUIDE
+================================================================
+
+WHAT YOU NEED
+-------------
+  - A Windows PC
+  - Python 3.8 or newer (free, from python.org)
+  - The BLOODSPIRE game files (the folder this file is in)
+  - A modern web browser (Chrome, Firefox, Edge)
+
+
+STEP 1 — INSTALL PYTHON (if you don't have it)
+-----------------------------------------------
+  1. Go to:  https://www.python.org/downloads/
+  2. Click the big yellow "Download Python" button
+  3. Run the installer
+  4. IMPORTANT: On the first screen, check the box that says
+     "Add Python to PATH" before clicking Install Now
+  5. Click "Install Now" and wait for it to finish
+
+
+STEP 2 — START THE GAME
+------------------------
+  1. Open the BLOODSPIRE folder (where this file is)
+  2. Double-click  START_GAME.bat
+  3. A black window will appear — keep it open
+  4. Your browser will open automatically to the game
+
+
+STEP 3 — CREATE YOUR ACCOUNT
+------------------------------
+  1. The game opens to a login screen
+  2. Click the "New Account" tab
+  3. Enter a Manager Name (this is your in-game name)
+  4. Enter a Password (at least 4 characters)
+  5. Email is optional
+  6. Click "Create Account"
+  7. You'll be taken to the main screen
+
+
+STEP 4 — CREATE YOUR TEAM
+--------------------------
+  1. Click "Create New Team" and follow the prompts
+  2. Name your team and build your 5 warriors
+  3. Assign gear, weapons, and strategies to each warrior
+
+
+STEP 5 — CONNECT TO THE LEAGUE SERVER
+--------------------------------------
+  The host (your friend) will give you:
+    - A server address  (looks like: http://100.x.x.x:8766)
+    - A manager name to register with
+
+  To connect:
+  1. Click the "Action" menu at the top
+  2. Click "League Settings"
+  3. Enter the Server URL your host gave you
+  4. Enter a Manager Name for the league (can be same as local)
+  5. Enter a Password for the league
+  6. Click "Register & Save"
+
+  Once registered, use "Action → Upload Team" to submit your
+  team for league matches.
+
+
+STEP 6 — RUNNING YOUR TURNS
+-----------------------------
+  - After the host runs a league turn, use
+    "Action → Download Results" to get your results
+  - Your local "Run Turn" button runs practice fights against
+    AI opponents and does NOT affect the league
+
+
+TROUBLESHOOTING
+---------------
+  Game won't start:
+    - Make sure you double-clicked START_GAME.bat, not a .py file
+    - Make sure Python was installed with "Add to PATH" checked
+    - Try right-clicking START_GAME.bat and "Run as administrator"
+
+  Browser shows "This site can't be reached":
+    - The black window may have closed — relaunch START_GAME.bat
+    - Try opening this URL manually:  http://localhost:8765
+
+  Can't connect to league server:
+    - Check the server address with your host
+    - Make sure the host's server is running
+
+
+STOPPING THE GAME
+-----------------
+  Click in the black window and press Ctrl+C, then close it.
+  Your progress is saved automatically.
+
+================================================================
