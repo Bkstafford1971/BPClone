@@ -183,6 +183,41 @@ class Team:
         snapshot = dead.to_dict()
         snapshot["archived_killed_by"] = dead.killed_by
         snapshot["archived_turns"]     = getattr(dead, "turns_active", 0)
+        
+        # Add formatted injuries text for display
+        snapshot["injuries_text"] = []
+        if snapshot.get("injuries"):
+            injury_data = snapshot["injuries"]
+            # Map injury level to description
+            INJURY_DESCRIPTIONS = {
+                0: "none", 1: "minor wound", 2: "bleeding wound", 
+                3: "serious wound", 4: "deep wound", 5: "grave wound",
+                6: "critical wound", 7: "mortal wound", 8: "near-fatal", 9: "fatal"
+            }
+            INJURY_LOCATIONS = [
+                "head", "chest", "abdomen", "primary_arm", 
+                "secondary_arm", "primary_leg", "secondary_leg"
+            ]
+            for loc in INJURY_LOCATIONS:
+                level = injury_data.get(loc, 0)
+                if level > 0:
+                    display_loc = loc.replace("_", " ").title()
+                    display_level = INJURY_DESCRIPTIONS.get(level, f"Level {level}")
+                    snapshot["injuries_text"].append(f"{display_loc}: {display_level}")
+        
+        # Add formatted skills text for display
+        snapshot["skills_text"] = []
+        if snapshot.get("skills"):
+            skills_data = snapshot["skills"]
+            SKILL_LEVEL_NAMES = ["Untrained", "Novice", "Apprentice", "Competent", 
+                                "Adept", "Expert", "Master", "Grandmaster", 
+                                "Legendary", "Mythic"]
+            for skill_name, level in sorted(skills_data.items()):
+                if level > 0:
+                    display_name = skill_name.replace("_", " ").title()
+                    display_level = SKILL_LEVEL_NAMES[level] if 0 <= level < len(SKILL_LEVEL_NAMES) else f"Level {level}"
+                    snapshot["skills_text"].append(f"{display_name}: {display_level}")
+        
         self.archived_warriors.append(snapshot)
 
         # Place the replacement

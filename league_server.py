@@ -32,6 +32,7 @@ sys.path.insert(0, BASE_DIR)
 
 _lock          = threading.Lock()
 _turn_progress = {"running": False, "done": 0, "total": 0, "message": ""}
+_global_server = None  # Reference for graceful shutdown from request handlers
 
 
 # =============================================================================
@@ -63,7 +64,7 @@ def _turn_dir(turn_num):
     return d
 
 def _load_config():
-    return _load_json(_config_path(), {
+    cfg = _load_json(_config_path(), {
         "current_turn": 1,
         "turn_state": "open",
         "host_password_hash": "",
@@ -71,7 +72,27 @@ def _load_config():
         "fight_counter": 0,
         "reset_count": 0,
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "show_favorite_weapon": False,  # Feature flag for testing favorite weapon mechanic
+        "show_luck_factor": False,      # Feature flag for testing luck factor visibility
+        "show_max_hp": False,           # Feature flag for testing max HP visibility
+        "ai_teams_enabled": True,       # Whether AI filler teams participate each turn
+        "schedule_enabled": False,      # Whether to auto-run turns on a schedule
+        "schedule_day": "Friday",       # Day of week to auto-run
+        "schedule_time": "20:00",       # HH:MM (24-hour) to auto-run
     })
+    # Ensure new flags exist in old configs
+    for key, default in [
+        ("show_favorite_weapon", False),
+        ("show_luck_factor",     False),
+        ("show_max_hp",          False),
+        ("ai_teams_enabled",     True),
+        ("schedule_enabled",     False),
+        ("schedule_day",         "Friday"),
+        ("schedule_time",        "20:00"),
+    ]:
+        if key not in cfg:
+            cfg[key] = default
+    return cfg
 
 def _save_config(cfg):   _save_json(_config_path(), cfg)
 def _load_managers():    return _load_json(_managers_path(), {})
@@ -166,23 +187,26 @@ def _run_turn(request_password, rerun_turn=None):
         turn_num = rerun_turn if rerun_turn else cfg["current_turn"]
         uploads  = _load_uploads(turn_num)
 
-        # Inject AI teams as pseudo-uploads
-        try:
-            from ai_league_teams import get_or_create_ai_teams
-            ai_teams = get_or_create_ai_teams()
-            for ai_team in ai_teams:
-                mid = ai_team["manager_id"]
-                if mid not in uploads:
-                    uploads[mid] = {
-                        "manager_id"  : mid,
-                        "manager_name": ai_team["manager_name"],
-                        "team"        : ai_team,
-                        "uploaded_at" : "AI (auto)",
-                        "is_ai"       : True,
-                    }
-        except Exception as e:
-            print(f"  WARNING: Could not load AI teams: {e}")
-            ai_teams = []
+        # Inject AI teams as pseudo-uploads (only when the flag is enabled)
+        ai_teams = []
+        if cfg.get("ai_teams_enabled", True):
+            try:
+                from ai_league_teams import get_or_create_ai_teams
+                ai_teams = get_or_create_ai_teams()
+                for ai_team in ai_teams:
+                    mid = ai_team["manager_id"]
+                    if mid not in uploads:
+                        uploads[mid] = {
+                            "manager_id"  : mid,
+                            "manager_name": ai_team["manager_name"],
+                            "team"        : ai_team,
+                            "uploaded_at" : "AI (auto)",
+                            "is_ai"       : True,
+                        }
+            except Exception as e:
+                print(f"  WARNING: Could not load AI teams: {e}")
+        else:
+            print("  AI teams disabled — skipping AI team injection.")
 
         if not uploads:
             return {"success": False, "error": "No teams (player or AI) available."}
@@ -195,7 +219,13 @@ def _run_turn(request_password, rerun_turn=None):
 
     from team        import Team
     from matchmaking import build_fight_card
-    from combat      import run_fight
+    from combat      import run_fight, set_show_favorite_weapon, set_show_luck_factor, set_show_max_hp
+
+    # Apply feature flags from config
+    cfg = _load_config()
+    set_show_favorite_weapon(cfg.get("show_favorite_weapon", False))
+    set_show_luck_factor(cfg.get("show_luck_factor", False))
+    set_show_max_hp(cfg.get("show_max_hp", False))
 
     class _Rival:
         def __init__(self, mid, mname, team):
@@ -234,12 +264,31 @@ def _run_turn(request_password, rerun_turn=None):
 
         # Exclude all teams owned by the same manager (real manager_id match)
         this_real_mid = upload.get("manager_id", manager_id)
-        rivals = [
-            r for mid, r in rival_map.items()
-            if mid != manager_id
-            and getattr(r, "real_manager_id", mid) != this_real_mid
-        ]
-        card   = build_fight_card(player_team, rivals)
+        is_ai_manager = manager_id.startswith("ai_")
+        if is_ai_manager:
+            # AI teams only fight other AI teams — player warriors must not
+            # appear as opponents here because they already fight once in their
+            # OWN team's fight card.  Allowing AI cards to use player warriors
+            # as rivals causes each player warrior to fight twice per turn.
+            rivals = [
+                r for mid, r in rival_map.items()
+                if mid != manager_id and mid.startswith("ai_")
+            ]
+        else:
+            rivals = [
+                r for mid, r in rival_map.items()
+                if mid != manager_id
+                and getattr(r, "real_manager_id", mid) != this_real_mid
+            ]
+        
+        # Load champion state for challenge matching
+        try:
+            from save import load_champion_state
+            champ_state = load_champion_state()
+        except Exception:
+            champ_state = {}
+        
+        card   = build_fight_card(player_team, rivals, champion_state=champ_state)
 
         fight_logs, bouts = {}, []
         for bout in card:
@@ -294,7 +343,10 @@ def _run_turn(request_password, rerun_turn=None):
             slain  = result.loser_died and not pw_won
             pwr    = "win" if pw_won else "loss"
 
-            # Update popularity and streak (mirrors matchmaking.py local run_turn)
+            # NOTE: record_result() is already called inside run_fight() (combat.py).
+            # Do NOT call it again here — wins/losses/kills would be double-counted.
+
+            # Update popularity and recognition (NOT called inside run_fight)
             pw.update_popularity(won=pw_won)
             pw.update_recognition(
                 won=pw_won,
@@ -314,6 +366,7 @@ def _run_turn(request_password, rerun_turn=None):
                 "opponent_race": ow.race.name, "opponent_team": bout.opponent_team.team_name,
                 "result": pwr, "minutes": result.minutes_elapsed, "fight_id": fid,
                 "warrior_slain": slain, "opponent_slain": killed, "is_kill": killed,
+                "fight_type": bout.fight_type,
             })
             if slain:
                 player_team.kill_warrior(pw, killed_by=ow.name, killer_fights=ow.total_fights)
@@ -327,10 +380,12 @@ def _run_turn(request_password, rerun_turn=None):
                 "training": result.training_results.get(pw.name, []),
             })
 
-        # Slim team snapshot for storage — strip fight_history to keep files small.
-        # The full history was already applied to the player's local team on the
-        # previous download; the client only needs current stats + records now.
+        # Create two versions:
+        # 1. team_slim: for server-side storage (strip fight_history to save space)
+        # 2. team_full: for client download (keep fight_history so client has complete picture)
         team_full = player_team.to_dict()
+        
+        # Server storage version: stripped fight_history
         team_slim = dict(team_full)
         team_slim["warriors"] = []
         for wd in team_full.get("warriors", []):
@@ -340,6 +395,31 @@ def _run_turn(request_password, rerun_turn=None):
             ws = dict(wd)
             ws.pop("fight_history", None)   # strip — large and not needed server-side
             team_slim["warriors"].append(ws)
+        
+        # Client version: KEEP fight_history for complete record display
+        team_for_client = dict(team_full)
+        # Don't strip fight_history — clients need it to verify record accuracy
+        
+        # Preserve archived warriors (they have stats but no fight_history)
+        team_slim["archived_warriors"] = team_full.get("archived_warriors", [])
+        team_for_client["archived_warriors"] = team_full.get("archived_warriors", [])
+        
+        # Update turn_history with this turn's results.
+        # The upload now includes the client's existing turn_history so we can
+        # build an accurate last-5-turns record.  Remove any stale entry for
+        # this turn first (handles reruns), then append the fresh one.
+        if "turn_history" not in team_for_client:
+            team_for_client["turn_history"] = []
+        team_for_client["turn_history"] = [
+            e for e in team_for_client["turn_history"]
+            if e.get("turn") != turn_num
+        ]
+        team_for_client["turn_history"].append({
+            "turn": turn_num,
+            "w": sum(1 for b in bouts if b.get("result") == "WIN"),
+            "l": sum(1 for b in bouts if b.get("result") == "LOSS"),
+            "k": sum(1 for b in bouts if b.get("opponent_slain")),
+        })
 
         mgr_res = {
             "turn"        : turn_num,
@@ -347,7 +427,7 @@ def _run_turn(request_password, rerun_turn=None):
             "team_id"     : player_team.team_id,
             "team_name"   : player_team.team_name,
             "bouts"       : bouts,
-            "team"        : team_slim,
+            "team"        : team_for_client,  # Use FULL version with fight_history for client
             "fight_logs"  : fight_logs,
         }
         _save_result(turn_num, manager_id, mgr_res)
@@ -429,15 +509,24 @@ def _run_turn(request_password, rerun_turn=None):
         except Exception:
             pass
 
-        # Deaths this turn
+        # Deaths this turn — pull real W/L/K from the team result data
         deaths_nl = []
         for mid2, res in all_results.items():
+            team_dict = res.get("team", {})
+            warriors_by_name = {
+                wd["name"]: wd
+                for wd in team_dict.get("warriors", []) if wd
+            }
             for b in res.get("bouts", []):
                 if b.get("warrior_slain"):
+                    wname = b.get("warrior_name", "?")
+                    wd    = warriors_by_name.get(wname, {})
                     deaths_nl.append({
-                        "name"     : b.get("warrior_name","?"),
+                        "name"     : wname,
                         "team"     : res.get("team_name","?"),
-                        "w"        : 0, "l": 0, "k": 0,
+                        "w"        : wd.get("wins",  b.get("wins",  0)),
+                        "l"        : wd.get("losses", b.get("losses", 0)),
+                        "k"        : wd.get("kills",  b.get("kills",  0)),
                         "killed_by": b.get("opponent_name","?"),
                     })
 
@@ -471,7 +560,35 @@ def _run_turn(request_password, rerun_turn=None):
                 pass
 
         champ_state = load_champion_state()
-        champ_state = _update_champion(nl_teams, champ_state, deaths_nl)
+
+        # Detect if the reigning champion was beaten or didn't fight this turn
+        _champ_beaten_by   = None
+        _champ_beaten_team = None
+        _cur_champ = champ_state.get("name", "")
+        _champ_fought = False
+        if _cur_champ:
+            for _bout in fake_card:
+                _pw_won  = _bout.result.winner.name == _bout.player_warrior.name
+                _winner  = _bout.player_warrior if _pw_won else _bout.opponent
+                _loser   = _bout.opponent       if _pw_won else _bout.player_warrior
+                _w_team  = (_bout.player_team.team_name if _pw_won
+                            else _bout.opponent_team.team_name)
+                # Track whether the champion fought at all
+                if _bout.player_warrior.name == _cur_champ or _bout.opponent.name == _cur_champ:
+                    _champ_fought = True
+                # Detect defeat
+                if _loser.name == _cur_champ:
+                    _champ_beaten_by   = _winner.name
+                    _champ_beaten_team = _w_team
+                    break
+            # Champion forfeits title if they didn't fight this turn
+            if _cur_champ and not _champ_fought and not _champ_beaten_by:
+                print(f"  [champion] {_cur_champ} did not fight this turn — title vacated.")
+                champ_state = {}
+
+        champ_state = _update_champion(nl_teams, champ_state, deaths_nl,
+                                       champion_beaten_by=_champ_beaten_by,
+                                       champion_beaten_team=_champ_beaten_team)
         save_champion_state(champ_state)
 
         voice = load_newsletter_voice()
@@ -499,6 +616,39 @@ def _run_turn(request_password, rerun_turn=None):
     return {"success": True, "turn_number": turn_num,
             "managers": len(all_results), "fights": total_fights,
             "newsletter": newsletter_text}
+
+
+def _filter_warrior_for_client(warrior_dict: dict, cfg: dict) -> dict:
+    """
+    Filter warrior data for client download based on feature flags.
+    Removes sensitive fields if flags are disabled.
+    """
+    w = warrior_dict.copy()
+    # Remove luck factor if flag is off
+    if not cfg.get("show_luck_factor", False):
+        w.pop("luck", None)
+    # Remove favorite weapon if flag is off  
+    if not cfg.get("show_favorite_weapon", False):
+        w.pop("favorite_weapon", None)
+    return w
+
+
+def _filter_results_for_client(results: list, cfg: dict) -> list:
+    """
+    Filter all team results for client download based on feature flags.
+    """
+    filtered = []
+    for team_result in results:
+        tr = team_result.copy()
+        # Filter warriors in the team
+        if "team" in tr and "warriors" in tr["team"]:
+            tr["team"] = tr["team"].copy()
+            tr["team"]["warriors"] = [
+                _filter_warrior_for_client(w, cfg)
+                for w in tr["team"]["warriors"]
+            ]
+        filtered.append(tr)
+    return filtered
 
 
 # =============================================================================
@@ -629,6 +779,53 @@ def _admin_page():
   <button class="danger" onclick="resetArena()">🗑 Reset Arena to Turn 1</button>
  </div>
 
+ <div class="panel" style="min-width:220px;max-width:320px">
+  <h3>Feature Flags (Testing)</h3>
+  <p style="font-size:11px;margin:0 0 10px;color:#555">Enable debug visibility for testing mechanics (hidden by default).</p>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="fav-wpn" onchange="toggleFlag('show_favorite_weapon')" style="cursor:pointer">
+   <span style="cursor:pointer;user-select:none">Show favorite weapon flavor</span></label>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="luck-fct" onchange="toggleFlag('show_luck_factor')" style="cursor:pointer">
+   <span style="cursor:pointer;user-select:none">Show luck factor (1-30)</span></label>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="max-hp" onchange="toggleFlag('show_max_hp')" style="cursor:pointer">
+   <span style="cursor:pointer;user-select:none">Show warrior max HP</span></label>
+  <div style="margin-top:8px;border-top:1px solid #ddd;padding-top:8px">
+   <label style="display:block;margin:6px 0"><input type="checkbox" id="ai-enabled" onchange="toggleFlag('ai_teams_enabled')" style="cursor:pointer">
+    <span style="cursor:pointer;user-select:none">AI teams participate each turn</span></label>
+   <div style="font-size:10px;color:#666;margin-left:20px">
+    Uncheck when running live playtester sessions.
+   </div>
+  </div>
+  <div style="margin-top:8px;font-size:10px;color:#888">
+   Changes apply on next turn run.
+  </div>
+ </div>
+
+ <div class="panel" style="min-width:240px;max-width:340px">
+  <h3>Turn Schedule</h3>
+  <p style="font-size:11px;margin:0 0 8px;color:#555">
+   Automatically run a turn once a week at a set day and time.<br>
+   You can still run turns manually at any time regardless of this setting.
+  </p>
+  <label style="display:block;margin:6px 0">
+   <input type="checkbox" id="sched-enabled" onchange="toggleSchedule()" style="cursor:pointer">
+   <span style="cursor:pointer;user-select:none">Enable auto-schedule</span>
+  </label>
+  <div id="sched-details" style="margin-top:8px;padding-left:4px">
+   Day:
+   <select id="sched-day" onchange="saveSchedule()" style="font-size:12px;border:2px inset #808080;margin-left:4px">
+    <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+    <option>Wednesday</option><option>Thursday</option><option selected>Friday</option>
+    <option>Saturday</option>
+   </select>
+   <br><br>
+   Time (24h):
+   <input type="time" id="sched-time" onchange="saveSchedule()"
+          style="font-size:12px;border:2px inset #808080;margin-left:4px;width:90px"
+          value="20:00">
+   <div style="margin-top:8px;font-size:10px;color:#888" id="sched-next"></div>
+  </div>
+ </div>
+
 </div>
 <div class="wrap">
  <div class="panel">
@@ -707,6 +904,108 @@ async function pollProgress(){{
 }}
 
 function show(t,c){{const m=document.getElementById('msg');m.textContent=t;m.className=c;m.style.display='block';}}
+
+function _cbId(flag){{
+ const m={{'show_favorite_weapon':'fav-wpn','show_luck_factor':'luck-fct',
+           'show_max_hp':'max-hp','ai_teams_enabled':'ai-enabled'}};
+ return m[flag]||flag;
+}}
+
+async function toggleFlag(flag){{
+ const pw=pw_val();
+ const cb=document.getElementById(_cbId(flag));
+ if(!pw){{show('Enter the host password first.','err');cb.checked=!cb.checked;return;}}
+ const newVal=cb.checked;
+ const body={{}};
+ body[flag]=newVal;
+ try{{
+  const r=await fetch('/api/admin/update',{{method:'POST',
+   headers:{{'Content-Type':'application/json'}},
+   body:JSON.stringify({{host_password:pw,...body}})}});
+  const d=await r.json();
+  if(d.success){{
+   const label=flag.replace(/^show_/,'').replace(/_/g,' ');
+   show(`✓ ${{label}} ${{newVal?'enabled':'disabled'}}`,'ok');
+   loadFlags();
+  }}else{{
+   show('Error: '+d.error,'err');
+   cb.checked=!newVal;
+  }}
+ }}catch(e){{show('Connection error: '+e.message,'err');cb.checked=!newVal;}}
+}}
+
+function _applyFlags(flags){{
+ const f=flags||{{}};
+ document.getElementById('fav-wpn').checked   = f.show_favorite_weapon||false;
+ document.getElementById('luck-fct').checked  = f.show_luck_factor||false;
+ document.getElementById('max-hp').checked    = f.show_max_hp||false;
+ document.getElementById('ai-enabled').checked= f.ai_teams_enabled!==false;
+ localStorage.setItem('bp_flags',JSON.stringify(f));
+}}
+
+async function loadFlags(){{
+ try{{
+  const r=await fetch('/api/flags');
+  const d=await r.json();
+  if(d.success){{_applyFlags(d);return;}}
+ }}catch(e){{}}
+ try{{
+  _applyFlags(JSON.parse(localStorage.getItem('bp_flags')||'{{}}'));
+ }}catch(e){{}}
+}}
+
+async function loadSchedule(){{
+ try{{
+  const r=await fetch('/api/schedule');
+  const d=await r.json();
+  if(!d.success)return;
+  document.getElementById('sched-enabled').checked=d.schedule_enabled||false;
+  const sel=document.getElementById('sched-day');
+  for(let o of sel.options){{if(o.value===d.schedule_day){{o.selected=true;break;}}}}
+  document.getElementById('sched-time').value=d.schedule_time||'20:00';
+  _updateSchedNote(d.schedule_enabled,d.schedule_day,d.schedule_time);
+ }}catch(e){{}}
+}}
+
+function _updateSchedNote(enabled,day,t){{
+ const el=document.getElementById('sched-next');
+ if(!el)return;
+ if(!enabled){{el.textContent='Schedule is disabled.';return;}}
+ el.textContent=`Next auto-run: ${{day}} at ${{t}}`;
+}}
+
+async function toggleSchedule(){{
+ const pw=pw_val();
+ if(!pw){{show('Enter the host password first.','err');
+          document.getElementById('sched-enabled').checked=!document.getElementById('sched-enabled').checked;return;}}
+ await saveSchedule();
+}}
+
+async function saveSchedule(){{
+ const pw=pw_val();
+ if(!pw)return;  // silent if no pw — only fires on explicit toggle or time change
+ const enabled=document.getElementById('sched-enabled').checked;
+ const day=document.getElementById('sched-day').value;
+ const t=document.getElementById('sched-time').value;
+ try{{
+  const r=await fetch('/api/admin/update',{{method:'POST',
+   headers:{{'Content-Type':'application/json'}},
+   body:JSON.stringify({{host_password:pw,schedule_enabled:enabled,
+                         schedule_day:day,schedule_time:t}})}});
+  const d=await r.json();
+  if(d.success){{
+   _updateSchedNote(enabled,day,t);
+   show(`✓ Schedule ${{enabled?'set to '+day+' '+t:'disabled'}}`,'ok');
+  }}else show('Error: '+d.error,'err');
+ }}catch(e){{show('Connection error: '+e.message,'err');}}
+}}
+
+document.addEventListener('DOMContentLoaded',()=>{{loadFlags();loadSchedule();}});
+
+// Browser close detection — gracefully shutdown server when page unloads
+window.addEventListener('beforeunload', () => {{
+  navigator.sendBeacon('/api/shutdown', '');
+}});
 </script></body></html>"""
 
 
@@ -717,6 +1016,20 @@ function show(t,c){{const m=document.getElementById('msg');m.textContent=t;m.cla
 class LeagueHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *a): pass
+
+    def _shutdown_server(self):
+        """Gracefully shutdown the server."""
+        import time
+        time.sleep(0.2)  # Brief wait to ensure response is fully sent
+        global _global_server
+        if _global_server:
+            try:
+                _global_server.shutdown()
+                _global_server.server_close()
+            except Exception:
+                pass
+        import sys
+        sys.exit(0)
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin",  "*")
@@ -768,11 +1081,20 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
             cfg = _load_config()
             mgrs= _load_managers()
             ups = _load_uploads(cfg["current_turn"])
+            # Build manager list with last upload timestamps
+            managers_info = []
+            for mid, mgr in mgrs.items():
+                managers_info.append({
+                    "manager_id": mid,
+                    "manager_name": mgr["manager_name"],
+                    "last_upload_timestamp": mgr.get("last_upload_timestamp", "—")
+                })
             self.send_json({
                 "current_turn"    : cfg["current_turn"],
                 "turn_state"      : cfg["turn_state"],
                 "total_managers"  : len(mgrs),
                 "uploaded_count"  : len(ups),
+                "managers"        : managers_info,
                 "uploaded"        : [ups[m]["manager_name"] for m in ups],
                 "not_uploaded"    : [mgrs[m]["manager_name"] for m in mgrs if m not in ups],
                 "reset_count"     : cfg.get("reset_count", 0),
@@ -821,10 +1143,41 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
             self.send_json({"success":True,"narrative":narrative,"fight_id":fid,"turn":turn_n}); return
 
         if path == "/api/standings":
-            self.send_json(_load_standings()); return
+            cfg = _load_config()
+            standings = _load_standings()
+            # Filter warrior data based on feature flags
+            filtered_standings = {}
+            for mid, sd in standings.items():
+                fsd = sd.copy()
+                if "warriors" in fsd:
+                    fsd["warriors"] = {
+                        wname: _filter_warrior_for_client(ws, cfg)
+                        for wname, ws in fsd["warriors"].items()
+                    }
+                filtered_standings[mid] = fsd
+            self.send_json(filtered_standings); return
 
         if path == "/api/progress":
             self.send_json(_turn_progress); return
+
+        if path == "/api/flags":
+            cfg = _load_config()
+            self.send_json({
+                "success"              : True,
+                "show_favorite_weapon" : cfg.get("show_favorite_weapon", False),
+                "show_luck_factor"     : cfg.get("show_luck_factor",     False),
+                "show_max_hp"          : cfg.get("show_max_hp",          False),
+                "ai_teams_enabled"     : cfg.get("ai_teams_enabled",     True),
+            }); return
+
+        if path == "/api/schedule":
+            cfg = _load_config()
+            self.send_json({
+                "success"          : True,
+                "schedule_enabled" : cfg.get("schedule_enabled", False),
+                "schedule_day"     : cfg.get("schedule_day",     "Friday"),
+                "schedule_time"    : cfg.get("schedule_time",    "20:00"),
+            }); return
 
         if path == "/api/results":
             q  = self.qs()
@@ -860,6 +1213,8 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
             if os.path.exists(nl_path):
                 with open(nl_path, "r", encoding="utf-8") as _nf:
                     nl_text = _nf.read()
+            # Filter results based on feature flags
+            team_results = _filter_results_for_client(team_results, cfg)
             # Newsletter is served separately via /api/newsletter?turn=N
             # to keep /api/results payload small and avoid Windows socket aborts
             self.send_json({"success":True,"results":team_results,
@@ -939,13 +1294,17 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
                     cfg["turn_state"] = "open"; _save_config(cfg)
                 turn_num = cfg["current_turn"]
                 team_id  = team.get("team_id", "") if isinstance(team, dict) else ""
+                upload_time = time.strftime("%Y-%m-%d %H:%M:%S")
                 _save_upload(turn_num, mid, {
                     "manager_id"  : mid,
                     "manager_name": mgrs[mid]["manager_name"],
                     "team_id"     : team_id,
                     "team"        : team,
-                    "uploaded_at" : time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "uploaded_at" : upload_time,
                 })
+                # Update manager's last_upload_timestamp for tracking
+                mgrs[mid]["last_upload_timestamp"] = upload_time
+                _save_managers(mgrs)
             self.send_json({"success":True,"turn":turn_num,
                             "message":f"Team uploaded for turn {turn_num}."}); return
 
@@ -969,6 +1328,37 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
             cfg["reset_count"] = cfg.get("reset_count", 0) + 1
             _save_config(cfg)
             self.send_json({"success":True,"message":"League reset to turn 1."}); return
+
+        if path == "/api/admin/update":
+            cfg = _load_config()
+            if not _check_host_pw(cfg, b.get("host_password","")):
+                self.send_json({"success":False,"error":"Not authorised."}, 401); return
+            # Update feature flags
+            for bool_key in ("show_favorite_weapon", "show_luck_factor",
+                             "show_max_hp", "ai_teams_enabled", "schedule_enabled"):
+                if bool_key in b:
+                    cfg[bool_key] = bool(b[bool_key])
+            # Update schedule settings
+            if "schedule_day" in b:
+                valid_days = ("Sunday","Monday","Tuesday","Wednesday",
+                              "Thursday","Friday","Saturday")
+                day = b["schedule_day"]
+                if day in valid_days:
+                    cfg["schedule_day"] = day
+            if "schedule_time" in b:
+                # Validate HH:MM format
+                import re as _re
+                if _re.match(r"^\d{2}:\d{2}$", str(b["schedule_time"])):
+                    cfg["schedule_time"] = b["schedule_time"]
+            _save_config(cfg)
+            self.send_json({"success":True,"message":"Config updated.","config":cfg}); return
+
+        if path == "/api/shutdown":
+            # Browser closed or admin requested shutdown
+            self.send_json({"success": True, "message": "Shutting down..."})
+            # Schedule shutdown for after response is sent
+            threading.Timer(0.5, self._shutdown_server).start()
+            return
 
         self.send_json({"error":"Not found."}, 404)
 
@@ -997,11 +1387,12 @@ def main():
         daemon_threads = True   # threads die with the server process
 
     server = ThreadedLeagueServer(("0.0.0.0", args.port), LeagueHandler)
+    _global_server = server
     url    = f"http://localhost:{args.port}"
 
     print()
     print("  ╔══════════════════════════════════════════════╗")
-    print("  ║     BLOODSPIRE LEAGUE SERVER                  ║")
+    print("  ║     BLOODSPIRE LEAGUE SERVER                 ║")
     print("  ╚══════════════════════════════════════════════╝")
     print(f"\n  Admin panel :  {url}/admin")
     print(f"  Player URL  :  http://YOUR_LAN_IP:{args.port}")
@@ -1010,6 +1401,46 @@ def main():
     print(f"  ⚠  Forward port {args.port} on your router for internet play.\n")
 
     threading.Timer(0.8, lambda: webbrowser.open(f"{url}/admin")).start()
+
+    # ── Auto-scheduler thread ──────────────────────────────────────────────
+    # Checks every minute whether a scheduled turn should fire.
+    _DAYS = ("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")
+
+    def _scheduler():
+        import datetime as _dt
+        _last_fired_turn = None  # prevent double-fire within the same minute
+        while True:
+            time.sleep(30)
+            try:
+                cfg = _load_config()
+                if not cfg.get("schedule_enabled", False):
+                    continue
+                if cfg.get("turn_state") in ("processing",):
+                    continue  # already running
+                day_target  = cfg.get("schedule_day",  "Friday")
+                time_target = cfg.get("schedule_time", "20:00")
+                now = _dt.datetime.now()
+                cur_day  = now.strftime("%A")          # e.g. "Friday"
+                cur_time = now.strftime("%H:%M")       # e.g. "20:00"
+                cur_turn = cfg.get("current_turn", 1)
+                if (cur_day == day_target
+                        and cur_time == time_target
+                        and _last_fired_turn != cur_turn):
+                    print(f"\n  [scheduler] Auto-running turn {cur_turn} "
+                          f"({day_target} {time_target})")
+                    _last_fired_turn = cur_turn
+                    # Run in a separate thread so the scheduler loop continues
+                    threading.Thread(
+                        target=_run_turn,
+                        args=(args.host_password,),
+                        daemon=True,
+                    ).start()
+            except Exception as _se:
+                print(f"  [scheduler] Error: {_se}")
+
+    threading.Thread(target=_scheduler, daemon=True, name="bp-scheduler").start()
+    # ──────────────────────────────────────────────────────────────────────
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:

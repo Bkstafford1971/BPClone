@@ -5,7 +5,7 @@
 # Run: python gui_server.py
 # Opens http://localhost:8765 in your default browser automatically.
 #
-# Serves bloodpit_client.html and provides a REST JSON API for all game data.
+# Serves Bloodspire_client.html and provides a REST JSON API for all game data.
 # =============================================================================
 
 import http.server
@@ -29,11 +29,15 @@ from team      import Team, TEAM_SIZE
 from save      import save_team, load_team, next_team_id, increment_turn, current_turn, load_fight_log
 from weapons   import WEAPONS
 from armor     import armor_selection_menu, helm_selection_menu
+from races     import list_playable_races
 
 PORT     = 8765
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HTML_FILE= os.path.join(BASE_DIR, "bloodpit_client.html")
+HTML_FILE= os.path.join(BASE_DIR, "Bloodspire_client.html")
 LEAGUE_SETTINGS_FILE = os.path.join(BASE_DIR, "saves", "league_settings.json")
+
+# Global server reference for graceful shutdown from request handlers
+_global_server = None
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +146,20 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # Suppress console noise
 
+    def _shutdown_server(self):
+        """Gracefully shutdown the server."""
+        import time
+        time.sleep(0.2)  # Brief wait to ensure response is fully sent
+        global _global_server
+        if _global_server:
+            try:
+                _global_server.shutdown()
+                _global_server.server_close()
+            except Exception:
+                pass
+        import sys
+        sys.exit(0)
+
     # --- Helpers ---
 
     def send_json(self, data: dict, status: int = 200):
@@ -205,6 +223,17 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             self.send_file(HTML_FILE)
             return
 
+        # Serve static assets (images, etc.)
+        if p.startswith("/static/"):
+            fname = p[len("/static/"):]
+            fpath = os.path.join(BASE_DIR, fname)
+            ext = os.path.splitext(fname)[1].lower()
+            ctype = {".png": "image/png", ".jpg": "image/jpeg",
+                     ".jpeg": "image/jpeg", ".gif": "image/gif",
+                     ".svg": "image/svg+xml"}.get(ext, "application/octet-stream")
+            self.send_file(fpath, ctype)
+            return
+
         # --- API routes ---
 
         if p == "/api/game_data":
@@ -216,7 +245,7 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                 "triggers"        : TRIGGERS,
                 "styles"          : FIGHTING_STYLES,
                 "aim_points"      : AIM_DEFENSE_POINTS,
-                "races"           : ["Human","Half-Orc","Halfling","Dwarf","Half-Elf","Elf"],
+                "races"           : list_playable_races(),
                 "genders"         : ["Male","Female"],
                 "attributes"      : ATTRIBUTES,
                 "non_weapon_skills": NON_WEAPON_SKILLS,
@@ -248,7 +277,15 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/team":
             q = self.qs()
             try:
+                from warrior import assign_favorite_weapon as _afw
                 team = load_team(int(q.get("id", 0)))
+                changed = False
+                for _w in team.warriors:
+                    if _w and not getattr(_w, "favorite_weapon", ""):
+                        _afw(_w)
+                        changed = True
+                if changed:
+                    save_team(team)
                 self.send_json({"success": True, "team": team_to_json(team)})
             except FileNotFoundError:
                 self.send_json({"success": False, "error": "Team not found."}, 404)
@@ -547,6 +584,12 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/league/run_turn":
             self.send_json(_league_proxy_post("/league/run_turn", body))
 
+        elif p == "/api/shutdown":
+            # Browser closed or user requested shutdown
+            self.send_json({"success": True, "message": "Shutting down..."})
+            # Schedule shutdown for after response is sent
+            threading.Timer(0.5, self._shutdown_server).start()
+
         elif p == "/api/league/get_results":
             self.send_json(_do_league_get_results(body))
 
@@ -677,6 +720,7 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             from ai              import get_or_create_rivals, save_rivals
             from ai_league_teams import get_or_create_ai_teams, ai_teams_as_rivals, evolve_ai_teams
             from matchmaking     import run_turn as _do_run_turn
+            from save            import load_champion_state
             manager_id = int(body.get("manager_id", 0))
             team_ids   = [int(x) for x in body.get("team_ids", [])]
             to_run     = get_teams_to_run(manager_id, team_ids)
@@ -684,6 +728,7 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"success": False, "error": "No teams flagged to run."}); return
             rivals     = get_or_create_rivals()
             ai_teams   = get_or_create_ai_teams()
+            champion_state = load_champion_state()
             ai_rivals  = ai_teams_as_rivals(ai_teams)
             all_rivals = ai_rivals + [r for r in rivals if r.manager_id not in
                                       {ar.manager_id for ar in ai_rivals}]
@@ -693,7 +738,7 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             for tid in to_run:
                 try:
                     team = load_team(tid)
-                    card = _do_run_turn(team, all_rivals, verbose=False)
+                    card = _do_run_turn(team, all_rivals, verbose=False, champion_state=champion_state)
                     bouts = []
                     for bout in card:
                         pw = bout.player_warrior; r = bout.result
@@ -1080,6 +1125,7 @@ def _run_turn_for_team(body: dict) -> dict:
         from ai              import get_or_create_rivals, save_rivals
         from matchmaking     import run_turn as _do_run_turn
         from ai_league_teams import get_or_create_ai_teams, ai_teams_as_rivals, evolve_ai_teams
+        from save            import load_champion_state
 
         team_id = int(body.get("team_id", 0))
         team    = load_team(team_id)
@@ -1093,8 +1139,9 @@ def _run_turn_for_team(body: dict) -> dict:
                                   {ar.manager_id for ar in ai_rivals}]
 
         turn_num = increment_turn()
+        champion_state = load_champion_state()
 
-        card = _do_run_turn(team, all_rivals, verbose=False)
+        card = _do_run_turn(team, all_rivals, verbose=False, champion_state=champion_state)
 
         # Update AI team records from this turn's fights
         ai_results = {}
@@ -1201,6 +1248,28 @@ def _get_league_settings_for(manager_name: str) -> dict:
     all_s = _load_all_league_settings()
     key = manager_name.strip().upper()
     settings = all_s.get(key, {})
+    
+    # Calculate lastTurnRan from team turn_history if not explicitly set
+    if "lastTurnRan" not in settings or not settings["lastTurnRan"]:
+        from save import load_all_teams
+        try:
+            # Get all teams owned by this manager
+            teams = load_all_teams()
+            manager_key = manager_name.strip().upper()
+            last_turn = None
+            for team in teams:
+                # Match teams with same manager name (case-insensitive)
+                team_mgr = (team.manager_name or "").strip().upper()
+                if team_mgr == manager_key and team.turn_history:
+                    # Get the most recent turn from this team's turn_history
+                    most_recent = team.turn_history[-1].get("turn")
+                    if most_recent:
+                        last_turn = max(last_turn, most_recent) if last_turn else most_recent
+            if last_turn:
+                settings["lastTurnRan"] = last_turn
+        except Exception:
+            pass  # Fall back to saved value or undefined
+    
     return {"success": True, "settings": settings}
 
 
@@ -1400,8 +1469,8 @@ def _confirm_replacement(body: dict) -> dict:
 def _slim_team_for_upload(team_json: dict) -> dict:
     """
     Strip fields the league server doesn't need for running fights.
-    Keeps: team identity, warrior stats, gear, strategies, trains, skills.
-    Drops: fight_history, archived_warriors, injuries (reset each fight anyway),
+    Keeps: team identity, warrior stats, gear, strategies, trains, skills, archived_warriors.
+    Drops: fight_history, injuries (reset each fight anyway),
            turn_history, pending_replacements — all bulk data not needed server-side.
     """
     slim = {
@@ -1409,6 +1478,9 @@ def _slim_team_for_upload(team_json: dict) -> dict:
         "team_name"   : team_json.get("team_name"),
         "manager_name": team_json.get("manager_name"),
         "warriors"    : [],
+        "archived_warriors": team_json.get("archived_warriors", []),
+        # Preserve turn_history so the server can build an accurate last-5-turns record
+        "turn_history": team_json.get("turn_history", []),
     }
     for w in team_json.get("warriors", []):
         if not w:
@@ -1443,6 +1515,8 @@ def _slim_team_for_upload(team_json: dict) -> dict:
             "is_dead"            : w.get("is_dead", False),
             "want_monster_fight" : w.get("want_monster_fight", False),
             "want_retire"        : w.get("want_retire", False),
+            # Needed for favorite-weapon flavor text in fight narratives
+            "favorite_weapon"    : w.get("favorite_weapon", ""),
         })
     return slim
 
@@ -1738,6 +1812,18 @@ def _apply_league_results(body: dict) -> dict:
             # ── Keep local user-set fields ────────────────────────────────
             # (trains, strategies, gear, initial_stats preserved as-is)
 
+        # ── Merge team turn_history from server results ───────────────────
+        # Update the team's record of wins/losses/kills per turn
+        server_team_dict = result.get("team", {})
+        server_turn_history = server_team_dict.get("turn_history", [])
+        if server_turn_history:
+            local_known_turns = {e.get("turn") for e in team.turn_history}
+            for entry in server_turn_history:
+                turn_n = entry.get("turn")
+                if turn_n and turn_n not in local_known_turns:
+                    team.turn_history.append(entry)
+                    local_known_turns.add(turn_n)
+
         save_team(team)
 
         # Build bout summary for the turn-results view
@@ -1844,18 +1930,20 @@ def _full_reset() -> dict:
 # ---------------------------------------------------------------------------
 
 def main():
+    global _global_server
     server = http.server.HTTPServer(("127.0.0.1", PORT), BloodspireHandler)
+    _global_server = server
     url    = f"http://localhost:{PORT}"
 
     print()
     print("  ╔══════════════════════════════════════╗")
-    print("  ║     BLOODSPIRE CLIENT - v1.2          ║")
+    print("  ║     BLOODSPIRE CLIENT - v1.2         ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"\n  Server running at: {url}")
     print("  Opening browser... (Ctrl+C to stop)\n")
 
     if not os.path.exists(HTML_FILE):
-        print(f"  ERROR: bloodpit_client.html not found at {HTML_FILE}")
+        print(f"  ERROR: Bloodspire_client.html not found at {HTML_FILE}")
         print("  Make sure all game files are in the same directory.")
         return
 

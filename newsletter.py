@@ -203,6 +203,8 @@ def _warrior_tiers(teams, champion_state: dict) -> str:
             if getattr(wobj,"is_dead",False): continue
             rname=wobj.race.name if hasattr(wobj.race,"name") else "Human"
             if rname in _NPC_RACES: continue
+            # Don't show replacement warriors until they've competed at least once
+            if getattr(wobj,"total_fights",0) == 0: continue
             tiers[_warrior_tier(wobj,wobj.name==champ_name)].append({
                 "name":wobj.name,"team":tname,"tid":tid,
                 "w":wobj.wins,"l":wobj.losses,"k":wobj.kills,
@@ -253,9 +255,13 @@ def _fights_section(card) -> str:
     sorted_card = sorted(card, key=lambda b: _order.get(getattr(b,"fight_type","rivalry"), 2))
 
     # Deduplicate: collapse A-vs-B and B-vs-A to one line.
-    # Named (non-NPC) warriors may only appear once — peasants/monsters are exempt.
+    # The fake_card in league mode contains every fight from every team's
+    # perspective, so the same matchup can appear twice (once with A as
+    # player_warrior, once with B as player_warrior).  seen_pairs handles
+    # that.  We deliberately do NOT filter by individual warrior because
+    # that caused legitimate fights to be dropped when a warrior appeared
+    # as pw in their own team's card AND as ow in an AI team's card.
     seen_pairs = set()
-    seen_warriors = set()
     for bout in sorted_card:
         pw=bout.player_warrior; ow=bout.opponent; r=bout.result
         if not r: continue
@@ -263,22 +269,6 @@ def _fights_section(card) -> str:
         if pair in seen_pairs:
             continue
         seen_pairs.add(pair)
-        pt_name = (bout.player_team.team_name
-                   if hasattr(bout, "player_team") and bout.player_team
-                   else "")
-        ot_name = (bout.opponent_team.team_name
-                   if hasattr(bout, "opponent_team") and bout.opponent_team
-                   else "")
-        pw_is_npc = pt_name in _NPC_TEAM_NAMES
-        ow_is_npc = ot_name in _NPC_TEAM_NAMES
-        if not pw_is_npc and (pt_name, pw.name) in seen_warriors:
-            continue
-        if not ow_is_npc and (ot_name, ow.name) in seen_warriors:
-            continue
-        if not pw_is_npc:
-            seen_warriors.add((pt_name, pw.name))
-        if not ow_is_npc:
-            seen_warriors.add((ot_name, ow.name))
         pw_won=r.winner and r.winner.name==pw.name
         winner=pw if pw_won else ow; loser=ow if pw_won else pw
         mins=r.minutes_elapsed; ftype=bout.fight_type.replace("_"," ")
@@ -492,183 +482,348 @@ def _pick_block(pool: list, used: set, ctx: dict) -> str:
 
 def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) -> str:
     """
-    Assemble the Arena Happenings section from modular narrative block libraries.
-    Pattern: 1 Intro + up-to-2 Team + up-to-2 Warrior + 1 Meta + 1 Champion + 0-1 Death + 1 Outro
-    Each section is conditional on relevant data existing.
+    Generate a 4-6 paragraph newspaper article from fight data.
+    Comprehensive narrative with team performance, warrior highlights, 
+    ranking shifts, and meta-game analysis.
     """
     arena  = ARENA_NAME.upper()
     venue  = "Bloodspire"
     byline = random.choice(_BLK_BYLINES)
-    used   = set()   # tracks raw templates used this newsletter — prevents repetition
-
-    # ------------------------------------------------------------------
-    # Gather turn data
-    # ------------------------------------------------------------------
-    team_data = {}
-    for bout in card:
-        if not bout.result: continue
-        tn     = bout.player_team.team_name
-        pw_won = bout.result.winner and bout.result.winner.name == bout.player_warrior.name
-        if tn not in team_data:
-            team_data[tn] = {"w": 0, "l": 0, "k": 0}
-        td = team_data[tn]
-        if pw_won:
-            td["w"] += 1
-            if bout.result.loser_died:
-                td["k"] += 1
-        else:
-            td["l"] += 1
-
-    player_team_data = {tn: td for tn, td in team_data.items()
-                        if tn not in _NPC_TEAM_NAMES}
-    best_team  = max(player_team_data.items(),
-                     key=lambda x: (x[1]["w"], -x[1]["l"]), default=None) if player_team_data else None
-    worst_team = min(player_team_data.items(),
-                     key=lambda x: (x[1]["w"], -x[1]["l"]), default=None) if player_team_data else None
-
-    seen_fights   = set()
-    kill_fights   = []
-    epic_fights   = []
-    normal_fights = []
-    for bout in card:
-        if not bout.result: continue
-        pair = frozenset([bout.player_warrior.name, bout.opponent.name])
-        if pair in seen_fights: continue
-        seen_fights.add(pair)
-        pw_won = bout.result.winner and bout.result.winner.name == bout.player_warrior.name
-        winner = bout.player_warrior if pw_won else bout.opponent
-        loser  = bout.opponent       if pw_won else bout.player_warrior
-        m      = bout.result.minutes_elapsed
-        if bout.result.loser_died:
-            kill_fights.append((winner, loser, m))
-        elif m >= 9:
-            epic_fights.append((winner, loser, m))
-        else:
-            normal_fights.append((winner, loser, m))
-
-    challenge_counts = {}
-    for bout in card:
-        if bout.fight_type in ("challenge", "blood_challenge"):
-            oname = bout.opponent.name
-            challenge_counts[oname] = challenge_counts.get(oname, 0) + 1
-
-    hot_teams = []
-    cold_teams = []
+    random.seed()
+    
+    # ==================================================================
+    # DATA EXTRACTION & ANALYSIS
+    # ==================================================================
+    
+    # 1. Team standings analysis
+    team_records = {}
+    team_changes = {}  # Track which teams moved
     for team in teams:
         if _is_npc_team(team): continue
-        hist   = getattr(team, "turn_history", []) if hasattr(team, "turn_history") else []
-        recent = hist[-3:] if len(hist) >= 2 else []
-        if not recent: continue
-        rw = sum(h.get("w", 0) for h in recent)
-        rl = sum(h.get("l", 0) for h in recent)
         tname = team.team_name if hasattr(team, "team_name") else team.get("team_name", "?")
-        if rw > 0 and rl == 0:   hot_teams.append(tname)
-        elif rl > 0 and rw == 0: cold_teams.append(tname)
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-    def _rec(td):
-        return f"{td['w']}-{td['l']}-{td['k']}"
-
-    def _rank_change(td):
-        if td["w"] > td["l"]:  return "climbing the standings"
-        if td["l"] > td["w"]:  return "slipping in the rankings"
-        return "holding steady"
-
-    champ     = champion_state.get("name", "")
-    champ_t   = champion_state.get("team_name", "")
+        w, l, k = 0, 0, 0
+        for bout in card:
+            if not bout.result: continue
+            pteam = bout.player_team
+            pteam_name = pteam.team_name if hasattr(pteam, "team_name") else pteam.get("team_name", "?")
+            oteam = bout.opponent_team
+            oteam_name = oteam.team_name if hasattr(oteam, "team_name") else oteam.get("team_name", "?")
+            
+            pw_won = bout.result.winner and bout.result.winner.name == bout.player_warrior.name
+            
+            if pteam_name == tname:
+                if pw_won:
+                    w += 1
+                    if bout.result.loser_died: k += 1
+                else:
+                    l += 1
+            elif oteam_name == tname:
+                if not pw_won:
+                    w += 1
+                    if bout.result.loser_died: k += 1
+                else:
+                    l += 1
+        
+        team_records[tname] = {"w": w, "l": l, "k": k, "team": team}
+    
+    # 2. Warrior performance tracking (recognition changes, fight counts)
+    warrior_stats = {}  # {name: {team, wins, losses, kills, recs_pt, tier}}
+    for bout in card:
+        if not bout.result: continue
+        pw = bout.player_warrior
+        op = bout.opponent
+        pw_won = bout.result.winner and bout.result.winner.name == pw.name
+        
+        for warrior, won, team in [(pw, pw_won, bout.player_team), 
+                                   (op, not pw_won, bout.opponent_team)]:
+            if not warrior or not hasattr(warrior, "name"): continue
+            name = warrior.name
+            tname = team.team_name if hasattr(team, "team_name") else team.get("team_name", "?")
+            if tname in _NPC_TEAM_NAMES: continue
+            
+            if name not in warrior_stats:
+                rec = getattr(warrior, "recognition", 0)
+                warrior_stats[name] = {
+                    "team": tname, "wins": 0, "losses": 0, "kills": 0,
+                    "recs": rec, "fights": [], "warrior_obj": warrior
+                }
+            
+            ws = warrior_stats[name]
+            if won:
+                ws["wins"] += 1
+                if bout.result.loser_died: ws["kills"] += 1
+            else:
+                ws["losses"] += 1
+            
+            ws["fights"].append({
+                "opponent": op.name if hasattr(op, "name") else "?",
+                "won": won, "died": won and bout.result.loser_died,
+                "minutes": bout.result.minutes_elapsed
+            })
+    
+    # 3. Challenge tracking (who was challenged most, who avoided most)
+    challenge_counts = {}  # {warrior: count}
+    avoidance_counts = {}  # {team: count}
+    for bout in card:
+        if not bout.result or bout.fight_type not in ["challenge", "blood_challenge"]:
+            continue
+        challenger = bout.player_warrior
+        chal_name = challenger.name if hasattr(challenger, "name") else "?"
+        challenged_team = bout.opponent_team
+        cteam_name = challenged_team.team_name if hasattr(challenged_team, "team_name") else "?"
+        
+        challenge_counts[chal_name] = challenge_counts.get(chal_name, 0) + 1
+        avoidance_counts[cteam_name] = avoidance_counts.get(cteam_name, 0) + 1
+    
+    most_challenged = max(challenge_counts.items(), key=lambda x: x[1])[0] if challenge_counts else None
+    most_avoided = max(avoidance_counts.items(), key=lambda x: x[1])[0] if avoidance_counts else None
+    
+    # 4. Top performers this turn
+    top_warriors = sorted(
+        [(name, ws) for name, ws in warrior_stats.items() if ws["wins"] + ws["losses"] > 0],
+        key=lambda x: (-x[1]["wins"], x[1]["losses"], -x[1]["recs"])
+    )[:3]
+    
+    # 5. Champion tracking
+    champ = champion_state.get("name", "")
+    champ_t = champion_state.get("team_name", "")
     champ_src = champion_state.get("source", "")
-
-    # Base context — all variables pre-filled with safe defaults
+    
+    # Base context
     ctx = dict(
         arena=arena, venue=venue, byline=byline,
         turn=turn_num, next_turn=turn_num + 1,
-        team="", team2="", record="", rank_change="climbing the standings",
-        warrior="", opponent="", points="",
-        champion=champ.upper() if champ else "",
+        team="", team2="", record="",
+        rank_change="", warrior="", opponent="",
+        points="", champion=champ.upper() if champ else "",
         champ_team=champ_t.upper() if champ_t else "",
     )
-
+    
     paragraphs = []
-
-    # ------------------------------------------------------------------
-    # 1. INTRO
-    # ------------------------------------------------------------------
-    paragraphs.append(_pick_block(_BLK_INTRO, used, ctx))
-
-    # ------------------------------------------------------------------
-    # 2. TEAM PERFORMANCE  (up to 2 blocks — best team then worst team)
-    # ------------------------------------------------------------------
-    if best_team:
-        tn, td = best_team
-        ctx.update(
-            team=tn.upper(), record=_rec(td), rank_change=_rank_change(td),
-            team2=worst_team[0].upper() if worst_team else tn.upper(),
-        )
-        paragraphs.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
-
-    if worst_team and best_team and worst_team[0] != best_team[0]:
-        tn, td = worst_team
-        ctx.update(
-            team=tn.upper(), record=_rec(td), rank_change=_rank_change(td),
-            team2=best_team[0].upper(),
-        )
-        paragraphs.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
-
-    # ------------------------------------------------------------------
-    # 3. WARRIOR HIGHLIGHTS  (up to 2 blocks from notable fights)
-    # ------------------------------------------------------------------
-    highlight_pool = kill_fights + epic_fights + normal_fights
-    random.shuffle(highlight_pool)
-    for winner, loser, _ in highlight_pool[:2]:
-        ctx.update(
-            warrior=winner.name.upper(),
-            opponent=loser.name.upper(),
-            points=str(getattr(winner, "recognition", 0)),
-        )
-        paragraphs.append(_pick_block(_BLK_WARRIOR_HI, used, ctx))
-
-    # ------------------------------------------------------------------
-    # 4. META / AVOIDANCE  (1 block, conditional)
-    # ------------------------------------------------------------------
-    if challenge_counts:
-        most_chal = max(challenge_counts, key=challenge_counts.get)
-        ctx.update(
-            warrior=most_chal.upper(),
-            team=best_team[0].upper() if best_team else "",
-        )
-        paragraphs.append(_pick_block(_BLK_META_WARRIOR, used, ctx))
-    elif hot_teams or cold_teams:
-        featured = (hot_teams or cold_teams)[0]
-        ctx.update(team=featured.upper())
-        paragraphs.append(_pick_block(_BLK_META_TEAM, used, ctx))
-
-    # ------------------------------------------------------------------
-    # 5. CHAMPION  (1 block, conditional on champion_state)
-    # ------------------------------------------------------------------
-    if champ:
-        pool = _BLK_CHAMP_NEW if champ_src == "beat_champion" else _BLK_CHAMP_HOLDS
-        paragraphs.append(_pick_block(pool, used, ctx))
+    
+    # ==================================================================
+    # PARAGRAPH 1: OPENING + TEAM STANDINGS
+    # ==================================================================
+    intro = _pick_block(_BLK_INTRO, set(), ctx)
+    
+    # Find top/bottom team for opening
+    if team_records:
+        best_team = max(team_records.items(), key=lambda x: (x[1]["w"], -x[1]["l"]))
+        worst_team = min(team_records.items(), key=lambda x: (x[1]["w"], -x[1]["l"]))
+        
+        best_name, best_rec = best_team
+        worst_name, worst_rec = worst_team
+        
+        record_str = f"{best_rec['w']}-{best_rec['l']}-{best_rec['k']}"
+        ctx["team"] = best_name.upper()
+        ctx["record"] = record_str
+        
+        if best_rec["w"] > best_rec["l"]:
+            ctx["rank_change"] = "climbing the standings"
+        elif best_rec["l"] > best_rec["w"]:
+            ctx["rank_change"] = "slipping lower"
+        else:
+            ctx["rank_change"] = "holding steady"
+        
+        team_perf = _pick_block(_BLK_TEAM_PERF, set(), ctx)
+        para1 = f"{intro}  {team_perf}"
     else:
-        paragraphs.append(_pick_block(_BLK_CHAMP_VACANT, used, ctx))
+        para1 = f"{intro}"
+    
+    paragraphs.append(para1)
+    
+    # ==================================================================
+    # PARAGRAPH 2: WARRIOR HIGHLIGHTS & INDIVIDUAL PERFORMANCES
+    # ==================================================================
+    para2_parts = []
+    
+    if top_warriors:
+        for name, ws in top_warriors[:2]:
+            if ws["wins"] > 0:
+                ctx["warrior"] = name.upper()
+                ctx["points"] = str(ws["recs"])
+                rec_gain = ws["recs"] - (ws["recs"] - ws["wins"] * 5)  # rough estimate
+                
+                if ws["wins"] == len(ws["fights"]) and len(ws["fights"]) > 0:
+                    # Perfect record this turn
+                    line = f"{name.upper()} dominated this turn with a perfect {ws['wins']}-{ws['losses']} record, gaining recognition and notoriety in equal measure.  Managers are taking notice."
+                else:
+                    line = f"{name.upper()} emerged from the turn {ws['wins']}-{ws['losses']}, further establishing their presence in {arena}.  The crowd remembers winners."
+                
+                para2_parts.append(line)
+    
+    # Add meta about challenges or avoidance
+    if most_challenged and most_challenged not in [w[0] for w in top_warriors]:
+        ctx["warrior"] = most_challenged.upper()
+        meta_warrior = _pick_block(_BLK_META_WARRIOR, set(), ctx)
+        para2_parts.append(meta_warrior)
+    
+    if para2_parts:
+        para2 = "  ".join(para2_parts)
+        paragraphs.append(para2)
+    
+    # ==================================================================
+    # PARAGRAPH 3: TEAM META & AVOIDANCE / STRATEGY
+    # ==================================================================
+    para3_parts = []
+    
+    if most_avoided and most_avoided not in _NPC_TEAM_NAMES:
+        ctx["team"] = most_avoided.upper()
+        meta_team = _pick_block(_BLK_META_TEAM, set(), ctx)
+        para3_parts.append(meta_team)
+    
+    if worst_team and worst_rec["w"] < worst_rec["l"]:
+        wname, wrec = worst_team
+        ctx["team"] = wname.upper()
+        ctx["record"] = f"{wrec['w']}-{wrec['l']}-{wrec['k']}"
+        para3_parts.append(f"{wname} walked into trouble and couldn't escape it.  A {wrec['w']}-{wrec['l']}-{wrec['k']} turn like that carries consequences.  The standings don't forget.")
+    
+    if para3_parts:
+        para3 = "  ".join(para3_parts)
+        paragraphs.append(para3)
+    
+    # ==================================================================
+    # PARAGRAPH 4: CHAMPION STATUS
+    # ==================================================================
+    para4_parts = []
+    
+    if champ:
+        if champ_src == "beat_champion":
+            ctx["champion"] = champ.upper()
+            ctx["champ_team"] = champ_t.upper()
+            champ_line = _pick_block(_BLK_CHAMP_NEW, set(), ctx)
+        else:
+            ctx["champion"] = champ.upper()
+            ctx["champ_team"] = champ_t.upper() if champ_t else "?"
+            champ_line = _pick_block(_BLK_CHAMP_HOLDS, set(), ctx)
+    else:
+        champ_line = _pick_block(_BLK_CHAMP_VACANT, set(), ctx)
+    
+    para4_parts.append(champ_line)
+    
+    if para4_parts:
+        para4 = "  ".join(para4_parts)
+        paragraphs.append(para4)
+    
+    # ==================================================================
+    # PARAGRAPH 4b: ADDITIONAL WARRIOR SPOTLIGHT (3rd place and beyond)
+    # ==================================================================
+    if len(top_warriors) >= 3:
+        para4b_parts = []
+        for name, ws in top_warriors[2:4]:
+            if ws["wins"] + ws["losses"] > 0:
+                ratio = ws["wins"] / max(1, ws["wins"] + ws["losses"])
+                if ratio >= 0.5:
+                    line = (f"{name.upper()} rounds out the notable performances this turn with a "
+                            f"{ws['wins']}-{ws['losses']} showing.  Not spectacular — but consistent "
+                            f"fighters build records one turn at a time.")
+                else:
+                    line = (f"{name.upper()} finished the turn at {ws['wins']}-{ws['losses']}.  "
+                            f"Losses at this level tend to concentrate the mind quickly in {arena}.")
+                para4b_parts.append(line)
+        if para4b_parts:
+            paragraphs.append("  ".join(para4b_parts))
 
-    # ------------------------------------------------------------------
-    # 6. DEATH  (1 block — only if deaths occurred this turn)
-    # ------------------------------------------------------------------
-    if deaths:
-        d       = deaths[0]
-        rec_str = f"{d.get('w', 0)}-{d.get('l', 0)}-{d.get('k', 0)}"
-        killer  = d.get("killed_by", "an unknown foe")
-        ctx.update(warrior=d["name"].upper(), opponent=killer.upper(), record=rec_str)
-        paragraphs.append(_pick_block(_BLK_DEATH, used, ctx))
+    # ==================================================================
+    # PARAGRAPH 4c: FIGHT PACE & SPECTACLE
+    # ==================================================================
+    all_bouts = [b for b in card if b.result]
+    if all_bouts:
+        fight_times = [b.result.minutes_elapsed for b in all_bouts if hasattr(b.result, "minutes_elapsed") and b.result.minutes_elapsed]
+        kills_this_turn = sum(1 for b in all_bouts if b.result.loser_died)
+        total_fights = len(all_bouts)
 
-    # ------------------------------------------------------------------
-    # 7. OUTRO
-    # ------------------------------------------------------------------
-    paragraphs.append(_pick_block(_BLK_OUTRO, used, ctx))
+        pace_parts = []
 
-    return "\n\nArena Happenings\n\n" + "\n\n".join(paragraphs)
+        if fight_times:
+            avg_mins = sum(fight_times) / len(fight_times)
+            if avg_mins <= 4:
+                pace_parts.append(
+                    f"This was a fast turn in {arena}.  Fights resolved quickly and with conviction — "
+                    f"few debates, fewer prolonged engagements.  The crowd rarely had time to grow restless.")
+            elif avg_mins >= 10:
+                pace_parts.append(
+                    f"The fights ran long this turn.  Endurance was tested across the card, "
+                    f"and not every warrior answered the call.  A slow turn tends to favor patience over flash.")
+            else:
+                pace_parts.append(
+                    f"Turn {turn_num} ran at a measured pace across the board.  No wild swings in duration — "
+                    f"most fights found their conclusion at the expected moment, which tells its own story.")
+
+        if total_fights > 0:
+            kill_rate = kills_this_turn / total_fights
+            if kills_this_turn == 0:
+                pace_parts.append(
+                    f"The Dark Arena went unclaimed this turn — every bout ended with a loser still breathing.  "
+                    f"Rare in {arena}, and notable enough to record.")
+            elif kill_rate >= 0.3:
+                pace_parts.append(
+                    f"{kills_this_turn} warriors did not walk away from their fight this turn.  "
+                    f"A high toll for a single card.  Managers should study the results carefully before next turn's scheduling.")
+            elif kills_this_turn >= 1:
+                pace_parts.append(
+                    f"The Dark Arena collected {kills_this_turn} this turn.  "
+                    f"Every warrior still standing should note that the odds eventually balance.")
+
+        if pace_parts:
+            paragraphs.append("  ".join(pace_parts))
+
+    # ==================================================================
+    # PARAGRAPH 4d: TEAM PERFORMANCE SPREAD
+    # ==================================================================
+    if len(team_records) >= 2:
+        spread_parts = []
+        sorted_teams = sorted(team_records.items(), key=lambda x: (-x[1]["w"], x[1]["l"]))
+        top2 = sorted_teams[:2]
+        bottom2 = sorted_teams[-2:]
+
+        if len(sorted_teams) >= 3:
+            t1_name, t1_rec = top2[0]
+            t2_name, t2_rec = top2[1]
+            spread_parts.append(
+                f"{t1_name.upper()} and {t2_name.upper()} led the table this turn "
+                f"at {t1_rec['w']}-{t1_rec['l']}-{t1_rec['k']} and "
+                f"{t2_rec['w']}-{t2_rec['l']}-{t2_rec['k']} respectively.  "
+                f"The gap between the top teams and the rest was clear and deliberate.")
+
+            b1_name, b1_rec = bottom2[-1]
+            if b1_name not in [t1_name, t2_name] and b1_rec["l"] > b1_rec["w"]:
+                spread_parts.append(
+                    f"At the other end, {b1_name.upper()} finished the turn below the line.  "
+                    f"A {b1_rec['w']}-{b1_rec['l']}-{b1_rec['k']} record in {arena} "
+                    f"is not a disaster — but it requires a response, not an excuse.")
+
+        if spread_parts:
+            paragraphs.append("  ".join(spread_parts))
+
+    # ==================================================================
+    # PARAGRAPH 5 (CONDITIONAL): DEATHS
+    # ==================================================================
+    if deaths and len(deaths) > 0:
+        para5_parts = []
+        for d in deaths[:2]:  # Show up to 2 deaths
+            d_record = f"{d.get('w', 0)}-{d.get('l', 0)}-{d.get('k', 0)}"
+            ctx["warrior"] = d["name"].upper()
+            ctx["record"] = d_record
+            death_line = _pick_block(_BLK_DEATH, set(), ctx)
+            para5_parts.append(death_line)
+        
+        para5 = "  ".join(para5_parts)
+        paragraphs.append(para5)
+    
+    # ==================================================================
+    # PARAGRAPH 6: CLOSING / PHILOSOPHICAL
+    # ==================================================================
+    outro = _pick_block(_BLK_OUTRO, set(), ctx)
+    para_final = f"{outro}"
+    paragraphs.append(para_final)
+
+    # Join with double line breaks for readability
+    article = "\n\n".join(paragraphs)
+    return "\n\nArena Happenings\n\n" + article
+
+
+
 
 
 # ---------------------------------------------------------------------------

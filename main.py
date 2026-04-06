@@ -35,12 +35,14 @@ from matchmaking  import run_turn, turn_summary, ScheduledFight
 from save         import (
     save_team, load_team, load_all_teams, list_saved_teams,
     list_fight_logs, load_fight_log, print_save_status,
+    load_champion_state, save_champion_state,
     next_team_id,
 )
 from weapons      import WEAPONS, get_weapon
 from armor        import (
     armor_selection_menu, helm_selection_menu, get_armor, can_wear_armor,
 )
+from ai_league_teams import get_or_create_ai_teams, ai_teams_as_rivals
 
 
 # ---------------------------------------------------------------------------
@@ -551,11 +553,22 @@ def _run_turn(gs: GameState, setup_first: bool = False):
 
     print("\n  Preparing rivals...")
     gs.rivals = get_or_create_rivals()
+    
+    # Include league AI teams in the rivals pool so champion challenges work
+    try:
+        ai_teams = get_or_create_ai_teams()
+        ai_rivals = ai_teams_as_rivals(ai_teams)
+        gs.rivals.extend(ai_rivals)
+    except Exception:
+        pass  # AI teams not available; continue with regular rivals only
 
     print(f"  {len(gs.rivals)} rival managers in the pool.")
     print(f"  Scheduling {len(gs.player_team.active_warriors)} fights...\n")
+    
+    # Load champion state for champion challenge support
+    champion_state = load_champion_state()
 
-    card = run_turn(gs.player_team, gs.rivals, verbose=True)
+    card = run_turn(gs.player_team, gs.rivals, verbose=True, champion_state=champion_state)
     gs.last_card = card
 
     # Print summary

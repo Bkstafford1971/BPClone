@@ -1,5 +1,18 @@
-﻿@echo off
+@echo off
+chcp 65001 >nul
 title BLOODSPIRE
+cls
+
+echo.
+echo  ================================================================
+echo     BLOODSPIRE CLIENT
+echo  ================================================================
+echo.
+echo  Starting BLOODSPIRE...
+echo  Your browser will open automatically.
+echo  Keep this window open while playing.
+echo  Press Ctrl+C in this window to stop the server.
+echo.
 
 :: Check for Python
 python --version >nul 2>&1
@@ -26,12 +39,13 @@ if errorlevel 1 (
 )
 
 echo.
-echo  Starting BLOODSPIRE...
-echo  Your browser will open automatically.
-echo  Keep this window open while playing.
-echo  Press Ctrl+C in this window to stop the server.
+echo  Server running at: http://localhost:8765
+echo  Opening browser... (Ctrl+C to stop)
 echo.
 
 cd /d "%~dp0"
 python gui_server.py
-pause
+
+echo.
+echo  Server has stopped.
+REM pause

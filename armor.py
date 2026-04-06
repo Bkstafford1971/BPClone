@@ -325,3 +325,129 @@ def armor_selection_menu() -> List[str]:
 def helm_selection_menu() -> List[str]:
     """Return ordered list of helm names for display in menus."""
     return HELM_TIERS[:]
+
+
+# ---------------------------------------------------------------------------
+# RACE-SPECIFIC ARMOR MODIFIERS
+# ---------------------------------------------------------------------------
+
+def get_effective_defense_for_race(
+    armor_name: str,
+    helm_name: str,
+    race_name: str,
+) -> int:
+    """
+    Get the total defense value, accounting for race-specific armor interactions.
+    
+    For Lizardfolk: natural scales (Scale armor equiv) + layering rules:
+      - Cloth: no change, just normal defense
+      - Leather: effective = Chain (6), but Lizardfolk only takes normal penalties
+      - Cuir Boulli: effective = Half-Plate (8), but Lizardfolk only takes moderate penalties
+      - Brigandine+: normal heavy armor with escalating penalties
+    
+    For other races: normal calculation.
+    """
+    if race_name != "Lizardfolk":
+        return total_defense_value(armor_name, helm_name)
+    
+    # Lizardfolk with natural scales (equivalent to Scale armor: defense 5)
+    armor = get_armor(armor_name or "None")
+    helm  = get_armor(helm_name  or "None")
+    
+    base_defense = 5  # Scales = Scale armor equivalent
+    helm_defense = helm.defense_value
+    
+    # Armor layering for Lizardfolk
+    if armor_name in ("None", "Cloth"):
+        # Cloth is just normal clothing, no bonus to scales defense
+        armor_bonus = 0
+    elif armor_name == "Leather":
+        # Leather layered on scales = Chain equivalent (def 6)
+        armor_bonus = 6 - base_defense  # +1 to scales
+    elif armor_name == "Cuir Boulli":
+        # Cuir Boulli on scales = Half-Plate equivalent (def 8)
+        armor_bonus = 8 - base_defense  # +3 to scales
+    else:
+        # Brigandine and heavier: standard calculation on top of scales
+        armor_bonus = armor.defense_value
+    
+    return base_defense + armor_bonus + helm_defense
+
+
+def get_effective_dex_for_race(
+    base_dex: int,
+    armor_name: str,
+    helm_name: str,
+    race_name: str,
+) -> int:
+    """
+    Get effective Dexterity after armor penalties, accounting for race-specific rules.
+    
+    For Lizardfolk: reduced DEX penalties for lighter armor:
+      - Cloth: no penalty (from scales naturally)
+      - Leather: -1 Dodge, -1 Initiative (lighter than Chain's -2)
+      - Cuir Boulli: -2 Dodge, -2 Initiative (lighter than Half-Plate's -3)
+      - Brigandine+: escalating penalties
+    
+    For other races: normal calculation.
+    """
+    if race_name != "Lizardfolk":
+        return effective_dex(base_dex, armor_name, helm_name)
+    
+    armor = get_armor(armor_name or "None")
+    helm  = get_armor(helm_name  or "None")
+    
+    # Lizardfolk start with no penalty (scales are native)
+    armor_penalty = 0
+    
+    if armor_name in ("None", "Cloth"):
+        armor_penalty = 0
+    elif armor_name == "Leather":
+        armor_penalty = 1  # Lighter than normal armor
+    elif armor_name == "Cuir Boulli":
+        armor_penalty = 2  # Moderate penalty (still lighter than Half-Plate's 3)
+    else:
+        # Brigandine and heavier: normal penalties
+        armor_penalty = armor.dex_penalty
+    
+    helm_penalty = helm.dex_penalty
+    total_penalty = armor_penalty + helm_penalty
+    return max(1, base_dex - total_penalty)
+
+
+def get_armor_attack_rate_penalty_for_race(
+    armor_name: str,
+    race_name: str,
+) -> float:
+    """
+    Get the attack rate penalty for armor, accounting for race-specific rules.
+    
+    For Lizardfolk: reduced penalties for lighter armor:
+      - Cloth: 0
+      - Leather: -0.5 (lighter than Chain's -1.5)
+      - Cuir Boulli: -1.5 (lighter than Half-Plate's -2.5)
+      - Brigandine+: escalating penalties
+    
+    For other races: 0 (handled separately in combat.py)
+    """
+    if race_name != "Lizardfolk":
+        return 0.0
+    
+    if armor_name in ("None", "Cloth"):
+        return 0.0
+    elif armor_name == "Leather":
+        return 0.5
+    elif armor_name == "Cuir Boulli":
+        return 1.5
+    elif armor_name == "Brigandine":
+        return 2.5
+    elif armor_name == "Scale":
+        return 3.5
+    elif armor_name == "Chain":
+        return 4.0
+    elif armor_name == "Half-Plate":
+        return 5.5
+    else:  # Full Plate
+        return 6.5
+    
+    return 0.0

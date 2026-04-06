@@ -37,11 +37,15 @@ class RacialModifiers:
     damage_bonus: int = 0       # Flat bonus to damage dealt per hit
     damage_penalty: int = 0     # Flat penalty to damage dealt per hit
 
-    # --- Attack Rate ---
+    # --- Attack Rate & Initiative ---
     # Stored as a modifier to "actions per minute" on a 0-100 internal scale.
     # APPROX: Each point ≈ roughly 0.1 attacks/minute at base dex.
     attack_rate_bonus: int = 0
     attack_rate_penalty: int = 0
+    initiative_bonus: int = 0   # Bonus to initiative rolls (new)
+    
+    # --- Attributes ---
+    strength_penalty: int = 0   # Flat penalty to STR (for races that are physically weak)
 
     # --- Defense ---
     dodge_bonus: int = 0
@@ -57,6 +61,18 @@ class RacialModifiers:
     trains_stats_faster: bool = False    # Human: attributes improve more easily
     fewer_perms: bool = False            # Human: lower permanent injury chance
     bigger_weapons_bonus: bool = False   # Half-Elf: counts as 1 STR higher for weapon weight reqs
+    
+    # --- New Race Abilities ---
+    thrown_mastery: bool = False         # Goblin: +2 bonus to Opportunity Throw, throwables 1 weight lighter
+    scavenger: bool = False              # Goblin: high chance to notice and pick up dropped weapons
+    heavy_weapon_penalty: bool = False   # Goblin & Tabaxi: suffer penalties for weight 4.0+ or two-handed
+    counterstrike_mastery: bool = False  # Gnome: strong bonus on successful parries + ripostes
+    tactician_edge: bool = False         # Gnome: better vs aggressive opponents, worse vs methodical
+    natural_armor: bool = False          # Lizardfolk: scales = Scale armor protection, layering rules
+    natural_weapon_bonus: bool = False   # Lizardfolk: +3 damage with Martial Combat / claws / tail
+    acrobatic_advantage: bool = False    # Tabaxi: high resist to knockdowns, acrobatic maneuvers on good rolls
+    frenzy_ability: bool = False         # Tabaxi: +3 attack rate burst once per fight for 3-4 actions
+    spear_exception: bool = False        # Tabaxi: spears exempt from heavy weapon penalty
 
     # --- Flavor / Soft Mechanics ---
     preferred_weapons: List[str] = field(default_factory=list)
@@ -272,6 +288,158 @@ RACES: dict[str, Race] = {
             ],
             favored_opponents="Light and medium opponents — small, fast weapons struggle vs heavy armor.",
             disfavored_opponents="Large, powerful opponents who can't be taken out with small weapons.",
+        ),
+    ),
+
+    # =========================================================================
+    "Goblin": Race(
+        name="Goblin",
+        is_playable=True,
+        description=(
+            "Small, vicious scavengers and dirty fighters. Fast and tricky with thrown weapons, "
+            "but physically weak and struggle with heavy arms. They excel at throwing sand, "
+            "scavenging weapons, and acrobatic hit-and-run tactics."
+        ),
+        base_height_in=42,    # 3'6" male — tiny
+        base_weight_lbs=48,
+        modifiers=RacialModifiers(
+            # Guide: "highest action economy among small races"
+            attack_rate_bonus=3,
+            # Guide: "they love striking first"
+            initiative_bonus=3,
+            # Guide: "small and skittering"
+            dodge_bonus=2,
+            # Guide: "tiny frames = weak hits"
+            damage_penalty=3,
+            # Guide: "extremely fragile"
+            hp_bonus=-5,
+            # Guide: "physically weak"
+            strength_penalty=2,
+            thrown_mastery=True,
+            scavenger=True,
+            heavy_weapon_penalty=True,
+            preferred_weapons=[
+                "Dagger", "Stiletto", "Short Sword", "Hatchet", "Javelin",
+                "Throwing Knife", "Blowgun", "Shortbow",
+            ],
+            weak_weapons=[
+                "Great Axe", "Great Sword", "Halberd", "Battle Flail",
+                "Great Pick", "War Flail", "Morning Star", "Maul",
+            ],
+            favored_opponents="Slow, heavily armored opponents — Goblins can dart in and out.",
+            disfavored_opponents="Other fast, evasive opponents. One solid hit usually ends them.",
+        ),
+    ),
+
+    # =========================================================================
+    "Gnome": Race(
+        name="Gnome",
+        is_playable=True,
+        description=(
+            "Small, surprisingly tough and crafty inventors and tacticians. Gnomes are hardy "
+            "for their size, learn quickly, and excel at turning aggression against opponents "
+            "through clever counterstrikes and ripostes. They favor precise swords and bludgeons."
+        ),
+        base_height_in=40,    # 3'4" male — smallest playable race
+        base_weight_lbs=85,
+        modifiers=RacialModifiers(
+            # Guide: "remarkably durable for their small stature"
+            hp_bonus=7,
+            # Guide: "they are quick learners, similar to but slightly weaker than Humans"
+            trains_stats_faster=True,  # APPROX: ~18% faster (similar to humans' 20%)
+            # Guide: "naturally good at deflecting blows"
+            parry_bonus=2,
+            # Guide: "small and defensive"
+            dodge_bonus=1,
+            # Guide: "they hit lighter than bigger races"
+            damage_penalty=2,
+            # Guide: "not the fastest; they prefer careful, measured fighting"
+            attack_rate_penalty=1,
+            counterstrike_mastery=True,
+            tactician_edge=True,
+            preferred_weapons=[
+                "Short Sword", "Long Sword", "Epee", "Bastard Sword",
+                "Hammer", "Mace", "Morningstar", "War Hammer",
+            ],
+            weak_weapons=[
+                "Great Axe", "Battle Axe", "Halberd", "Great Pick",
+                "Boar Spear", "Pole Axe", "Pike",
+            ],
+            favored_opponents="Aggressive warriors with high activity styles — Gnomes punish overcommitment.",
+            disfavored_opponents="Methodical, patient fighters with low activity and careful tactics.",
+        ),
+    ),
+
+    # =========================================================================
+    "Lizardfolk": Race(
+        name="Lizardfolk",
+        is_playable=True,
+        description=(
+            "Savage reptilian predators. Tough, relentless fighters who rely on natural claws, "
+            "powerful tail strikes, and kicks. They are the best Martial Combat race with natural "
+            "armor that scales with layered protection."
+        ),
+        base_height_in=72,    # 6'0" male — larger than humans, muscular
+        base_weight_lbs=240,  # Muscular / dense
+        modifiers=RacialModifiers(
+            # Guide: "exceptional toughness"
+            hp_bonus=9,
+            # Guide: "clearly the strongest Martial Combat users"
+            natural_weapon_bonus=True,  # +3 damage with MC / claws / tail / kicks
+            martial_combat_bonus=True,
+            # Guide: "small dodge bonus"
+            dodge_bonus=1,
+            # Guide: "cold-blooded — slower to accelerate"
+            attack_rate_penalty=2,
+            natural_armor=True,  # Scales = Scale armor equiv, with layering rules
+            preferred_weapons=[
+                "Open Hand", "Dagger", "Stiletto", "Short Sword", "Hatchet",
+                "Hammer", "Mace", "Quarterstaff",
+            ],
+            weak_weapons=[
+                "Epee", "Rapier", "Long Sword",  # Not suited to their heavy fighting style
+            ],
+            favored_opponents="Most opponents — Lizardfolk are well-rounded tanks.",
+            disfavored_opponents="None in particular, but heavy armor restricts their natural strengths.",
+        ),
+    ),
+
+    # =========================================================================
+    "Tabaxi": Race(
+        name="Tabaxi",
+        is_playable=True,
+        description=(
+            "Lightning-quick, acrobatic feline warriors. Tabaxi are masters of speed, evasion, "
+            "and fluid movement. They dart in and out of combat with vaults and tumbles, but are "
+            "fragile and tire quickly in prolonged fights."
+        ),
+        base_height_in=58,    # 4'10" male — slightly shorter than average human with feline build
+        base_weight_lbs=115,  # Light and lean
+        modifiers=RacialModifiers(
+            # Guide: "best pure evasion in the game"
+            dodge_bonus=4,
+            # Guide: "they frequently strike first"
+            initiative_bonus=3,
+            # Guide: "light, agile build"
+            hp_bonus=-6,
+            # Guide: "they tire faster than most races"
+            # endurance_penalty=-3,  (doesn't exist in RacialModifiers yet, handled in combat)
+            # Guide: "not built for raw power"
+            strength_penalty=2,
+            acrobatic_advantage=True,
+            frenzy_ability=True,
+            heavy_weapon_penalty=True,
+            spear_exception=True,
+            preferred_weapons=[
+                "Dagger", "Short Sword", "Scimitar", "Epee", "Stiletto",
+                "Hatchet", "Javelin", "Scythe", "Spear",
+            ],
+            weak_weapons=[
+                "Great Axe", "Great Sword", "Halberd", "Maul", "Battle Flail",
+                "War Flail", "Ball & Chain", "Great Pick",
+            ],
+            favored_opponents="Most opponents — Tabaxi are hard to hit and difficult to pin down.",
+            disfavored_opponents="Heavy hitters and endurance grinders (Dwarf, Lizardfolk, Half-Orc).",
         ),
     ),
 

@@ -366,6 +366,7 @@ class Strategy:
 NON_WEAPON_SKILLS = [
     "dodge", "parry", "throw", "charge", "lunge",
     "disarm", "initiative", "feint", "brawl", "sweep",
+    "cleave", "bash", "acrobatics", "riposte", "slash", "strike",
 ]
 
 # 45 weapon skills — one per weapon in the game.
@@ -519,6 +520,10 @@ class Warrior:
         # --- Death state ---
         self.is_dead: bool = False   # True once slain; slot awaits player replacement
         self.killed_by: str = ""     # Name of the warrior/monster that slew this one
+
+        # --- Favorite Weapon (hidden at creation, revealed only in combat) ---
+        # Assigned based on race + stats + random element. Never changes once set.
+        self.favorite_weapon: str = ""  # e.g. "War Flail", "Stiletto", etc.
 
         # --- Physical Measurements ---
         self.height_in, self.weight_lbs = self._calc_measurements()
@@ -681,6 +686,39 @@ class Warrior:
             raise ValueError(f"Invalid result: '{result}'. Use 'win' or 'loss'.")
         self.total_fights += 1
 
+    def recalculate_streak(self) -> None:
+        """
+        Recalculate the current streak from fight_history.
+        Positive = current win streak, negative = current loss streak, 0 = no streak.
+        Call this after loading a warrior from downloaded data to ensure streak is accurate.
+        
+        Note: fight_history is stored with oldest fights first (index 0), newest fights last.
+        We count consecutive results of the same type as the most recent fight (at the end).
+        """
+        if not self.fight_history:
+            self.streak = 0
+            return
+        
+        # Get the most recent fight result type (at the end of the list)
+        most_recent_result = self.fight_history[-1].get("result", "").lower()
+        if most_recent_result not in ("win", "loss"):
+            self.streak = 0
+            return
+        
+        # Count consecutive results of the same type from the most recent fight backwards
+        streak = 0
+        for entry in reversed(self.fight_history):
+            result = entry.get("result", "").lower()
+            if result == most_recent_result:
+                streak += 1
+            else:
+                break  # Stop at the first different result
+        
+        # Make streak positive for wins, negative for losses
+        if most_recent_result == "loss":
+            streak = -streak
+        self.streak = streak
+
     @property
     def can_retire(self) -> bool:
         """Retirement becomes available at 100 fights."""
@@ -721,10 +759,12 @@ class Warrior:
 
         SKILL training (weapon skills + non-weapon skills):
           Governed by Intelligence.
-          Base chance = 75 - (current_level × 7)
-            Level 0→1 : 75%   Level 1→2 : 68%   Level 2→3 : 61%
+          Early levels (0-2): Base chance = 80 - (current_level × 5)
+            Level 0→1 : 80%   Level 1→2 : 75%   Level 2→3 : 70%
+          Mid levels (3-5): Base chance = 75 - (current_level × 7)
             Level 3→4 : 54%   Level 4→5 : 47%   Level 5→6 : 40%
-            Level 6→7 : 33%   Level 7→8 : 26%   Level 8→9 : 19%
+          Late levels (6-9): Base chance = 70 - (current_level × 8)
+            Level 6→7 : 22%   Level 7→8 : 14%   Level 8→9 : 6%
           INT modifier: (intelligence - 12) × 2.5% per point above/below 12
             e.g. INT 13 = +2.5%, INT 15 = +7.5%, INT 10 = -5%
           Clamped 5%–95%.
@@ -732,13 +772,13 @@ class Warrior:
         ATTRIBUTE training (STR / DEX / CON / INT / PRE — not SIZE):
           Governed by Constitution.
           Early gains (total attribute increases so far < 6):
-            Chance = max(2, 5 + (constitution - 10) × 2.125)
-            CON 10 = 5%,  CON 12 = 9%,  CON 15 = 16%,  CON 18 = 22%,  CON 25 = 37%
-          Late gains (6+ increases already made — much harder):
-            Chance = max(2, early_chance × 0.25)
-            CON 18 late: 22% × 0.25 = ~5%
-          Human racial bonus: +3% to early tier.
-          Calibration: CON 18 warrior training 3×/fight reaches +6 in ~9-10 fights.
+            Chance = 10 + (constitution - 10) × 2.5
+            CON 10 = 10%,  CON 12 = 15%,  CON 15 = 22.5%,  CON 17 = 27.5%,  CON 20 = 35%
+          Late gains (6+ increases already made — significantly harder):
+            Chance = max(3, early_chance × 0.35)
+            CON 17 late: 27.5% × 0.35 = ~9.6%
+          Human racial bonus: +5% to early tier.
+          Calibration: Even lower CON warriors have reasonable chance to improve
           "Total gains" is tracked per-attribute in self.attribute_gains.
         """
         key = skill.lower().replace(" ", "_")
@@ -756,19 +796,19 @@ class Warrior:
             gains_so_far = self.attribute_gains.get(key, 0)
             con = self.constitution
 
-            # Early tier (first 6 gains): CON-driven, realistic pace
-            # CON 18 → ~22% per attempt → ~9 fights at 3 trains/fight to reach +6
-            early_chance = max(2.0, 5.0 + (con - 10) * 2.125)
+            # Early tier (first 6 gains): CON-driven, reasonable pace
+            # CON 17 → ~27.5% per attempt → ~9 fights at 3 trains/fight to reach +6
+            early_chance = 10.0 + (con - 10) * 2.5
             if self.race.modifiers.trains_stats_faster:
-                early_chance += 3.0   # Human racial bonus
+                early_chance += 5.0   # Human racial bonus
 
             if gains_so_far < 6:
                 chance = int(early_chance)
             else:
-                # Late tier: very hard regardless of CON
-                chance = max(2, int(early_chance * 0.25))
+                # Late tier: harder but still possible
+                chance = max(3, int(early_chance * 0.35))
 
-            chance = max(2, min(95, chance))
+            chance = max(3, min(95, chance))
 
             if random.randint(1, 100) > chance:
                 tier_label = "late tier — very hard" if gains_so_far >= 6 else f"CON {con}"
@@ -807,7 +847,18 @@ class Warrior:
                 return f"{skill.replace('_',' ').title()} is already at Master Skill (9)."
 
             intel = self.intelligence
-            base_chance  = 75 - (current_level * 7)
+            
+            # Progressive difficulty: early levels easier, late levels much harder
+            if current_level < 3:
+                # Early levels (0-2): gentle progression
+                base_chance = 80 - (current_level * 5)
+            elif current_level < 6:
+                # Mid levels (3-5): moderate difficulty
+                base_chance = 75 - (current_level * 7)
+            else:
+                # Late levels (6-9): steep difficulty curve
+                base_chance = 70 - (current_level * 8)
+            
             int_modifier = (intel - 12) * 2.5
             chance       = max(5, min(95, int(base_chance + int_modifier)))
 
@@ -939,15 +990,19 @@ class Warrior:
         """
         Recalculate popularity after a fight.
         APPROX:
-          win   → +3 base, +1 per kill streak length (max +5), +PRE bonus
+          win   → +3 base, +1 per kill streak length (max +5), +PRE bonus, +acrobatics bonus
           loss  → -2 base, -1 per loss streak length (max -5), -PRE penalty
           PRE modifier: (presence - 10) * 0.2 (crowd loves charismatic fighters)
+          Acrobatics bonus: +2% per acrobatics level (max +18% at level 9)
         Clamped 1-100.
         """
         pre_mod = int((self.presence - 10) * 0.2)
+        acrobatics_level = self.skills.get("acrobatics", 0)
+        acrobatics_bonus = int(acrobatics_level * 0.2) if acrobatics_level > 0 else 0  # +2% per level (as integer add to popularity)
+        
         if won:
             streak_bonus = min(5, max(0, self.streak))
-            delta = 3 + streak_bonus + pre_mod
+            delta = 3 + streak_bonus + pre_mod + acrobatics_bonus
         else:
             streak_penalty = min(5, max(0, -self.streak))
             delta = -2 - streak_penalty + pre_mod
@@ -1099,6 +1154,7 @@ class Warrior:
             "killed_by":       self.killed_by,
             "initial_stats":   self.initial_stats,
             "fight_history":   self.fight_history,
+            "favorite_weapon": self.favorite_weapon,
         }
 
     @classmethod
@@ -1147,6 +1203,7 @@ class Warrior:
             w.initial_stats = {attr: getattr(w, attr) for attr in ATTRIBUTES}
         w.fight_history  = data.get("fight_history", [])
         w.trains     = data.get("trains",     [])
+        w.favorite_weapon = data.get("favorite_weapon", "")
 
         # Load injuries
         inj_data = data.get("injuries", {})
@@ -1161,8 +1218,99 @@ class Warrior:
         w.max_hp = w._calc_max_hp()
         w.current_hp = w.max_hp
         w.height_in, w.weight_lbs = w._calc_measurements()
+        
+        # Recalculate streak from fight_history to ensure it's accurate
+        # (especially important when loading downloaded league data)
+        w.recalculate_streak()
 
         return w
+
+
+# =============================================================================
+# FAVORITE WEAPON ASSIGNMENT
+# =============================================================================
+
+def assign_favorite_weapon(warrior: "Warrior") -> None:
+    """
+    Assign a favorite weapon to a warrior based on their race and stats.
+    This is called after warrior creation and never changes.
+    
+    Rules:
+      - Tabaxi: light/fast weapons (Dagger, Short Sword, Scimitar, Hatchet, Javelin, 
+                Stiletto, Bola, Heavy Barbed Whip)
+      - Half-Orc: big damage weapons (War Flail, Great Axe, Great Sword, War Hammer, 
+                  Great Pick, Battle Flail, Maul)
+      - Dwarf: axes, hammers, spears, shields (Battle Axe, War Hammer, Boar Spear, 
+               Long Spear, Target Shield, Halberd)
+      - Elf: small/fast blades, thrown weapons (Dagger, Short Sword, Stiletto, Javelin, 
+             Epee, Scimitar)
+      - Halfling: small/light weapons, martial-friendly (Dagger, Short Sword, Hatchet, 
+                  Buckler, Open Hand, Knife)
+      - Human: broad balanced weapons (Short Sword, Military Pick, Morning Star, 
+               Boar Spear, War Hammer)
+      - Goblin: light/dirty fighting (Dagger, Short Sword, Hatchet, Javelin, Bola)
+      - Gnome: swords & hammers (Short Sword, Longsword, Hammer, War Hammer, Mace)
+      - Lizardfolk: martial + light/medium (Short Spear, Long Spear, Trident, War Hammer, 
+                    Battle Axe, Martial Combat via Open Hand)
+      
+    STR/DEX bias: Heavy weapons favor high STR, light weapons favor high DEX.
+    """
+    race_name = warrior.race.name
+    str_val = warrior.strength
+    dex_val = warrior.dexterity
+    
+    # Define weapon pools per race
+    RACE_WEAPONS = {
+        "Tabaxi": ["Dagger", "Short Sword", "Scimitar", "Hatchet", "Javelin", 
+                   "Stiletto", "Bola", "Heavy Barbed Whip"],
+        "Half-Orc": ["War Flail", "Great Axe", "Great Sword", "War Hammer", 
+                     "Great Pick", "Battle Flail", "Maul"],
+        "Dwarf": ["Battle Axe", "War Hammer", "Boar Spear", "Long Spear", 
+                  "Target Shield", "Halberd"],
+        "Elf": ["Dagger", "Short Sword", "Stiletto", "Javelin", "Epee", "Scimitar"],
+        "Halfling": ["Dagger", "Short Sword", "Hatchet", "Buckler", "Open Hand", "Knife"],
+        "Human": ["Short Sword", "Military Pick", "Morning Star", "Boar Spear", "War Hammer"],
+        "Goblin": ["Dagger", "Short Sword", "Hatchet", "Javelin", "Bola"],
+        "Gnome": ["Short Sword", "Longsword", "Hammer", "War Hammer", "Mace"],
+        "Lizardfolk": ["Short Spear", "Long Spear", "Trident", "War Hammer", 
+                       "Battle Axe", "Open Hand"],
+    }
+    
+    # Get weapons for this race (fallback to Human if race not defined)
+    available_weapons = RACE_WEAPONS.get(race_name, RACE_WEAPONS["Human"])
+    
+    # Apply STR/DEX weighting to weapon selection
+    # For simplicity: warriors with high STR get favorite from heavier options,
+    # high DEX get favorite from lighter options
+    weighted_choices = []
+    
+    for weapon_name in available_weapons:
+        weight = 1
+        
+        # Light weapons favor DEX
+        light_weapons = {"Dagger", "Stiletto", "Knife", "Short Sword", "Javelin", 
+                        "Epee", "Hatchet", "Buckler", "Bola", "Open Hand"}
+        if weapon_name in light_weapons:
+            dex_bonus = max(0, dex_val - 12) * 0.1  # DEX 12→1.0x, DEX 18→1.6x
+            weight = 1 + dex_bonus
+        
+        # Heavy weapons favor STR
+        heavy_weapons = {"Maul", "Great Axe", "War Flail", "Great Sword", "Great Pick",
+                        "Battle Flail", "War Hammer", "Long Spear", "Halberd"}
+        if weapon_name in heavy_weapons:
+            str_bonus = max(0, str_val - 12) * 0.1  # STR 12→1.0x, STR 18→1.6x
+            weight = 1 + str_bonus
+        
+        weighted_choices.append((weapon_name, weight))
+    
+    # Select one weapon using weighted random
+    if weighted_choices:
+        weapons, weights = zip(*weighted_choices)
+        favorite = random.choices(weapons, weights=weights, k=1)[0]
+        warrior.favorite_weapon = favorite
+    else:
+        # Fallback (shouldn't happen)
+        warrior.favorite_weapon = "Open Hand"
 
 
 # =============================================================================
@@ -1448,6 +1596,7 @@ def create_warrior_interactive(base_stats: Dict[str, int] = None) -> Optional["W
         name=name, race_name=race_name, gender=gender, **final_stats
     )
     warrior.luck = random.randint(1, 30)
+    assign_favorite_weapon(warrior)
 
     print("\n" + warrior.stat_block())
     print(f"  Luck factor: {warrior.luck}/30")
@@ -1478,4 +1627,5 @@ def create_warrior_ai(
 
     w = Warrior(name=name, race_name=race_name, gender=gender, **final)
     w.luck = random.randint(1, 30)
+    assign_favorite_weapon(w)
     return w

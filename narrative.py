@@ -287,7 +287,7 @@ def style_intent_line(
     """
     Return a style intent line (or None, ~60% skip chance).
     """
-    if random.random() < 0.55:
+    if random.random() < 0.30:
         return None
 
     pool = STYLE_INTENT_POOLS.get(style, STYLE_INTENT_POOLS["Strike"])
@@ -337,6 +337,14 @@ ATTACK_VERBS: dict[str, list[str]] = {
     "Oddball"      : ["strikes at", "swings at", "lashes out at"],
 }
 
+# Lizardfolk-specific attack verbs when using Open Hand/Martial Combat
+# Features claw rakes, tail sweeps, and powerful kicks
+LIZARDFOLK_ATTACK_VERBS: dict[str, list[str]] = {
+    "claw"  : ["rakes at", "slashes at with claws", "tears at", "rends at with razor claws"],
+    "kick"  : ["kicks at", "stomps toward", "drives a powerful kick at", "lashes out with a kick toward"],
+    "tail"  : ["sweeps at with tail", "lashes at with tail", "swings tail at", "brings tail around toward"],
+}
+
 # Extra style-flavored attack verbs — third-person singular
 STYLE_ATTACK_PREFIX: dict[str, list[str]] = {
     "Total Kill"       : ["tries to demolish", "savagely attacks", "hacks away at",
@@ -361,11 +369,25 @@ def attack_line(
     style          : str,
     aim_point      : str,
     attacker_gender: str = "Male",
+    attacker_race  : str = None,      # For Lizardfolk special handling
 ) -> str:
-    """Generate the attack declaration line."""
+    """Generate the attack declaration line. Lizardfolk with Open Hand get special claw/tail/kick verbs."""
     loc_pool = AIM_POINT_LABELS.get(aim_point, AIM_POINT_LABELS["None"])
     location = random.choice(loc_pool)
     pronoun  = "his" if attacker_gender == "Male" else "her"
+
+    # Lizardfolk with Open Hand use special descriptors
+    if attacker_race == "Lizardfolk" and weapon_name == "Open Hand":
+        attack_types = ["claw", "kick", "tail"]
+        attack_type = random.choice(attack_types)
+        
+        verb_pool = LIZARDFOLK_ATTACK_VERBS.get(attack_type, LIZARDFOLK_ATTACK_VERBS["claw"])
+        verb = random.choice(verb_pool)
+        
+        # Return without weapon mention since it's natural weapons
+        return (
+            f"{attacker_name.upper()} {verb} {defender_name.upper()}'s {location}!"
+        )
 
     # Style-flavored variant — always ends with weapon reference
     if style in STYLE_ATTACK_PREFIX and random.random() < 0.5:
@@ -401,6 +423,13 @@ HIT_VERBS: dict[str, list[str]] = {
     "Oddball"      : ["punches into", "cracks into", "finds", "hits"],
 }
 
+# Lizardfolk-specific hit verbs when using claws, tail, or feet in martial combat
+LIZARDFOLK_HIT_VERBS: dict[str, list[str]] = {
+    "claw"  : ["rakes across", "shreds", "tears into", "slashes across", "rends"],
+    "kick"  : ["crashes into", "smashes into", "crushes into", "drives into"],
+    "tail"  : ["whips across", "lashes into", "sweeps across", "crashes into"],
+}
+
 HIT_TARGETS = {
     "Head"    : ["headgear", "helm", "skull", "head", "temple"],
     "Chest"   : ["chest armor", "ribs", "breastplate", "torso", "chest"],
@@ -429,10 +458,12 @@ def hit_line(
     weapon_category: str,
     aim_point     : str,
     hit_precision : str = "normal",  # "precise", "normal", "barely"
+    attacker_race : str = None,       # For Lizardfolk special handling
 ) -> list[str]:
     """
     Return 1-2 lines describing a successful hit.
     hit_precision affects whether an announcement line precedes the hit.
+    If attacker is Lizardfolk using Open Hand, use claw/tail/kick descriptions.
     """
     lines = []
 
@@ -445,15 +476,37 @@ def hit_line(
         )
         lines.append(ann)
 
-    # The actual hit
-    verb_pool = HIT_VERBS.get(weapon_category, HIT_VERBS["Oddball"])
-    verb = random.choice(verb_pool)
-    target_pool = HIT_TARGETS.get(aim_point, HIT_TARGETS["None"])
-    target = random.choice(target_pool)
-    lines.append(
-        f"{attacker_name.upper()}'s {weapon_name.lower()} "
-        f"{verb} {defender_name.upper()}'s {target}!"
-    )
+    # Lizardfolk with Open Hand use special claw/tail/kick descriptions
+    if attacker_race == "Lizardfolk" and weapon_name == "Open Hand":
+        attack_types = ["claw", "kick", "tail"]
+        attack_type = random.choice(attack_types)
+
+        verb_pool = LIZARDFOLK_HIT_VERBS.get(attack_type, LIZARDFOLK_HIT_VERBS["claw"])
+        verb = random.choice(verb_pool)
+        target_pool = HIT_TARGETS.get(aim_point, HIT_TARGETS["None"])
+        target = random.choice(target_pool)
+
+        # Create attack type descriptor
+        attack_desc = {
+            "claw": "claws",
+            "kick": "powerful kick",
+            "tail": "lashing tail",
+        }.get(attack_type, "claws")
+        
+        lines.append(
+            f"{attacker_name.upper()}'s {attack_desc} "
+            f"{verb} {defender_name.upper()}'s {target}!"
+        )
+    else:
+        # Standard weapon-based hit description
+        verb_pool = HIT_VERBS.get(weapon_category, HIT_VERBS["Oddball"])
+        verb = random.choice(verb_pool)
+        target_pool = HIT_TARGETS.get(aim_point, HIT_TARGETS["None"])
+        target = random.choice(target_pool)
+        lines.append(
+            f"{attacker_name.upper()}'s {weapon_name.lower()} "
+            f"{verb} {defender_name.upper()}'s {target}!"
+        )
     return lines
 
 
@@ -464,9 +517,9 @@ def hit_line(
 DAMAGE_LINES: dict[str, list[str]] = {
     "scratch": [
         "   Barely a scratch!",
-        "   The blow glances harmlessly off!",
+        "   The blow glances off without finding flesh!",
         "   Little damage results from the strike",
-        "   The armor does its job admirably",
+        "   The armor absorbs most of the impact",
         "   The blow does almost nothing",
     ],
     "light": [
@@ -474,7 +527,7 @@ DAMAGE_LINES: dict[str, list[str]] = {
         "   Some damage is done",
         "   A glancing blow!",
         "   The blow lands without full force",
-        "   The armor absorbs most of it",
+        "   The armor softens the worst of it",
     ],
     "solid": [
         "   A solid blow has been struck!",
@@ -585,6 +638,97 @@ DODGE_LINES = [
 
 def dodge_line(defender_name: str) -> str:
     return random.choice(DODGE_LINES).format(defender=defender_name.upper())
+
+
+# ---------------------------------------------------------------------------
+# DEFENSE INTENT LINES (defender's reaction shown before result is known)
+# ---------------------------------------------------------------------------
+
+DEFENSE_INTENT_PARRY = [
+    "{defender} braces to meet the attack!",
+    "{defender} raises {his} guard against the incoming blow!",
+    "{defender} is ready for {his} opponent's move!",
+    "{defender} eyes the incoming strike carefully!",
+    "{defender} sets {his} feet and prepares to deflect!",
+    "{defender} shifts weight, preparing to parry!",
+    "{defender} tightens {his} grip and watches for the opening!",
+    "{defender} reads the attack and reacts!",
+    "{defender} commits to a solid defense!",
+    "{defender} is eagerly defending!",
+]
+
+DEFENSE_INTENT_DODGE = [
+    "{defender} is already moving!",
+    "{defender} looks to slip the blow!",
+    "{defender} watches for the angle of attack!",
+    "{defender} plans to avoid being where the weapon lands!",
+    "{defender} shifts {his} weight to dodge!",
+    "{defender} keeps {his} feet light and ready!",
+    "{defender}'s footwork is anticipating trouble!",
+    "{defender} stays mobile, looking for the escape!",
+    "{defender} isn't planning to stand still for this!",
+    "{defender}'s plan is not to get hit!",
+]
+
+
+def defense_intent_line(defender_name: str, gender: str, uses_parry: bool) -> str:
+    pronoun = "his" if gender == "Male" else "her"
+    pool = DEFENSE_INTENT_PARRY if uses_parry else DEFENSE_INTENT_DODGE
+    return random.choice(pool).format(defender=defender_name.upper(), his=pronoun)
+
+
+# ---------------------------------------------------------------------------
+# LOW HP STATUS COMMENTARY
+# ---------------------------------------------------------------------------
+
+_LOW_HP_TIER1 = [   # 30–50% HP remaining
+    "{warrior} is showing signs of the punishment received!",
+    "{warrior} is taking this fight on the chin!",
+    "The damage is starting to add up for {warrior}!",
+    "{warrior} is breathing harder now!",
+    "{warrior} looks like {he} could use a moment to collect {himself}!",
+]
+
+_LOW_HP_TIER2 = [   # 15–30% HP remaining
+    "{warrior} is in serious trouble!",
+    "{warrior} is covered in blood — and not all of it is the opponent's!",
+    "The crowd senses {warrior} is running out of options!",
+    "{warrior} is surviving on determination alone at this point!",
+    "{warrior} is desperately wounded and still fighting!",
+    "{warrior} looks deathly pale!",
+]
+
+_LOW_HP_TIER3 = [   # below 15% HP remaining
+    "{warrior} would make a corpse envious!",
+    "{warrior} is drenched in blood!",
+    "{warrior} is barely standing — sheer will is all that remains!",
+    "The end is near for {warrior}!",
+    "{warrior} staggers but somehow refuses to fall!",
+    "{warrior} is one solid hit away from the Dark Arena!",
+]
+
+
+def low_hp_line(warrior_name: str, gender: str, hp_pct: float) -> Optional[str]:
+    """Return a low-HP status line, or None if HP is above threshold / random skip."""
+    pronoun  = "he" if gender == "Male" else "she"
+    reflexive = "himself" if gender == "Male" else "herself"
+    if hp_pct >= 0.50:
+        return None
+    if hp_pct >= 0.30:
+        if random.random() > 0.30:   # fire ~30% of the time in this range
+            return None
+        pool = _LOW_HP_TIER1
+    elif hp_pct >= 0.15:
+        if random.random() > 0.50:
+            return None
+        pool = _LOW_HP_TIER2
+    else:
+        if random.random() > 0.70:
+            return None
+        pool = _LOW_HP_TIER3
+    return random.choice(pool).format(
+        warrior=warrior_name.upper(), he=pronoun, himself=reflexive
+    )
 
 
 # ---------------------------------------------------------------------------
