@@ -343,6 +343,14 @@ def _run_turn(request_password, rerun_turn=None):
             slain  = result.loser_died and not pw_won
             pwr    = "win" if pw_won else "loss"
 
+            # If either warrior is the reigning champion, record as a champion title fight
+            _champ_name = champ_state.get("name", "") if isinstance(champ_state, dict) else ""
+            fight_type_to_record = (
+                "champion" if (_champ_name and (
+                    ow.name == _champ_name or pw.name == _champ_name
+                )) else bout.fight_type
+            )
+
             # NOTE: record_result() is already called inside run_fight() (combat.py).
             # Do NOT call it again here — wins/losses/kills would be double-counted.
 
@@ -366,7 +374,7 @@ def _run_turn(request_password, rerun_turn=None):
                 "opponent_race": ow.race.name, "opponent_team": bout.opponent_team.team_name,
                 "result": pwr, "minutes": result.minutes_elapsed, "fight_id": fid,
                 "warrior_slain": slain, "opponent_slain": killed, "is_kill": killed,
-                "fight_type": bout.fight_type,
+                "fight_type": fight_type_to_record,
             })
             if slain:
                 player_team.kill_warrior(pw, killed_by=ow.name, killer_fights=ow.total_fights)
@@ -374,7 +382,7 @@ def _run_turn(request_password, rerun_turn=None):
             bouts.append({
                 "warrior_name": pw.name, "opponent_name": ow.name,
                 "opponent_race": ow.race.name, "opponent_team": bout.opponent_team.team_name,
-                "opponent_manager": bout.opponent_manager, "fight_type": bout.fight_type,
+                "opponent_manager": bout.opponent_manager, "fight_type": fight_type_to_record,
                 "result": pwr.upper(), "minutes": result.minutes_elapsed, "fight_id": fid,
                 "warrior_slain": slain, "opponent_slain": killed,
                 "training": result.training_results.get(pw.name, []),
@@ -486,12 +494,7 @@ def _run_turn(request_password, rerun_turn=None):
             try:
                 from team import Team
                 t = Team.from_dict(res["team"])
-                t.turn_history.append({
-                    "turn": turn_num,
-                    "w": sum(1 for b in res["bouts"] if b.get("result")=="WIN"),
-                    "l": sum(1 for b in res["bouts"] if b.get("result")=="LOSS"),
-                    "k": sum(1 for b in res["bouts"] if b.get("opponent_slain")),
-                })
+                # turn_history already has this turn appended in team_for_client above
                 nl_teams.append(t)
             except Exception:
                 pass
@@ -511,6 +514,7 @@ def _run_turn(request_password, rerun_turn=None):
 
         # Deaths this turn — pull real W/L/K from the team result data
         deaths_nl = []
+        _seen_deaths = set()
         for mid2, res in all_results.items():
             team_dict = res.get("team", {})
             warriors_by_name = {
@@ -520,6 +524,9 @@ def _run_turn(request_password, rerun_turn=None):
             for b in res.get("bouts", []):
                 if b.get("warrior_slain"):
                     wname = b.get("warrior_name", "?")
+                    if wname in _seen_deaths:
+                        continue
+                    _seen_deaths.add(wname)
                     wd    = warriors_by_name.get(wname, {})
                     deaths_nl.append({
                         "name"     : wname,
@@ -528,6 +535,22 @@ def _run_turn(request_password, rerun_turn=None):
                         "l"        : wd.get("losses", b.get("losses", 0)),
                         "k"        : wd.get("kills",  b.get("kills",  0)),
                         "killed_by": b.get("opponent_name","?"),
+                    })
+                elif b.get("opponent_slain"):
+                    # Opponent (rival/AI) was killed by the player's warrior —
+                    # AI teams don't fight player teams from their own perspective,
+                    # so this death would otherwise be invisible to the deaths list.
+                    oname = b.get("opponent_name", "?")
+                    if oname in _seen_deaths:
+                        continue
+                    _seen_deaths.add(oname)
+                    deaths_nl.append({
+                        "name"     : oname,
+                        "team"     : b.get("opponent_team", "?"),
+                        "w"        : 0,
+                        "l"        : 0,
+                        "k"        : 0,
+                        "killed_by": b.get("warrior_name", "?"),
                     })
 
         # Build a minimal card-like list for the newsletter — all managers including AI
