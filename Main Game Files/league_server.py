@@ -385,7 +385,7 @@ def _run_turn(request_password, rerun_turn=None):
                 "opponent_manager": bout.opponent_manager, "fight_type": fight_type_to_record,
                 "result": pwr.upper(), "minutes": result.minutes_elapsed, "fight_id": fid,
                 "warrior_slain": slain, "opponent_slain": killed,
-                "training": result.training_results.get(pw.name, []),
+                "training": result.training_results.get("warrior_a", []),
             })
 
         # Create two versions:

@@ -810,16 +810,19 @@ class CombatEngine:
 
         training = {}
         self._emit("")   # blank line between fight outcome and training block
-        for w, opp, is_opp in [
-            (self.warrior_a, self.warrior_b, False),
-            (self.warrior_b, self.warrior_a, True),
+        for w, opp, is_opp, pos_key in [
+            (self.warrior_a, self.warrior_b, False, "warrior_a"),
+            (self.warrior_b, self.warrior_a, True,  "warrior_b"),
         ]:
             # Dead warriors do not train — they're carried out on a shield
             if result.loser_died and result.loser is w:
-                training[w.name] = []
+                training[pos_key] = []
                 continue
             res = self._apply_training(w, opponent=opp)
-            training[w.name] = res
+            # Key by position ("warrior_a"/"warrior_b") to avoid collision when
+            # both fighters share the same name.  Callers that need the training
+            # list for warrior_a (always the player warrior) use "warrior_a".
+            training[pos_key] = res
             if res:
                 self._emit(N.training_summary(w.name, res, is_opponent=is_opp))
 

@@ -1190,7 +1190,7 @@ def _run_turn_for_team(body: dict) -> dict:
                 "opponent_slain" : r.loser_died and r.winner is not None
                                    and r.winner.name == pw.name,
                 "fight_id"       : bout.fight_id,
-                "training"       : r.training_results.get(pw.name, []),
+                "training"       : r.training_results.get("warrior_a", []),
             })
 
         save_rivals(rivals)
