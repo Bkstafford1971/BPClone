@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # warrior.py — BLOODSPIRE Warrior Class
 # =============================================================================
 # Defines the Warrior dataclass along with:
@@ -757,29 +757,21 @@ class Warrior:
         Returns a human-readable result message (success OR no-progress).
         Training is NOT automatic — success depends on the warrior's stats.
 
-        SKILL training (weapon skills + non-weapon skills):
-          Governed by Intelligence.
-          Early levels (0-2): Base chance = 80 - (current_level × 5)
-            Level 0→1 : 80%   Level 1→2 : 75%   Level 2→3 : 70%
-          Mid levels (3-5): Base chance = 75 - (current_level × 7)
-            Level 3→4 : 54%   Level 4→5 : 47%   Level 5→6 : 40%
-          Late levels (6-9): Base chance = 70 - (current_level × 8)
-            Level 6→7 : 22%   Level 7→8 : 14%   Level 8→9 : 6%
-          INT modifier: (intelligence - 12) × 2.5% per point above/below 12
-            e.g. INT 13 = +2.5%, INT 15 = +7.5%, INT 10 = -5%
-          Clamped 5%–95%.
+        GRADUATED LEARNING CURVE — two-factor formula:
+          1. Base chance from governing stat (INT for skills, CON for attributes):
+               stat  3-8  -> 38%    stat  9-14 -> 65%
+               stat 15-20 -> 82%    stat 21-25 -> 94%
+          2. Difficulty multiplier from number of increases (gains):
+               gains 0-3 : x1.00   gains 4-5 : x0.52
+               gains 6-7 : x0.29   gains 8+  : x0.16
+          Mastery bonus (gains>=8, stat>=15): +(stat-14)*2%.  Clamped 4%-96%.
 
-        ATTRIBUTE training (STR / DEX / CON / INT / PRE — not SIZE):
-          Governed by Constitution.
-          Early gains (total attribute increases so far < 6):
-            Chance = 10 + (constitution - 10) × 2.5
-            CON 10 = 10%,  CON 12 = 15%,  CON 15 = 22.5%,  CON 17 = 27.5%,  CON 20 = 35%
-          Late gains (6+ increases already made — significantly harder):
-            Chance = max(3, early_chance × 0.35)
-            CON 17 late: 27.5% × 0.35 = ~9.6%
-          Human racial bonus: +5% to early tier.
-          Calibration: Even lower CON warriors have reasonable chance to improve
-          "Total gains" is tracked per-attribute in self.attribute_gains.
+        SKILL training (weapon skills + non-weapon skills):
+          Governed by Intelligence. gains = current skill level (0-based).
+
+        ATTRIBUTE training (STR / DEX / CON / INT / PRE, not SIZE):
+          Governed by Constitution. Gains tracked in self.attribute_gains.
+          Human racial bonus: +6 to base_chance (before multiplier, capped at 94).
         """
         key = skill.lower().replace(" ", "_")
 
@@ -792,26 +784,47 @@ class Warrior:
             if current_val >= STAT_MAX:
                 return f"{skill.capitalize()} is already at maximum ({STAT_MAX})."
 
-            # Track how many times this attribute has been successfully increased
-            gains_so_far = self.attribute_gains.get(key, 0)
-            con = self.constitution
+            gains = self.attribute_gains.get(key, 0)
+            stat  = self.constitution
 
-            # Early tier (first 6 gains): CON-driven, reasonable pace
-            # CON 17 → ~27.5% per attempt → ~9 fights at 3 trains/fight to reach +6
-            early_chance = 10.0 + (con - 10) * 2.5
-            if self.race.modifiers.trains_stats_faster:
-                early_chance += 5.0   # Human racial bonus
-
-            if gains_so_far < 6:
-                chance = int(early_chance)
+            # 1. Base chance from CON band
+            if stat <= 8:
+                base_chance = 38
+            elif stat <= 14:
+                base_chance = 65
+            elif stat <= 20:
+                base_chance = 82
             else:
-                # Late tier: harder but still possible
-                chance = max(3, int(early_chance * 0.35))
+                base_chance = 94
 
-            chance = max(3, min(95, chance))
+            if self.race.modifiers.trains_stats_faster:
+                base_chance = min(94, base_chance + 6)   # Human racial bonus
+
+            # 2. Difficulty multiplier based on gains
+            if gains < 4:
+                multiplier = 1.00
+            elif gains < 6:
+                multiplier = 0.52
+            elif gains < 8:
+                multiplier = 0.29
+            else:
+                multiplier = 0.16
+
+            chance = int(base_chance * multiplier)
+
+            # High CON still helps at Mastery (gains >= 8)
+            if gains >= 8 and stat >= 15:
+                chance += (stat - 14) * 2
+
+            chance = max(4, min(96, chance))
 
             if random.randint(1, 100) > chance:
-                tier_label = "late tier — very hard" if gains_so_far >= 6 else f"CON {con}"
+                tier_label = (
+                    "mastery tier" if gains >= 8 else
+                    "late tier"    if gains >= 6 else
+                    "mid tier"     if gains >= 4 else
+                    f"CON {stat}"
+                )
                 return (
                     f"{skill.capitalize()} training: no progress this session "
                     f"({tier_label}, {chance}% chance)."
@@ -819,8 +832,8 @@ class Warrior:
 
             new_val = min(STAT_MAX, current_val + 1)
             self.set_attr(key, new_val)
-            self.attribute_gains[key] = gains_so_far + 1
-            tier_note = " [harder tier]" if gains_so_far >= 6 else ""
+            self.attribute_gains[key] = gains + 1
+            tier_note = " [mastery]" if gains >= 8 else (" [late]" if gains >= 6 else "")
 
             # --- Attribute-specific side effects ---
             if key == "strength":
@@ -846,26 +859,41 @@ class Warrior:
             if current_level >= 9:
                 return f"{skill.replace('_',' ').title()} is already at Master Skill (9)."
 
-            intel = self.intelligence
-            
-            # Progressive difficulty: early levels easier, late levels much harder
-            if current_level < 3:
-                # Early levels (0-2): gentle progression
-                base_chance = 80 - (current_level * 5)
-            elif current_level < 6:
-                # Mid levels (3-5): moderate difficulty
-                base_chance = 75 - (current_level * 7)
+            gains = current_level          # skill level == number of increases so far
+            stat  = self.intelligence
+
+            # 1. Base chance from INT band
+            if stat <= 8:
+                base_chance = 38
+            elif stat <= 14:
+                base_chance = 65
+            elif stat <= 20:
+                base_chance = 82
             else:
-                # Late levels (6-9): steep difficulty curve
-                base_chance = 70 - (current_level * 8)
-            
-            int_modifier = (intel - 12) * 2.5
-            chance       = max(5, min(95, int(base_chance + int_modifier)))
+                base_chance = 94
+
+            # 2. Difficulty multiplier based on skill level (gains)
+            if gains < 4:
+                multiplier = 1.00
+            elif gains < 6:
+                multiplier = 0.52
+            elif gains < 8:
+                multiplier = 0.29
+            else:
+                multiplier = 0.16
+
+            chance = int(base_chance * multiplier)
+
+            # High INT still helps at Mastery (level 8->9)
+            if gains >= 8 and stat >= 15:
+                chance += (stat - 14) * 2
+
+            chance = max(4, min(96, chance))
 
             if random.randint(1, 100) > chance:
                 return (
                     f"{skill.replace('_',' ').title()} training: no progress this session "
-                    f"(INT {intel}, level {current_level}, {chance}% chance)."
+                    f"(INT {stat}, level {current_level}, {chance}% chance)."
                 )
 
             self.skills[key] = current_level + 1
