@@ -53,14 +53,12 @@ C:\Bloodspire\
 
 Bloodspire uses [Tailscale](https://tailscale.com/) to connect your client to the league server securely over a private VPN. This is free and takes about 5 minutes.
 
-1. Go to [https://tailscale.com/download](https://tailscale.com/download) and download the **Windows** client
-2. Install it and create a **free Tailscale account**
-3. Log in to Tailscale — it will show you your device is connected
-4. **Email the league admin** at **bkstafford1971@gmail.com** with:
-   - Your name / handle
-   - The email address you used to sign up for Tailscale
-5. The admin will send you a **share link** — click it to join the private league network
-6. Once accepted, you're ready to connect to the server
+1. Click this link to join my Tailscale network: [Join My Tailnet](https://your-invite-link-here)
+2. Sign up or log in with your preferred method (Google, Microsoft, GitHub, etc.).
+3. Download and install the Tailscale client for your device.
+4. Once connected, you should automatically see my server (look for its hostname or use MagicDNS if enabled).
+
+The link will guide you through the entire process.
 
 ---
 
