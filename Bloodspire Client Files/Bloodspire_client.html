@@ -1229,9 +1229,10 @@ function buildStatsTab(team, w, wIdx) {
   let stratRows = '';
   const strats = w.strategies || [];
 
-  // Separate Always from numbered
-  const numbered = strats.filter(s => s.trigger !== 'Always');
-  const always   = strats.find(s => s.trigger === 'Always') || {trigger:'Always',style:'',activity:'',aim_point:'',defense_point:''};
+  // Separate Always/default row from numbered trigger rows
+  const isDefaultTrigger = t => t === 'Always' || t === 'Always (Default Loop)';
+  const numbered = strats.filter(s => !isDefaultTrigger(s.trigger));
+  const always   = strats.find(s => isDefaultTrigger(s.trigger)) || {trigger:'Always (Default Loop)',style:'',activity:'',aim_point:'',defense_point:''};
 
   // Blank-first option list — blank = row inactive
   function stratOpts(items, val) {
@@ -1254,7 +1255,7 @@ function buildStatsTab(team, w, wIdx) {
   // D row — "Always" trigger locked, cannot be changed
   stratRows += `<tr>
     <td class="row-num" style="font-weight:bold;">D</td>
-    <td style="padding:2px 4px; background:#ececec; font-style:italic; color:#444;">Always</td>
+    <td style="padding:2px 4px; background:#ececec; font-style:italic; color:#444;">Always (Default Loop)</td>
     <td><select data-si="D" data-sf="style" ${OC}>${stratOpts(styles, always.style)}</select></td>
     <td style="text-align:center;"><input type="number" min="0" max="9" value="${always.activity||''}" placeholder="" data-si="D" data-sf="activity" onchange="scheduleAutoSave()" style="width:36px;"></td>
     <td><select data-si="D" data-sf="aim_point" ${OC}>${stratOpts(aimPts, always.aim_point)}</select></td>
@@ -2307,7 +2308,7 @@ async function doSaveWarrior() {
   const strats = [];
   for (let i = 0; i < 5; i++) {
     const trigger = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="trigger"]`);
-    if (!trigger) continue;
+    if (!trigger || trigger === 'None') continue;
     const style    = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="style"]`)    || 'Strike';
     const actRaw   = getInputVal(`#strat-body input[data-si="${i}"][data-sf="activity"]`);
     const activity = (actRaw !== '' && actRaw !== null) ? parseInt(actRaw) : 5;
@@ -2315,13 +2316,13 @@ async function doSaveWarrior() {
     const def      = getSelectVal(`#strat-body select[data-si="${i}"][data-sf="defense_point"]`) || 'None';
     strats.push({trigger, style, activity, aim_point:aim, defense_point:def});
   }
-  // D row — trigger is always "Always" regardless of DOM
+  // D row — trigger is always "Always (Default Loop)" regardless of DOM
   const dStyle    = getSelectVal('#strat-body select[data-si="D"][data-sf="style"]')    || 'Strike';
   const dActRaw   = getInputVal('#strat-body input[data-si="D"][data-sf="activity"]');
   const dActivity = (dActRaw !== '' && dActRaw !== null) ? parseInt(dActRaw) : 5;
   const dAim      = getSelectVal('#strat-body select[data-si="D"][data-sf="aim_point"]')    || 'None';
   const dDef      = getSelectVal('#strat-body select[data-si="D"][data-sf="defense_point"]') || 'None';
-  strats.push({trigger:'Always', style:dStyle, activity:dActivity, aim_point:dAim, defense_point:dDef});
+  strats.push({trigger:'Always (Default Loop)', style:dStyle, activity:dActivity, aim_point:dAim, defense_point:dDef});
 
   // Training
   const trains = [

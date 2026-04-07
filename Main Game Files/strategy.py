@@ -13,6 +13,7 @@
 from dataclasses import dataclass
 from typing import Optional, List
 from warrior import Warrior, Strategy
+from weapons import get_weapon
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +50,17 @@ class FighterState:
         return self.endurance <= 20.0
 
     @property
-    def is_tired(self) -> bool:
+    def is_somewhat_tired(self) -> bool:
         return self.endurance <= 40.0
+
+    @property
+    def is_slightly_tired(self) -> bool:
+        return self.endurance <= 60.0
+
+    # Legacy alias kept for backwards compatibility with old saves
+    @property
+    def is_tired(self) -> bool:
+        return self.is_somewhat_tired
 
     @property
     def is_dying(self) -> bool:
@@ -65,11 +75,51 @@ class FighterState:
         if pct < 0.10:
             return "none"
         elif pct < 0.30:
-            return "light"
+            return "slight"
         elif pct < 0.60:
             return "medium"
         else:
             return "heavy"
+
+
+# ---------------------------------------------------------------------------
+# TRIGGER HELPERS
+# ---------------------------------------------------------------------------
+
+_HEAVY_ARMOR  = {"Chain", "Half-Plate", "Full Plate"}
+_MEDIUM_ARMOR = {"Cuir Boulli", "Brigandine", "Scale"}
+
+
+def _armor_category(armor_name: str) -> str:
+    """Return 'heavy', 'medium', or 'light' for the given armor name."""
+    if armor_name in _HEAVY_ARMOR:
+        return "heavy"
+    if armor_name in _MEDIUM_ARMOR:
+        return "medium"
+    return "light"
+
+
+def _weapon_count(warrior: Warrior) -> int:
+    """Count non-Open-Hand weapon slots the warrior currently carries."""
+    count = 0
+    for wpn in (warrior.primary_weapon, warrior.secondary_weapon, warrior.backup_weapon):
+        if wpn and wpn != "Open Hand":
+            count += 1
+    return count
+
+
+def _throwable_count(warrior: Warrior) -> int:
+    """Count throwable weapons currently carried by the warrior."""
+    count = 0
+    for wpn_name in (warrior.primary_weapon, warrior.secondary_weapon, warrior.backup_weapon):
+        if not wpn_name or wpn_name == "Open Hand":
+            continue
+        try:
+            if get_weapon(wpn_name).throwable:
+                count += 1
+        except ValueError:
+            pass
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -87,53 +137,102 @@ def _check_trigger(
     """
     t = trigger.strip()
 
-    # --- Self conditions ---
-    if t == "Always":
+    # Never-match sentinels
+    if t in ("None", ""):
+        return False
+
+    # Always-match
+    if t in ("Always", "Always (Default Loop)"):
         return True
 
+    # --- Minute triggers ---
     if t.startswith("Minute"):
         try:
-            target_min = int(t.split()[-1])
-            return minute == target_min
+            return minute == int(t.split()[-1])
         except (ValueError, IndexError):
             return False
 
+    # --- Self fatigue ---
     if t == "You are very tired":
         return self_state.is_very_tired
+    if t == "You are somewhat tired":
+        return self_state.is_somewhat_tired
+    if t == "You are slightly tired":
+        return self_state.is_slightly_tired
+    if t == "You are tired":                       # legacy alias
+        return self_state.is_somewhat_tired
 
-    if t == "You are tired":
-        return self_state.is_tired
-
-    if t == "You are on the ground":
-        return self_state.is_on_ground
-
-    if t == "You have taken light damage":
-        return self_state.damage_category() == "light"
-
-    if t == "You have taken medium damage":
-        return self_state.damage_category() == "medium"
-
-    if t == "You have taken heavy damage":
-        return self_state.damage_category() == "heavy"
-
-    # --- Foe conditions ---
+    # --- Foe fatigue ---
     if t == "Your foe is very tired":
         return foe_state.is_very_tired
+    if t == "Your foe is somewhat tired":
+        return foe_state.is_somewhat_tired
+    if t == "Your foe is slightly tired":
+        return foe_state.is_slightly_tired
+    if t == "Your foe is tired":                   # legacy alias
+        return foe_state.is_somewhat_tired
 
-    if t == "Your foe is tired":
-        return foe_state.is_tired
+    # --- Self damage taken ---
+    if t == "You have taken heavy damage":
+        return self_state.damage_category() == "heavy"
+    if t == "You have taken medium damage":
+        return self_state.damage_category() == "medium"
+    if t == "You have taken slight damage":
+        return self_state.damage_category() == "slight"
+    if t == "You have taken light damage":         # legacy alias
+        return self_state.damage_category() == "slight"
 
+    # --- Foe damage taken ---
+    if t == "Your foe has taken heavy damage":
+        return foe_state.damage_category() == "heavy"
+    if t == "Your foe has taken medium damage":
+        return foe_state.damage_category() == "medium"
+    if t == "Your foe has taken slight damage":
+        return foe_state.damage_category() == "slight"
+    if t == "Your foe has taken light damage":     # legacy alias
+        return foe_state.damage_category() == "slight"
+
+    # --- Ground state ---
+    if t == "You are on the ground":
+        return self_state.is_on_ground
     if t == "Your foe is on the ground":
         return foe_state.is_on_ground
 
-    if t == "Your foe has taken light damage":
-        return foe_state.damage_category() == "light"
+    # --- Weapon state ---
+    if t == "You are weaponless":
+        return self_state.warrior.primary_weapon == "Open Hand" and _weapon_count(self_state.warrior) == 0
+    if t == "Your foe is weaponless":
+        return foe_state.warrior.primary_weapon == "Open Hand" and _weapon_count(foe_state.warrior) == 0
 
-    if t == "Your foe has taken medium damage":
-        return foe_state.damage_category() == "medium"
+    if t == "You have no throwable weapons":
+        return _throwable_count(self_state.warrior) == 0
+    if t == "You have at least one throwable weapon":
+        return _throwable_count(self_state.warrior) >= 1
+    if t == "You have exactly one throwable weapon":
+        return _throwable_count(self_state.warrior) == 1
 
-    if t == "Your foe has taken heavy damage":
-        return foe_state.damage_category() == "heavy"
+    if t == "You have exactly one weapon":
+        return _weapon_count(self_state.warrior) == 1
+    if t == "You have exactly 2 weapons":
+        return _weapon_count(self_state.warrior) == 2
+    if t == "You have more than 2 weapons":
+        return _weapon_count(self_state.warrior) > 2
+
+    # --- Foe armor category ---
+    foe_armor = foe_state.warrior.armor or "None"
+    if t == "Your foe is wearing light armor":
+        return _armor_category(foe_armor) == "light"
+    if t == "Your foe is wearing medium armor":
+        return _armor_category(foe_armor) == "medium"
+    if t == "Your foe is wearing heavy armor":
+        return _armor_category(foe_armor) == "heavy"
+
+    # --- Challenge triggers (tracked externally; always False until implemented) ---
+    if t in (
+        "You challenged your foe", "Your foe challenged you",
+        "You blood challenged your foe", "Your foe blood challenged you",
+    ):
+        return False
 
     # Unknown trigger — never matches (fail safe)
     return False
@@ -449,3 +548,28 @@ STYLE_PROPERTIES: dict[str, StyleProperties] = {
 def get_style_props(style_name: str) -> StyleProperties:
     """Return StyleProperties for a given style name, defaulting to Strike."""
     return STYLE_PROPERTIES.get(style_name, STYLE_PROPERTIES["Strike"])
+
+
+# ---------------------------------------------------------------------------
+# STYLE-SKILL SYNERGY MAP
+# ---------------------------------------------------------------------------
+# Lists the skills most important to each style.  As a warrior trains these
+# skills, the natural flaws of the style are gradually reduced.
+# Used by the training advisor and post-fight skill suggestions.
+
+STYLE_SKILL_SYNERGY: dict[str, list[str]] = {
+    "Counterstrike":      ["Parry", "Initiative", "Feint", "Riposte"],
+    "Decoy":              ["Feint", "Parry", "Acrobatics", "Riposte"],
+    "Lunge":              ["Lunge", "Initiative", "Dodge", "Charge"],
+    "Wall of Steel":      ["Initiative", "Parry", "Dodge", "Feint", "Riposte", "Strike"],
+    "Martial Combat":     ["Brawl", "Sweep", "Dodge", "Acrobatics", "Charge"],
+    "Bash":               ["Charge", "Bash", "Strike"],
+    "Sure Strike":        ["Feint", "Riposte", "Strike"],
+    "Engage & Withdraw":  ["Dodge", "Lunge", "Acrobatics", "Charge", "Riposte"],
+    "Defend":             ["Disarm", "Sweep", "Acrobatics"],
+    "Slash":              ["Slash", "Cleave", "Strike"],
+    "Parry":              ["Parry", "Riposte", "Disarm"],
+    "Opportunity Throw":  ["Throw", "Initiative", "Feint"],
+    "Calculated Attack":  ["Initiative", "Slash", "Strike", "Feint", "Riposte"],
+    "Strike":             ["Strike", "Initiative", "Bash", "Cleave", "Charge"],
+}

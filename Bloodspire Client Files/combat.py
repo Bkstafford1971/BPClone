@@ -614,6 +614,12 @@ def _update_endurance(
             ln = N.anxious_line(state.warrior.name, foe.warrior.name)
             if ln:
                 lines.append(ln)
+    if props.intimidate and strategy.activity >= 5:
+        drain = (strategy.activity - 4) * 1.0   # 1.0 per activity level above 4 (max 5.0 at activity 9)
+        foe.endurance = max(0.0, foe.endurance - drain)
+        ln = N.intimidate_line(state.warrior.name, foe.warrior.name)
+        if ln:
+            lines.append(ln)
     if state.endurance <= 20 and random.random() < 0.40:
         lines.append(N.fatigue_line(state.warrior.name, state.warrior.gender, True))
     elif state.endurance <= 40 and random.random() < 0.20:
@@ -1169,7 +1175,7 @@ class CombatEngine:
             self._emit(ln)
 
         dmg, wcats = _calc_damage_hybrid(att, ax, wpn, dfr, margin)
-        self._emit(N.damage_line(dmg, dfr.max_hp))
+        self._emit(N.damage_line(dmg, dfr.max_hp, cat))
 
         prev_hp        = ds_.current_hp
         ds_.current_hp -= dmg
@@ -1257,7 +1263,7 @@ class CombatEngine:
         for ln in N.hit_line(att.name, dfr.name, wpn, cat, ax.aim_point, "precise", attacker_race=att.race.name):
             self._emit(ln)
         dmg, _ = _calc_damage_hybrid(att, ax, wpn, dfr, 40)
-        self._emit(N.damage_line(dmg, dfr.max_hp))
+        self._emit(N.damage_line(dmg, dfr.max_hp, cat))
         prev       = ds_.current_hp
         ds_.current_hp -= dmg
 

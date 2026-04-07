@@ -1,17 +1,13 @@
 ﻿# =============================================================================
 # races.py — BLOODSPIRE Race Definitions
 # =============================================================================
-# Contains all 6 playable races and 2 NPC races with their modifiers.
+# Contains all 10 playable races and 2 NPC races with their modifiers.
 #
-# APPROXIMATION PHILOSOPHY (used throughout this file):
-#   The guide uses qualitative language ("slight bonus", "very high damage bonus").
-#   We convert these to numeric values using this scale:
-#     "slight"    = ±1
-#     "moderate"  = ±2
-#     "large"     = ±3
-#     "very high" = ±4
-#     "major"     = ±5
-#   All approximations are marked with "# APPROX:" in comments.
+# DESIGN PHILOSOPHY (Zero-Sum):
+#   - Median warrior (all stats = 12) is true baseline
+#   - Every bonus has a proportional penalty
+#   - Luck (1-30) is universal and naturally amplifies strengths/weaknesses
+#   - No "super race" — all are viable but require different playstyles
 # =============================================================================
 
 from dataclasses import dataclass, field
@@ -116,18 +112,16 @@ RACES: dict[str, Race] = {
         name="Human",
         is_playable=True,
         description=(
-            "The 'base' race — average in all areas, but supremely adaptable. "
-            "Humans train attributes more easily than any other race and suffer "
-            "fewer permanent injuries. They have no weapon preferences, making "
-            "them viable with any fighting style."
+            "The adaptable everyman. No extreme strengths or weaknesses, "
+            "but supremely adaptable. Humans train attributes more easily "
+            "and suffer fewer permanent injuries."
         ),
         base_height_in=67,    # 5'7" male SIZE-12 midpoint (range 5'2"–6'4")
         base_weight_lbs=165,
         modifiers=RacialModifiers(
-            # Guide: "Humans tend to train stats better and take fewer permanent injuries"
-            trains_stats_faster=True,   # APPROX: +20% chance to gain extra train progress
-            fewer_perms=True,           # APPROX: -15% base permanent injury chance
-            preferred_weapons=[],       # No preference: "basically, they're average"
+            trains_stats_faster=True,   # +20% training speed
+            fewer_perms=True,           # -20% permanent injury chance
+            preferred_weapons=[],
             favored_opponents="All races — Humans fight well against everyone.",
             disfavored_opponents="None in particular.",
         ),
@@ -138,22 +132,18 @@ RACES: dict[str, Race] = {
         name="Half-Orc",
         is_playable=True,
         description=(
-            "Brutes who rely on pure offense. Half-Orcs deal tremendous damage "
-            "and take punishment well, but swing slowly and lack finesse. "
-            "They come back from the brink of defeat with single devastating blows."
+            "Pure brute force. Devastating damage and high durability, "
+            "but slow, clumsy, and easy to outmaneuver."
         ),
         base_height_in=75,    # 6'3" male SIZE-12 midpoint (range 5'5"–7'6")
         base_weight_lbs=259,
         modifiers=RacialModifiers(
-            # Guide: "very high damage bonus" → APPROX: +4 flat damage per hit
-            damage_bonus=4,
-            # Guide: "moderate HP bonus"    → APPROX: +8 max HP
-            hp_bonus=8,
-            # Guide: "big attack rate penalty"   → APPROX: -3 on action scale
-            attack_rate_penalty=3,
-            # Guide: "slight dodge and parry penalties" → APPROX: -1 each
-            dodge_penalty=1,
-            parry_penalty=1,
+            damage_bonus=8,              # Massive offensive payoff
+            hp_bonus=6,                  # Very tough
+            attack_rate_penalty=4,       # Slow swings
+            initiative_bonus=-3,         # Slow to act
+            dodge_penalty=3,
+            parry_penalty=3,
             preferred_weapons=[
                 "War Flail", "Great Axe", "Great Sword", "War Hammer",
                 "Battle Flail", "Halberd", "Great Pick", "Tower Shield",
@@ -168,23 +158,18 @@ RACES: dict[str, Race] = {
         name="Halfling",
         is_playable=True,
         description=(
-            "Infuriating to fight. At 33 inches tall, Halflings are nearly "
-            "impossible to hit cleanly. They skitter, hop, and poke at blind spots. "
-            "Devastating early, but their light frames limit damage output."
+            "Infuriatingly hard to hit. Extremely fast and mobile, "
+            "but extremely fragile with very light damage output."
         ),
         base_height_in=46,    # 3'10" male SIZE-12 midpoint (range 3'1"–5'1")
         base_weight_lbs=49,
         modifiers=RacialModifiers(
-            # Guide: "big dodge bonus"        → APPROX: +4
-            dodge_bonus=4,
-            # Guide: "large action rate bonus"→ APPROX: +3
-            attack_rate_bonus=3,
-            # Guide: "decent Martial Combat bonus"
+            dodge_bonus=7,               # Hardest to hit in the game
+            attack_rate_bonus=4,         # Very fast
             martial_combat_bonus=True,
-            # Guide: "major damage penalty"   → APPROX: -4 (biggest penalty in game)
-            damage_penalty=4,
-            # Guide: "average parrying penalty" → APPROX: -2
-            parry_penalty=2,
+            damage_penalty=6,            # Biggest damage penalty in game
+            parry_penalty=3,
+            hp_bonus=-6,                 # Extremely fragile
             preferred_weapons=[
                 "Short Sword", "Stiletto", "Hatchet", "Quarterstaff",
                 "Javelin", "Bladed Flail", "Hammer",
@@ -203,27 +188,19 @@ RACES: dict[str, Race] = {
         name="Dwarf",
         is_playable=True,
         description=(
-            "The toughest warriors in the Pit. Dwarves absorb punishment, parry "
-            "masterfully, and wear heavier armor than their size suggests. "
-            "They are slow but hit with bone-crushing force."
+            "The ultimate tank. Absorbs massive punishment and parries "
+            "masterfully, but very slow and poor at dodging."
         ),
         base_height_in=50,    # 4'2" male SIZE-12 midpoint (range 3'6"–5'2")
         base_weight_lbs=195,  # Dense — notably heavier than height implies
         modifiers=RacialModifiers(
-            # Guide: "most HP in the game"      → APPROX: +12 HP
-            hp_bonus=12,
-            # Guide: "bonus to damage"          → APPROX: +2
-            damage_bonus=2,
-            # Guide: "bonus to Parry"           → APPROX: +3
-            parry_bonus=3,
-            # Guide: "slight penalty to attack rate" → APPROX: -1
-            attack_rate_penalty=1,
-            # Guide: "slight penalty to dodging" → APPROX: -1
-            dodge_penalty=1,
-            # Guide: "increased armor carrying capacity"
-            armor_capacity_bonus=True,    # APPROX: counts as +3 STR for armor weight only
-            # Guide: "bonus when using a shield"
-            shield_bonus=True,            # APPROX: +2 effective parry when shield equipped
+            hp_bonus=12,                 # Highest HP in game
+            damage_bonus=3,
+            parry_bonus=6,               # Master parriers
+            armor_capacity_bonus=True,
+            shield_bonus=True,
+            attack_rate_penalty=3,
+            dodge_penalty=4,             # Very poor dodge
             preferred_weapons=[
                 "Battle Axe", "Fransisca", "Great Axe", "Morningstar",
                 "War Hammer", "Boar Spear", "Target Shield", "Net", "Trident",
@@ -239,16 +216,16 @@ RACES: dict[str, Race] = {
         name="Half-Elf",
         is_playable=True,
         description=(
-            "Angry and capable. Thrown out of Elven society, Half-Elves entered "
-            "the Pit to prove themselves. They favor bladed and thrown weapons, "
-            "and can wield slightly larger weapons than their build suggests."
+            "Versatile and capable. Slight edge in weapon handling "
+            "with no major weaknesses or strengths."
         ),
         base_height_in=64,    # 5'4" male SIZE-12 midpoint (range 5'0"–6'0")
         base_weight_lbs=144,
         modifiers=RacialModifiers(
-            # Guide: "slight bonus to wielding bigger weapons"
-            # APPROX: Treated as +1 effective STR for weapon weight requirements only.
-            bigger_weapons_bonus=True,
+            bigger_weapons_bonus=True,   # Can use slightly heavier weapons
+            attack_rate_bonus=1,
+            dodge_bonus=2,
+            damage_bonus=1,              # Mild all-rounder bonuses
             preferred_weapons=[
                 "Pole Axe", "Bastard Sword", "Long Sword", "Scimitar",
                 "Battle Flail", "Scythe", "Javelin", "Broadsword",
@@ -267,21 +244,17 @@ RACES: dict[str, Race] = {
         name="Elf",
         is_playable=True,
         description=(
-            "Elusive and fast. Veterans laughed when Elves entered the Pit with "
-            "small blades — they stopped laughing quickly. Elves are masters of "
-            "speed, dual-wielding, and thrown weapons. Fragile, but nearly untouchable."
+            "Elusive speed demons. Masters of dual-wielding and evasion, "
+            "but extremely fragile."
         ),
         base_height_in=62,    # 5'2" male SIZE-12 midpoint (range 4'8"–5'11")
         base_weight_lbs=129,
         modifiers=RacialModifiers(
-            # Guide: "slight dodge bonus"        → APPROX: +2
-            dodge_bonus=2,
-            # Guide: "bonus to attack rate"      → APPROX: +2
-            attack_rate_bonus=2,
-            # Guide: "slight HP penalty"         → APPROX: -6 (least HP in game)
-            hp_bonus=-6,
-            # Guide: "bonus when using dual weapons"
-            dual_weapon_bonus=True,     # APPROX: +1 attack action when both hands armed
+            dodge_bonus=5,
+            attack_rate_bonus=5,
+            dual_weapon_bonus=True,
+            hp_bonus=-7,                 # Most fragile race
+            damage_penalty=2,
             preferred_weapons=[
                 "Dagger", "Short Sword", "Scimitar", "Scythe", "Flail",
                 "Javelin", "Stiletto", "Epee",
@@ -296,25 +269,18 @@ RACES: dict[str, Race] = {
         name="Goblin",
         is_playable=True,
         description=(
-            "Small, vicious scavengers and dirty fighters. Fast and tricky with thrown weapons, "
-            "but physically weak and struggle with heavy arms. They excel at throwing sand, "
-            "scavenging weapons, and acrobatic hit-and-run tactics."
+            "Tiny dirty fighters. Extremely fast and tricky with thrown weapons, "
+            "but very weak and fragile."
         ),
         base_height_in=42,    # 3'6" male — tiny
         base_weight_lbs=48,
         modifiers=RacialModifiers(
-            # Guide: "highest action economy among small races"
-            attack_rate_bonus=3,
-            # Guide: "they love striking first"
-            initiative_bonus=3,
-            # Guide: "small and skittering"
-            dodge_bonus=2,
-            # Guide: "tiny frames = weak hits"
-            damage_penalty=3,
-            # Guide: "extremely fragile"
-            hp_bonus=-5,
-            # Guide: "physically weak"
-            strength_penalty=2,
+            attack_rate_bonus=5,
+            initiative_bonus=5,
+            dodge_bonus=4,
+            damage_penalty=6,
+            hp_bonus=-7,
+            strength_penalty=4,
             thrown_mastery=True,
             scavenger=True,
             heavy_weapon_penalty=True,
@@ -336,27 +302,19 @@ RACES: dict[str, Race] = {
         name="Gnome",
         is_playable=True,
         description=(
-            "Small, surprisingly tough and crafty inventors and tacticians. Gnomes are hardy "
-            "for their size, learn quickly, and excel at turning aggression against opponents "
-            "through clever counterstrikes and ripostes. They favor precise swords and bludgeons."
+            "Small, surprisingly tough tacticians. Excel at counterstrikes "
+            "and turning aggression against opponents."
         ),
         base_height_in=40,    # 3'4" male — smallest playable race
         base_weight_lbs=85,
         modifiers=RacialModifiers(
-            # Guide: "remarkably durable for their small stature"
-            hp_bonus=7,
-            # Guide: "they are quick learners, similar to but slightly weaker than Humans"
-            trains_stats_faster=True,  # APPROX: ~18% faster (similar to humans' 20%)
-            # Guide: "naturally good at deflecting blows"
-            parry_bonus=2,
-            # Guide: "small and defensive"
-            dodge_bonus=1,
-            # Guide: "they hit lighter than bigger races"
-            damage_penalty=2,
-            # Guide: "not the fastest; they prefer careful, measured fighting"
-            attack_rate_penalty=1,
+            hp_bonus=6,
+            trains_stats_faster=True,
+            parry_bonus=5,
             counterstrike_mastery=True,
             tactician_edge=True,
+            damage_penalty=3,
+            attack_rate_penalty=2,
             preferred_weapons=[
                 "Short Sword", "Long Sword", "Epee", "Bastard Sword",
                 "Hammer", "Mace", "Morningstar", "War Hammer",
@@ -375,23 +333,18 @@ RACES: dict[str, Race] = {
         name="Lizardfolk",
         is_playable=True,
         description=(
-            "Savage reptilian predators. Tough, relentless fighters who rely on natural claws, "
-            "powerful tail strikes, and kicks. They are the best Martial Combat race with natural "
-            "armor that scales with layered protection."
+            "Savage reptilian predators. Tough, relentless, with natural "
+            "armor and weapons, but cold-blooded and slower to accelerate."
         ),
         base_height_in=72,    # 6'0" male — larger than humans, muscular
         base_weight_lbs=240,  # Muscular / dense
         modifiers=RacialModifiers(
-            # Guide: "exceptional toughness"
             hp_bonus=9,
-            # Guide: "clearly the strongest Martial Combat users"
-            natural_weapon_bonus=True,  # +3 damage with MC / claws / tail / kicks
+            natural_weapon_bonus=True,   # +3 with Martial Combat / claws
             martial_combat_bonus=True,
-            # Guide: "small dodge bonus"
-            dodge_bonus=1,
-            # Guide: "cold-blooded — slower to accelerate"
-            attack_rate_penalty=2,
-            natural_armor=True,  # Scales = Scale armor equiv, with layering rules
+            natural_armor=True,
+            dodge_bonus=2,
+            attack_rate_penalty=3,       # Cold-blooded = slower start
             preferred_weapons=[
                 "Open Hand", "Dagger", "Stiletto", "Short Sword", "Hatchet",
                 "Hammer", "Mace", "Quarterstaff",
@@ -409,27 +362,19 @@ RACES: dict[str, Race] = {
         name="Tabaxi",
         is_playable=True,
         description=(
-            "Lightning-quick, acrobatic feline warriors. Tabaxi are masters of speed, evasion, "
-            "and fluid movement. They dart in and out of combat with vaults and tumbles, but are "
-            "fragile and tire quickly in prolonged fights."
+            "Lightning-quick acrobatic felines. Best evasion in the game, "
+            "but fragile and tire quickly in long fights."
         ),
         base_height_in=58,    # 4'10" male — slightly shorter than average human with feline build
         base_weight_lbs=115,  # Light and lean
         modifiers=RacialModifiers(
-            # Guide: "best pure evasion in the game"
-            dodge_bonus=4,
-            # Guide: "they frequently strike first"
-            initiative_bonus=3,
-            # Guide: "light, agile build"
-            hp_bonus=-6,
-            # Guide: "they tire faster than most races"
-            # endurance_penalty=-3,  (doesn't exist in RacialModifiers yet, handled in combat)
-            # Guide: "not built for raw power"
-            strength_penalty=2,
+            dodge_bonus=7,               # Best pure evasion
+            initiative_bonus=5,
             acrobatic_advantage=True,
             frenzy_ability=True,
+            hp_bonus=-7,
+            strength_penalty=3,
             heavy_weapon_penalty=True,
-            spear_exception=True,
             preferred_weapons=[
                 "Dagger", "Short Sword", "Scimitar", "Epee", "Stiletto",
                 "Hatchet", "Javelin", "Scythe", "Spear",

@@ -514,54 +514,231 @@ def hit_line(
 # DAMAGE DESCRIPTION LINES
 # ---------------------------------------------------------------------------
 
-DAMAGE_LINES: dict[str, list[str]] = {
-    "scratch": [
-        "   Barely a scratch!",
-        "   The blow glances off without finding flesh!",
-        "   Little damage results from the strike",
-        "   The armor absorbs most of the impact",
-        "   The blow does almost nothing",
-    ],
-    "light": [
-        "   A minor hit!",
-        "   Some damage is done",
-        "   A glancing blow!",
-        "   The blow lands without full force",
-        "   The armor softens the worst of it",
-    ],
-    "solid": [
-        "   A solid blow has been struck!",
-        "   The resulting crunch echoes through the BLOODSPIRE!",
-        "   A telling hit!",
-        "   The blow has real authority behind it!",
-        "   That one will leave a mark!",
-    ],
-    "heavy": [
-        "   The blow lands with bone-breaking force!",
-        "   A devastating strike!",
-        "   That one hurt badly!",
-        "   The crowd winces at the sound of that blow!",
-        "   A powerful hit draws screams from the crowd!",
-    ],
-    "severe": [
-        "   The wound delivers terrible agony!",
-        "   Great gobs of gore gush from the gash!",
-        "   The strike lands with flesh-splattering fury!",
-        "   Blood sprays through the air!",
-        "   An absolutely monstrous blow!",
-    ],
+DAMAGE_LINES: dict[str, dict[str, list[str]]] = {
+    "Slashing": {
+        "Heavy": [
+            "   The blade carves a horrific canyon through flesh and muscle!",
+            "   A terrible slash opens wide, spilling blood in sheets!",
+            "   The edge shears through meat with savage force!",
+            "   A gruesome flap of skin and muscle is laid open!",
+            "   The strike slices deep, nearly severing the limb!",
+            "   Blood erupts as the blade cuts a vital channel!",
+            "   The slash leaves a ragged, gaping wound!",
+            "   Flesh parts violently beneath the keen edge!",
+            "   A horrific cut is torn across the warrior's torso!",
+            "   The blade bites deep and opens the body!",
+            "   A savage slash nearly takes the warrior's arm!",
+            "   The strike opens a long, ghastly wound!",
+            "   Blood sprays wildly from the deep slash!",
+            "   The edge cleaves through muscle and sinew!",
+            "   A brutal cut lays the warrior's side open!",
+        ],
+        "Medium": [
+            "   The blade opens a deep, bleeding gash!",
+            "   A clean slash draws a heavy flow of blood!",
+            "   The weapon cuts a painful channel through flesh!",
+            "   A long, weeping laceration is left behind!",
+            "   The strike slices through skin and muscle!",
+            "   Blood runs freely from the fresh cut!",
+            "   The blade leaves a wide, angry wound!",
+            "   A solid slash opens across the warrior's body!",
+            "   The edge bites deep and draws crimson!",
+            "   A painful cut is carved into the target!",
+        ],
+        "Light": [
+            "   The blade merely kisses the skin!",
+            "   A shallow cut appears along the surface!",
+            "   The weapon skims across and draws a thin line!",
+            "   Only a superficial slash is left behind!",
+            "   The strike glances off, leaving a minor score!",
+            "   A light cut wells up with a few drops of blood!",
+            "   The edge scrapes across the skin!",
+            "   A thin red line marks where the blade passed!",
+            "   The slash is more sting than true damage!",
+            "   Blood beads along a shallow graze!",
+        ],
+    },
+    "Piercing": {
+        "Heavy": [
+            "   The point drives deep into the body with brutal force!",
+            "   The weapon punches through flesh and out the other side!",
+            "   A horrific puncture wound is torn through the warrior!",
+            "   The strike impales the target with savage power!",
+            "   The point sinks in and finds something vital!",
+            "   A gaping hole is left where the weapon withdrew!",
+            "   The thrust punches straight through armor and meat!",
+            "   The warrior is skewered by the powerful strike!",
+            "   Blood gushes from the deep puncture!",
+            "   The point drives in with bone-cracking force!",
+        ],
+        "Medium": [
+            "   The point sinks deep and draws a heavy flow!",
+            "   A clean puncture wound is left behind!",
+            "   The weapon drives in and comes out red!",
+            "   Blood wells up from the deep stab!",
+            "   The thrust punches through muscle and out again!",
+            "   A painful hole is torn into the warrior's body!",
+            "   The point finds meat and draws freely!",
+            "   A solid stab opens a bleeding channel!",
+            "   Blood flows steadily from the puncture!",
+            "   The weapon sinks in and leaves a deep wound!",
+        ],
+        "Light": [
+            "   The point merely pricks the skin!",
+            "   A shallow puncture appears!",
+            "   The weapon skims in and draws a thin bead of blood!",
+            "   Only a minor stab wound is left behind!",
+            "   The thrust glances off, leaving a small hole!",
+            "   A light prick wells up with a few drops!",
+            "   The point barely breaks the surface!",
+            "   A superficial stab mark appears!",
+            "   The weapon nicks the flesh and withdraws!",
+            "   Blood beads from a shallow puncture!",
+        ],
+    },
+    "Bludgeoning": {
+        "Heavy": [
+            "   The blow lands with bone-shattering force!",
+            "   A sickening crunch echoes as bone breaks!",
+            "   The strike caves in flesh and crushes what lies beneath!",
+            "   The impact rattles the warrior's entire skeleton!",
+            "   A devastating smash pulps muscle and bone!",
+            "   The hit lands like a falling anvil!",
+            "   Bone gives way with a horrible crack!",
+            "   The warrior is smashed backward by the brutal force!",
+            "   The blow turns the target area into a bloody ruin!",
+            "   A crushing impact echoes across the arena!",
+        ],
+        "Medium": [
+            "   The strike lands with heavy, punishing force!",
+            "   A solid crunch is heard as the blow connects!",
+            "   The hit drives the air from the warrior's lungs!",
+            "   The weapon smashes into flesh with satisfying weight!",
+            "   A painful bruise forms beneath the skin!",
+            "   The blow rocks the warrior back on their heels!",
+            "   The strike connects with meaty impact!",
+            "   A heavy thud echoes as the weapon lands!",
+            "   The hit leaves a deep, angry bruise!",
+            "   The warrior staggers from the solid impact!",
+        ],
+        "Light": [
+            "   The blow lands lightly, more sting than damage!",
+            "   A dull thud is all that results!",
+            "   The strike barely connects with force!",
+            "   The hit is more jarring than damaging!",
+            "   The weapon smacks against the body with little effect!",
+            "   A light impact rocks the warrior slightly!",
+            "   The blow stings but does little real harm!",
+            "   The strike connects with minimal force!",
+            "   A weak smack is all the warrior feels!",
+            "   The hit lands with little more than a slap!",
+        ],
+    },
+    "Cleaving": {
+        "Heavy": [
+            "   The strike cleaves through bone and muscle with terrifying force!",
+            "   The blow splits the warrior wide open in a horrific wound!",
+            "   The attack hacks deep into flesh, nearly severing the limb!",
+            "   The weapon tears a gruesome channel through the body!",
+            "   The strike cleaves violently through meat and bone!",
+            "   A devastating chop lays the warrior's side open!",
+            "   The blow cuts through the target with savage power!",
+            "   The strike splits flesh and bone in a single brutal motion!",
+            "   The weapon cleaves a massive, gaping wound!",
+            "   The attack hacks through the warrior with bone-splitting force!",
+            "   A horrific cleave nearly takes the limb!",
+            "   The blow tears a ragged canyon through the body!",
+            "   The strike cleaves with unstoppable momentum!",
+            "   The weapon splits the warrior open with brutal efficiency!",
+            "   A terrible cleaving wound is torn into the target!",
+        ],
+        "Medium": [
+            "   The strike cleaves a deep, bleeding wound!",
+            "   The blow hacks into flesh with solid force!",
+            "   The attack cuts a wide, painful channel!",
+            "   The weapon cleaves through muscle and draws heavy blood!",
+            "   A powerful chop opens a long, weeping gash!",
+            "   The strike cleaves deeply into the warrior!",
+            "   The blow hacks a painful wound into the body!",
+            "   The attack cleaves through skin and meat!",
+            "   The weapon cuts a deep, angry furrow!",
+            "   The strike cleaves with punishing weight!",
+        ],
+        "Light": [
+            "   The strike merely grazes with a cleaving edge!",
+            "   The blow skims across and leaves a shallow chop!",
+            "   The attack nicks the warrior lightly!",
+            "   The weapon glances off in a minor cleave!",
+            "   A light chop scrapes across the surface!",
+            "   The strike barely breaks the skin with its edge!",
+            "   The blow lands as little more than a cleaving nick!",
+            "   The attack skims across and draws a thin line!",
+            "   The weapon kisses the flesh with a shallow chop!",
+            "   The strike leaves only a superficial cleave!",
+        ],
+    },
+    "Generic": {
+        "Heavy": [
+            "   The strike lands with devastating force!",
+            "   A horrific wound is torn open by the blow!",
+            "   The attack hits with bone-crushing power!",
+            "   Blood erupts violently from the impact!",
+            "   The blow caves in flesh and crushes what lies beneath!",
+            "   A terrible wound is left in the wake of the strike!",
+            "   The hit lands with savage, punishing force!",
+            "   Blood sprays wildly as the blow connects!",
+            "   The strike nearly folds the warrior in half!",
+            "   A gruesome wound is carved into the body!",
+        ],
+        "Medium": [
+            "   The strike lands with solid, painful force!",
+            "   A deep wound is opened by the blow!",
+            "   The attack connects heavily and draws blood!",
+            "   The hit rocks the warrior back on their heels!",
+            "   A painful wound is left in the wake of the strike!",
+            "   Blood flows steadily from the fresh injury!",
+            "   The blow lands with satisfying weight!",
+            "   The strike opens a bleeding channel!",
+            "   The attack hits hard enough to stagger!",
+            "   A solid wound is carved into the warrior!",
+        ],
+        "Light": [
+            "   The strike barely breaks the skin!",
+            "   The blow glances off and draws a thin line!",
+            "   The attack skims across the surface!",
+            "   Only a superficial wound is left behind!",
+            "   The hit stings more than it harms!",
+            "   Blood beads up along a minor graze!",
+            "   The strike lands lightly and is shrugged off!",
+            "   A shallow cut appears on the skin!",
+            "   The blow merely kisses the flesh!",
+            "   The attack draws only a few drops of blood!",
+        ],
+    },
+}
+
+# Map weapon categories to damage types
+_WEAPON_DAMAGE_TYPE: dict[str, str] = {
+    "Sword/Knife":    "Slashing",
+    "Axe/Pick":       "Cleaving",
+    "Hammer/Mace":    "Bludgeoning",
+    "Polearm/Spear":  "Piercing",
+    "Flail":          "Bludgeoning",
+    "Shield":         "Bludgeoning",
+    "Oddball":        "Generic",
 }
 
 
-def damage_line(damage: int, max_hp: int) -> str:
-    """Return a damage description line based on damage as a fraction of max HP."""
+def damage_line(damage: int, max_hp: int, weapon_category: str = "Oddball") -> str:
+    """Return a damage description line based on damage severity and weapon type."""
     pct = damage / max(1, max_hp)
-    if   pct < 0.05: tier = "scratch"
-    elif pct < 0.12: tier = "light"
-    elif pct < 0.22: tier = "solid"
-    elif pct < 0.35: tier = "heavy"
-    else:            tier = "severe"
-    return random.choice(DAMAGE_LINES[tier])
+    if   pct < 0.12: severity = "Light"
+    elif pct < 0.30: severity = "Medium"
+    else:            severity = "Heavy"
+
+    dmg_type = _WEAPON_DAMAGE_TYPE.get(weapon_category, "Generic")
+    pool = DAMAGE_LINES[dmg_type][severity]
+    return random.choice(pool)
 
 
 # ---------------------------------------------------------------------------
@@ -1186,6 +1363,25 @@ def anxious_line(warrior_name: str, foe_name: str) -> Optional[str]:
     """Only fires for styles with anxiously_awaits=True, ~20% chance."""
     if random.random() < 0.20:
         t = random.choice(ANXIOUS_LINES)
+        return t.format(warrior=warrior_name.upper(), foe=foe_name.upper())
+    return None
+
+
+INTIMIDATE_LINES = [
+    "{warrior}'s relentless assault is beginning to rattle {foe}!",
+    "{foe} flinches under the ferocity of {warrior}'s onslaught!",
+    "The sheer savagery of {warrior}'s assault wears on {foe}'s nerves!",
+    "{warrior} presses forward with terrifying aggression — {foe} backs away!",
+    "The crowd roars as {warrior}'s ferocity visibly shakes {foe}!",
+    "{foe} struggles to keep composure under {warrior}'s relentless pressure!",
+    "{warrior}'s wild fury is taking a psychological toll on {foe}!",
+]
+
+
+def intimidate_line(warrior_name: str, foe_name: str) -> Optional[str]:
+    """Only fires for styles with intimidate=True at high activity, ~25% chance."""
+    if random.random() < 0.25:
+        t = random.choice(INTIMIDATE_LINES)
         return t.format(warrior=warrior_name.upper(), foe=foe_name.upper())
     return None
 
