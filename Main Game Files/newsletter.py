@@ -250,9 +250,9 @@ def _dead_section(deaths: list, turn_num: int) -> str:
 def _fights_section(card) -> str:
     sep="="*75
     lines=["\nLAST TURN'S FIGHTS",sep]
-    # Monster fights first, then rivalry/challenge, then peasant
-    _order = {"monster":0,"blood_challenge":1,"challenge":1,"rivalry":2,"peasant":3}
-    sorted_card = sorted(card, key=lambda b: _order.get(getattr(b,"fight_type","rivalry"), 2))
+    # Monster fights first, then champion title fights, then rivalry/challenge, then peasant
+    _order = {"monster":0,"champion":1,"blood_challenge":2,"challenge":2,"rivalry":3,"peasant":4}
+    sorted_card = sorted(card, key=lambda b: _order.get(getattr(b,"fight_type","rivalry"), 3))
 
     # Deduplicate: collapse A-vs-B and B-vs-A to one line.
     # The fake_card in league mode contains every fight from every team's
@@ -271,7 +271,8 @@ def _fights_section(card) -> str:
         seen_pairs.add(pair)
         pw_won=r.winner and r.winner.name==pw.name
         winner=pw if pw_won else ow; loser=ow if pw_won else pw
-        mins=r.minutes_elapsed; ftype=bout.fight_type.replace("_"," ")
+        mins=r.minutes_elapsed
+        ftype = "Champions Title" if bout.fight_type == "champion" else bout.fight_type.replace("_"," ")
         style=_fight_style_word(mins)
         if r.loser_died:
             line=(f"{winner.name} slew {loser.name} in a {mins} minute {style} {ftype} fight."

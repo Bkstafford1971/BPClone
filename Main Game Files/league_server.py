@@ -271,99 +271,214 @@ def _run_turn(request_password, rerun_turn=None):
     #      the result keyed by both warrior names (_pvp_by_warrior).
     #   3. In the main loop, when a warrior's name is in _pvp_by_warrior, inject
     #      the pre-computed (possibly mirrored) result instead of fighting again.
+    #
+    # If the pre-pass fails for any reason, _fight_cards and _pvp_by_warrior
+    # will be empty and the main loop falls back to the old per-manager approach.
     # ===========================================================================
 
-    # warrior_name -> manager_id for all non-AI player warriors
-    player_warrior_to_mid = {}
-    for _mid, _upl in uploads.items():
-        if not _mid.startswith("ai_"):
-            for _wd in (_upl["team"].get("warriors") or []):
-                if _wd and _wd.get("name"):
-                    player_warrior_to_mid[_wd["name"]] = _mid
+    _fight_cards    = {}   # manager_id -> (pre_team, List[ScheduledFight])
+    _pvp_by_warrior = {}   # warrior_name -> pvp_data dict
 
-    # Pre-build non-AI fight cards
-    _fight_cards   = {}   # manager_id -> List[ScheduledFight]
-    for _mid, _upl in uploads.items():
-        if _mid.startswith("ai_"):
-            continue
-        try:
-            _pt = Team.from_dict(_upl["team"])
-            _pt.manager_name = _upl["manager_name"]
-        except Exception:
-            continue
-        _this_real = _upl.get("manager_id", _mid)
-        _r_list = [
-            r for mid2, r in rival_map.items()
-            if mid2 != _mid and getattr(r, "real_manager_id", mid2) != _this_real
-        ]
-        _fight_cards[_mid] = (_pt, build_fight_card(_pt, _r_list, champion_state=champ_state))
+    try:
+        # warrior_name -> manager_id for all non-AI player warriors
+        player_warrior_to_mid = {}
+        for _mid, _upl in uploads.items():
+            if not _mid.startswith("ai_"):
+                for _wd in (_upl["team"].get("warriors") or []):
+                    if _wd and _wd.get("name"):
+                        player_warrior_to_mid[_wd["name"]] = _mid
 
-    # Run each unique P-vs-P fight exactly once; track by warrior name
-    _pvp_by_warrior = {}  # warrior_name -> pvp_data dict (shared between both fighters)
-    for _mid, (_pt, _card) in _fight_cards.items():
-        _mname = uploads[_mid]["manager_name"]
-        for _bout in _card:
-            _pw  = _bout.player_warrior
-            _ow  = _bout.opponent
-            if player_warrior_to_mid.get(_ow.name) is None:
-                continue  # ow is not a player warrior
-            # Skip if either warrior is already assigned to a pre-fought match
-            if _pw.name in _pvp_by_warrior or _ow.name in _pvp_by_warrior:
+        # Pre-build non-AI fight cards
+        for _mid, _upl in uploads.items():
+            if _mid.startswith("ai_"):
                 continue
-            # Pre-assign fight ID so both managers share the same narrative ID
-            _pre_fid = _next_fid(cfg)
-            _result  = run_fight(
-                _pw, _ow,
-                team_a_name    = _pt.team_name,
-                team_b_name    = _bout.opponent_team.team_name,
-                manager_a_name = _mname,
-                manager_b_name = _bout.opponent_manager,
-                is_monster_fight = False,
-            )
-            # Scout flavor text injection
             try:
-                from save import get_all_scouted_warriors
-                _scouted = get_all_scouted_warriors(turn_num)
-                _attending = set()
-                for _ww in (_pw, _ow):
-                    for _mgr in _scouted.get(_ww.name, []):
-                        _attending.add(_mgr)
-                if _attending:
-                    _scout_line = (
-                        f"\n[A scout from {', '.join(sorted(_attending))}'s stable is in "
-                        f"attendance, watching the proceedings with a keen eye.]\n"
+                _pt = Team.from_dict(_upl["team"])
+                _pt.manager_name = _upl["manager_name"]
+            except Exception as _pe:
+                print(f"  PRE-PASS WARN: could not load team for {_upl.get('manager_name','?')}: {_pe}")
+                continue
+            try:
+                _this_real = _upl.get("manager_id", _mid)
+                _r_list = [
+                    r for mid2, r in rival_map.items()
+                    if mid2 != _mid and getattr(r, "real_manager_id", mid2) != _this_real
+                ]
+                _fc = build_fight_card(_pt, _r_list, champion_state=champ_state)
+                _fight_cards[_mid] = (_pt, _fc)
+            except Exception as _fce:
+                print(f"  PRE-PASS WARN: build_fight_card failed for {_upl.get('manager_name','?')}: {_fce}")
+                # Leave this manager out of _fight_cards; main loop will build a fresh card
+
+        # ------------------------------------------------------------------
+        # Deduplicate AI opponent usage: each named AI warrior (e.g. the
+        # champion) may only appear in ONE player's fight card per turn.
+        # Excess uses are replaced with a peasant fight so the player
+        # warrior still fights — they just don't get the champion bout.
+        # Monsters and Peasants are unlimited fodder and are NOT limited.
+        # ------------------------------------------------------------------
+        _used_ai_opponents = set()
+        _fodder_races = {"Monster", "Peasant"}
+        try:
+            from team import create_peasant_team as _cpt
+            from matchmaking import ScheduledFight as _SF_sub
+            import random as _rnd_sub
+            for _mid_ai in list(_fight_cards.keys()):
+                _pt_ai, _card_ai = _fight_cards[_mid_ai]
+                _new_card = []
+                for _b_ai in _card_ai:
+                    _ow_ai = _b_ai.opponent
+                    # Player warriors → P-vs-P logic handles them; fodder → always OK
+                    if (player_warrior_to_mid.get(_ow_ai.name) is not None
+                            or getattr(_ow_ai.race, "name", "") in _fodder_races):
+                        _new_card.append(_b_ai)
+                        continue
+                    # Named AI warrior — allow only the first user, substitute peasant for rest
+                    if _ow_ai.name in _used_ai_opponents:
+                        try:
+                            _pteam   = _cpt()
+                            _peasant = _rnd_sub.choice(_pteam.active_warriors)
+                            _new_card.append(_SF_sub(
+                                player_warrior   = _b_ai.player_warrior,
+                                opponent         = _peasant,
+                                player_team      = _pt_ai,
+                                opponent_team    = _pteam,
+                                opponent_manager = "The Arena",
+                                fight_type       = "peasant",
+                            ))
+                            print(f"  PRE-PASS: {_b_ai.player_warrior.name} vs {_ow_ai.name} "
+                                  f"— AI warrior already scheduled; substituted peasant")
+                        except Exception:
+                            pass  # warrior skips this turn — acceptable fallback
+                        continue
+                    _used_ai_opponents.add(_ow_ai.name)
+                    _new_card.append(_b_ai)
+                _fight_cards[_mid_ai] = (_pt_ai, _new_card)
+        except Exception as _ai_dedup_err:
+            print(f"  PRE-PASS WARN: AI opponent dedup failed: {_ai_dedup_err}")
+
+        # Run each unique P-vs-P fight exactly once; track by warrior name
+        for _mid, (_pt, _card) in _fight_cards.items():
+            _mname = uploads[_mid]["manager_name"]
+            for _bout in _card:
+                _pw  = _bout.player_warrior
+                _ow  = _bout.opponent
+                if player_warrior_to_mid.get(_ow.name) is None:
+                    continue  # ow is not a player warrior
+                # Skip if either warrior is already assigned to a pre-fought match
+                if _pw.name in _pvp_by_warrior or _ow.name in _pvp_by_warrior:
+                    continue
+                try:
+                    # Pre-assign fight ID so both managers share the same narrative ID
+                    _pre_fid = _next_fid(cfg)
+                    _result  = run_fight(
+                        _pw, _ow,
+                        team_a_name    = _pt.team_name,
+                        team_b_name    = _bout.opponent_team.team_name,
+                        manager_a_name = _mname,
+                        manager_b_name = _bout.opponent_manager,
+                        is_monster_fight = False,
                     )
-                    from combat import FightResult as _FR
-                    _result = _FR(
-                        winner=_result.winner, loser=_result.loser,
-                        loser_died=_result.loser_died, minutes_elapsed=_result.minutes_elapsed,
-                        narrative=_scout_line + _result.narrative,
-                        training_results=_result.training_results,
-                    )
-                # Persist scout narrative
-                for _ww in (_pw, _ow):
-                    if _ww.name in _scouted:
-                        _store_scout_narrative(_ww.name, _result.narrative, turn_num)
-            except Exception:
-                pass
-            _pvp_data = {
-                "result"         : _result,
-                "fid"            : _pre_fid,
-                "canonical_pw"   : _pw.name,
-                "canonical_ow"   : _ow.name,
-                "pw_team"        : _pt.team_name,
-                "ow_team"        : _bout.opponent_team.team_name,
-                "pw_manager"     : _mname,
-                "ow_manager"     : _bout.opponent_manager,
-                "fight_type"     : _bout.fight_type,
-                "pw_race"        : _pw.race.name,
-                "ow_race"        : _ow.race.name,
-                "pw_trained_dict": _pw.to_dict(),
-                "ow_trained_dict": _ow.to_dict(),
-            }
-            _pvp_by_warrior[_pw.name] = _pvp_data
-            _pvp_by_warrior[_ow.name] = _pvp_data
-            print(f"  PRE-FIGHT (P-vs-P): {_pw.name} vs {_ow.name} — fid={_pre_fid}")
+                    # Scout flavor text injection
+                    try:
+                        from save import get_all_scouted_warriors
+                        _scouted = get_all_scouted_warriors(turn_num)
+                        _attending = set()
+                        for _ww in (_pw, _ow):
+                            for _mgr in _scouted.get(_ww.name, []):
+                                _attending.add(_mgr)
+                        if _attending:
+                            _scout_line = (
+                                f"\n[A scout from {', '.join(sorted(_attending))}'s stable is in "
+                                f"attendance, watching the proceedings with a keen eye.]\n"
+                            )
+                            from combat import FightResult as _FR
+                            _result = _FR(
+                                winner=_result.winner, loser=_result.loser,
+                                loser_died=_result.loser_died, minutes_elapsed=_result.minutes_elapsed,
+                                narrative=_scout_line + _result.narrative,
+                                training_results=_result.training_results,
+                            )
+                        # Persist scout narrative
+                        for _ww in (_pw, _ow):
+                            if _ww.name in _scouted:
+                                _store_scout_narrative(_ww.name, _result.narrative, turn_num)
+                    except Exception:
+                        pass
+                    _pvp_data = {
+                        "result"         : _result,
+                        "fid"            : _pre_fid,
+                        "canonical_pw"   : _pw.name,
+                        "canonical_ow"   : _ow.name,
+                        "pw_team"        : _pt.team_name,
+                        "ow_team"        : _bout.opponent_team.team_name,
+                        "pw_manager"     : _mname,
+                        "ow_manager"     : _bout.opponent_manager,
+                        "fight_type"     : _bout.fight_type,
+                        "pw_race"        : _pw.race.name,
+                        "ow_race"        : _ow.race.name,
+                        "pw_trained_dict": _pw.to_dict(),
+                        "ow_trained_dict": _ow.to_dict(),
+                    }
+                    _pvp_by_warrior[_pw.name] = _pvp_data
+                    _pvp_by_warrior[_ow.name] = _pvp_data
+                    print(f"  PRE-FIGHT (P-vs-P): {_pw.name} vs {_ow.name} — fid={_pre_fid}")
+                except Exception as _pvp_err:
+                    print(f"  PRE-FIGHT WARN: P-vs-P fight {_pw.name} vs {_ow.name} failed: {_pvp_err}; will fight normally")
+                    # Remove partial entries so both warriors fight fresh in main loop
+                    _pvp_by_warrior.pop(_pw.name, None)
+                    _pvp_by_warrior.pop(_ow.name, None)
+
+        # ------------------------------------------------------------------
+        # Final cleanup pass: any card bout where ow is a player warrior
+        # already booked in a P-vs-P fight (i.e. ow.name in _pvp_by_warrior)
+        # must be replaced with a peasant, because that opponent is spoken
+        # for.  Without this, the main loop would call run_fight() on the
+        # booked warrior a second time (the pw check fires, but ow check
+        # does not — so the fight runs fresh).
+        # ------------------------------------------------------------------
+        try:
+            from team import create_peasant_team as _cpt2
+            from matchmaking import ScheduledFight as _SF2
+            import random as _rnd2
+            for _mid_cl in list(_fight_cards.keys()):
+                _pt_cl, _card_cl = _fight_cards[_mid_cl]
+                _new_cl = []
+                for _b_cl in _card_cl:
+                    _ow_cl = _b_cl.opponent
+                    _pw_cl = _b_cl.player_warrior
+                    # Only substitute when:
+                    #   • pw is NOT pre-fought (it will fall through to run_fight)
+                    #   • ow IS booked as the other side of a P-vs-P fight
+                    if (_pw_cl.name not in _pvp_by_warrior
+                            and _ow_cl.name in _pvp_by_warrior
+                            and player_warrior_to_mid.get(_ow_cl.name) is not None):
+                        try:
+                            _pt_sub  = _cpt2()
+                            _p_sub   = _rnd2.choice(_pt_sub.active_warriors)
+                            _new_cl.append(_SF2(
+                                player_warrior   = _pw_cl,
+                                opponent         = _p_sub,
+                                player_team      = _pt_cl,
+                                opponent_team    = _pt_sub,
+                                opponent_manager = "The Arena",
+                                fight_type       = "peasant",
+                            ))
+                            print(f"  PRE-PASS: {_pw_cl.name} vs {_ow_cl.name} "
+                                  f"— opponent already booked in P-vs-P; substituted peasant")
+                        except Exception:
+                            _new_cl.append(_b_cl)  # keep original as last resort
+                    else:
+                        _new_cl.append(_b_cl)
+                _fight_cards[_mid_cl] = (_pt_cl, _new_cl)
+        except Exception as _cl_err:
+            print(f"  PRE-PASS WARN: cleanup pass failed: {_cl_err}")
+
+    except Exception as _prepass_err:
+        import traceback; traceback.print_exc()
+        print(f"  PRE-PASS ERROR: {_prepass_err} — falling back to per-manager fight cards")
+        _fight_cards    = {}
+        _pvp_by_warrior = {}
 
     for manager_id, upload in uploads.items():
         mname = upload["manager_name"]
@@ -380,40 +495,45 @@ def _run_turn(request_password, rerun_turn=None):
         # Exclude all teams owned by the same manager (real manager_id match)
         this_real_mid = upload.get("manager_id", manager_id)
         is_ai_manager = manager_id.startswith("ai_")
-        if is_ai_manager:
-            # AI teams only fight other AI teams
-            rivals = [
-                r for mid, r in rival_map.items()
-                if mid != manager_id and mid.startswith("ai_")
-            ]
-            card = build_fight_card(player_team, rivals, champion_state=champ_state)
-        else:
-            # Non-AI: remap pre-built card so player_warrior objects point into
-            # the fresh player_team (ensures all in-place updates land on the
-            # right warrior objects when we call player_team.to_dict() later).
-            from matchmaking import ScheduledFight as _SF
-            _pre_pt, _pre_card = _fight_cards.get(manager_id, (None, []))
-            card = []
-            for _b in _pre_card:
-                _fresh_pw = player_team.warrior_by_name(_b.player_warrior.name)
-                if _fresh_pw is None:
-                    continue
-                card.append(_SF(
-                    player_warrior   = _fresh_pw,
-                    opponent         = _b.opponent,
-                    player_team      = player_team,
-                    opponent_team    = _b.opponent_team,
-                    opponent_manager = _b.opponent_manager,
-                    fight_type       = _b.fight_type,
-                ))
-            if not card:
-                # Fallback: build fresh card (shouldn't normally happen)
+        try:
+            if is_ai_manager:
+                # AI teams only fight other AI teams
                 rivals = [
                     r for mid, r in rival_map.items()
-                    if mid != manager_id
-                    and getattr(r, "real_manager_id", mid) != this_real_mid
+                    if mid != manager_id and mid.startswith("ai_")
                 ]
                 card = build_fight_card(player_team, rivals, champion_state=champ_state)
+            else:
+                # Non-AI: remap pre-built card so player_warrior objects point into
+                # the fresh player_team (ensures all in-place updates land on the
+                # right warrior objects when we call player_team.to_dict() later).
+                from matchmaking import ScheduledFight as _SF
+                _pre_pt, _pre_card = _fight_cards.get(manager_id, (None, []))
+                card = []
+                for _b in _pre_card:
+                    _fresh_pw = player_team.warrior_by_name(_b.player_warrior.name)
+                    if _fresh_pw is None:
+                        continue
+                    card.append(_SF(
+                        player_warrior   = _fresh_pw,
+                        opponent         = _b.opponent,
+                        player_team      = player_team,
+                        opponent_team    = _b.opponent_team,
+                        opponent_manager = _b.opponent_manager,
+                        fight_type       = _b.fight_type,
+                    ))
+                if not card:
+                    # Fallback: build fresh card
+                    rivals = [
+                        r for mid, r in rival_map.items()
+                        if mid != manager_id
+                        and getattr(r, "real_manager_id", mid) != this_real_mid
+                    ]
+                    card = build_fight_card(player_team, rivals, champion_state=champ_state)
+        except Exception as _card_err:
+            import traceback; traceback.print_exc()
+            print(f"  ERROR building fight card for {mname}: {_card_err} — skipping manager")
+            continue
 
         fight_logs, bouts = {}, []
         for bout in card:
@@ -656,21 +776,25 @@ def _run_turn(request_password, rerun_turn=None):
         all_results[manager_id] = mgr_res
 
     # Update standings (skip AI-only results from standings if desired, but include them)
-    standings = _load_standings()
-    for mid, res in all_results.items():
-        if mid not in standings:
-            standings[mid] = {"manager_name": res["manager_name"], "turns_played": 0,
-                              "warriors": {}, "is_ai": mid.startswith("ai_")}
-        e = standings[mid]; e["turns_played"] += 1
-        for wd in res["team"].get("warriors", []):
-            if not wd: continue
-            wn = wd["name"]
-            if wn not in e["warriors"]:
-                e["warriors"][wn] = {"wins":0,"losses":0,"kills":0,"fights":0}
-            ws = e["warriors"][wn]
-            ws.update(wins=wd.get("wins",0), losses=wd.get("losses",0),
-                      kills=wd.get("kills",0), fights=wd.get("total_fights",0))
-    _save_standings(standings)
+    try:
+        standings = _load_standings()
+        for mid, res in all_results.items():
+            if mid not in standings:
+                standings[mid] = {"manager_name": res["manager_name"], "turns_played": 0,
+                                  "warriors": {}, "is_ai": mid.startswith("ai_")}
+            e = standings[mid]; e["turns_played"] += 1
+            for wd in res["team"].get("warriors", []):
+                if not wd: continue
+                wn = wd["name"]
+                if wn not in e["warriors"]:
+                    e["warriors"][wn] = {"wins":0,"losses":0,"kills":0,"fights":0}
+                ws = e["warriors"][wn]
+                ws.update(wins=wd.get("wins",0), losses=wd.get("losses",0),
+                          kills=wd.get("kills",0), fights=wd.get("total_fights",0))
+        _save_standings(standings)
+    except Exception as _se:
+        import traceback; traceback.print_exc()
+        print(f"  WARNING: standings update failed: {_se}")
 
     # Evolve AI teams — apply fight results, handle deaths, train survivors
     try:
