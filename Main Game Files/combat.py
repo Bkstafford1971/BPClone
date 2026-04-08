@@ -1171,10 +1171,26 @@ class CombatEngine:
             return None
 
         precision = "precise" if margin >= 50 else ("barely" if margin < 20 else "normal")
-        for ln in N.hit_line(att.name, dfr.name, wpn, cat, aim, precision, attacker_race=att.race.name):
-            self._emit(ln)
+
+        # --- CRITICAL / SIGNATURE HIT ---
+        # Fires when weapon skill >= 5 and 25% chance rolls true.
+        # Replaces the normal hit_line with a weapon-specific signature line.
+        # Damage is floored at medium (12% of max HP) when the signature fires.
+        wpn_key_sig  = wpn.lower().replace(" ", "_").replace("&", "and")
+        wpn_skill_lvl = att.skills.get(wpn_key_sig, 0)
+        sig = None
+        if wpn_skill_lvl >= 5 and random.random() < 0.25:
+            sig = N.signature_line(att.name, wpn)
+
+        if sig:
+            self._emit(sig)
+        else:
+            for ln in N.hit_line(att.name, dfr.name, wpn, cat, aim, precision, attacker_race=att.race.name):
+                self._emit(ln)
 
         dmg, wcats = _calc_damage_hybrid(att, ax, wpn, dfr, margin)
+        if sig:
+            dmg = max(dmg, int(dfr.max_hp * 0.12))  # floor at minimum medium damage
         self._emit(N.damage_line(dmg, dfr.max_hp, cat))
 
         prev_hp        = ds_.current_hp
@@ -1385,27 +1401,52 @@ class CombatEngine:
 
     def _throw_stones(self, minute: int):
         """
-        From minute 7 onward the referee intervenes to pressure the losing warrior
-        and keep the fight from becoming a marathon.
+        From minute 7 onward the referee intervenes to pressure whichever warrior
+        is doing the least to end the fight — not necessarily the one losing.
 
-        - Monster fights are never slow to end — no intervention needed there.
-        - Target: warrior at lower HP%. Equal HP → random choice.
+        Activity score per warrior (higher = more aggressive / more likely to end it):
+          + attacks made last minute  (primary driver)
+          + HP advantage fraction     (winning = less urgent to act)
+          - defensive style penalty   (Parry/Defend styles are passive)
+          - high-HP-pct penalty       (winning comfortably and still stalling)
+
+        The warrior with the LOWER activity score gets targeted.
+        Tiebreak: the one with higher HP% (the one with less urgency to fight).
+
         - Damage: (minute - 6) * 2, but the Ref never kills — floor at 1 HP.
-        - No HP numbers shown in the narrative.
-        - If the loser attacked ≤1 times last minute (passive), ~55% chance of
-          a follow-up intervention the same minute.
+        - Follow-up throw if the target attacked ≤1 times last minute (~55% chance).
         """
         if self.is_monster_fight:
             return
 
         pct_a = self.state_a.current_hp / max(1, self.warrior_a.max_hp)
         pct_b = self.state_b.current_hp / max(1, self.warrior_b.max_hp)
-        if pct_a < pct_b:
+
+        # Defensive styles that the Ref frowns on
+        _passive_styles = {"Parry", "Defend"}
+
+        def _activity_score(attacks: int, hp_pct: float, style: str) -> float:
+            score = attacks                                  # raw attacks last minute
+            score -= 1.5 if style in _passive_styles else 0 # passive style penalty
+            score -= max(0.0, (hp_pct - 0.60)) * 3         # penalty for sitting on a big lead
+            return score
+
+        score_a = _activity_score(
+            self._prev_attacks_a, pct_a,
+            self.state_a.active_strategy.style if self.state_a.active_strategy else "Strike",
+        )
+        score_b = _activity_score(
+            self._prev_attacks_b, pct_b,
+            self.state_b.active_strategy.style if self.state_b.active_strategy else "Strike",
+        )
+
+        if score_a < score_b:
             target_state = self.state_a
-        elif pct_b < pct_a:
+        elif score_b < score_a:
             target_state = self.state_b
         else:
-            target_state = random.choice([self.state_a, self.state_b])
+            # True tie: go after whoever has the bigger HP cushion (less urgency)
+            target_state = self.state_a if pct_a >= pct_b else self.state_b
 
         dmg = (minute - 6) * 2
         n = target_state.warrior.name.upper()
@@ -1421,12 +1462,12 @@ class CombatEngine:
         self._emit(action.format(n=n))
         self._emit(effect.format(n=n))
 
-        # Follow-up if the loser was passive last minute (≤1 attacks)
-        losing_attacks = (
+        # Follow-up if the target was passive last minute (≤1 attacks)
+        target_attacks = (
             self._prev_attacks_a if target_state is self.state_a
             else self._prev_attacks_b
         )
-        if losing_attacks <= 1 and random.random() < 0.55:
+        if target_attacks <= 1 and random.random() < 0.55:
             action2, effect2 = random.choice(_REF_FOLLOWUP_EVENTS)
             target_state.current_hp = max(1, target_state.current_hp - dmg)
             self._emit(action2.format(n=n))
