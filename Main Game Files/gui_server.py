@@ -39,6 +39,23 @@ LEAGUE_SETTINGS_FILE = os.path.join(BASE_DIR, "saves", "league_settings.json")
 # Global server reference for graceful shutdown from request handlers
 _global_server = None
 
+# Heartbeat tracking — updated by /api/heartbeat, checked by watcher thread
+import time as _time
+_last_heartbeat: float = 0.0
+_HEARTBEAT_TIMEOUT = 3   # seconds; client pings every 1s, so 3s = 3 missed pings
+
+
+def _exit_and_close_terminal():
+    """Shut down Python and close the console window (Windows)."""
+    import sys, ctypes
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+    except Exception:
+        pass
+    sys.exit(0)
+
 
 # ---------------------------------------------------------------------------
 # JSON CONVERSION HELPERS
@@ -157,8 +174,7 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                 _global_server.server_close()
             except Exception:
                 pass
-        import sys
-        sys.exit(0)
+        _exit_and_close_terminal()
 
     # --- Helpers ---
 
@@ -584,6 +600,11 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/league/run_turn":
             self.send_json(_league_proxy_post("/league/run_turn", body))
 
+        elif p == "/api/heartbeat":
+            global _last_heartbeat
+            _last_heartbeat = _time.monotonic()
+            self.send_json({"ok": True})
+
         elif p == "/api/shutdown":
             # Browser closed or user requested shutdown
             self.send_json({"success": True, "message": "Shutting down..."})
@@ -735,10 +756,13 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             results        = []
             turn_num       = increment_turn()
             ai_results_agg = {}
+            global_used    = set()   # warrior names matched this turn — shared across all teams
             for tid in to_run:
                 try:
                     team = load_team(tid)
-                    card = _do_run_turn(team, all_rivals, verbose=False, champion_state=champion_state)
+                    card = _do_run_turn(team, all_rivals, verbose=False,
+                                       champion_state=champion_state,
+                                       global_used=global_used)
                     bouts = []
                     for bout in card:
                         pw = bout.player_warrior; r = bout.result
@@ -1948,6 +1972,25 @@ def main():
         return
 
     threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
+    # Heartbeat watcher — shuts down if client disappears for too long
+    def _heartbeat_watcher():
+        global _last_heartbeat
+        _last_heartbeat = _time.monotonic()  # grace period on startup
+        _time.sleep(10)  # extra grace at launch for browser to connect
+        while True:
+            _time.sleep(0.5)
+            if _time.monotonic() - _last_heartbeat > _HEARTBEAT_TIMEOUT:
+                print("\n  Client disconnected. Shutting down server.")
+                try:
+                    _global_server.shutdown()
+                    _global_server.server_close()
+                except Exception:
+                    pass
+                _exit_and_close_terminal()
+
+    watcher = threading.Thread(target=_heartbeat_watcher, daemon=True)
+    watcher.start()
 
     try:
         server.serve_forever()

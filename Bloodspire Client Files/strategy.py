@@ -431,53 +431,58 @@ class StyleProperties:
 
 
 STYLE_PROPERTIES: dict[str, StyleProperties] = {
+    # Endurance burn philosophy:
+    #   Every style costs something — no style gains endurance in combat.
+    #   Aggressive styles burn fast (8-10/action). Defensive styles break even
+    #   or cost a little (1-2/action). This ensures fights resolve within ~5-6
+    #   minutes without the ref becoming the primary deciding factor.
     "Total Kill": StyleProperties(
         apm_modifier=1.5, damage_modifier=5.0,
-        parry_bonus=-8, dodge_bonus=-8,          # ~5% parry/dodge per guide
-        endurance_burn=8.0, intimidate=True,
+        parry_bonus=-8, dodge_bonus=-8,
+        endurance_burn=10.0, intimidate=True,
         anxiously_awaits=False, total_kill_mode=True,
-        notes="Berserk. High damage, nearly no defense.",
+        notes="Berserk. High damage, nearly no defense. Burns out fast.",
     ),
     "Wall of Steel": StyleProperties(
         apm_modifier=1.5, damage_modifier=-2.0,
         parry_bonus=3, dodge_bonus=0,
-        endurance_burn=7.0, intimidate=True,
+        endurance_burn=9.0, intimidate=True,
         anxiously_awaits=False, total_kill_mode=False,
-        notes="High attack rate, damage penalty, high endurance cost.",
+        notes="High attack rate, damage penalty, very high endurance cost.",
     ),
     "Lunge": StyleProperties(
         apm_modifier=0.5, damage_modifier=-1.0,
         parry_bonus=0, dodge_bonus=4,
-        endurance_burn=5.0, intimidate=False,
+        endurance_burn=6.0, intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
-        notes="Good dodge bonus. Rhythm bursts.",
+        notes="Good dodge bonus. Rhythm bursts. Moderate endurance cost.",
     ),
     "Bash": StyleProperties(
         apm_modifier=-0.5, damage_modifier=3.0,
         parry_bonus=-1, dodge_bonus=-2,
-        endurance_burn=6.0, intimidate=False,
+        endurance_burn=7.0, intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
-        notes="Good damage. Poor defense.",
+        notes="Good damage. Poor defense. High endurance cost.",
     ),
     "Slash": StyleProperties(
         apm_modifier=-1.5, damage_modifier=4.0,
         parry_bonus=-2, dodge_bonus=-3,
-        endurance_burn=4.0, intimidate=False,
+        endurance_burn=5.0, intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
         notes="Special slash hits. Slow, poor defense.",
     ),
     "Strike": StyleProperties(
         apm_modifier=0.0, damage_modifier=0.0,
         parry_bonus=0, dodge_bonus=0,
-        endurance_burn=-1.0,              # GAINS endurance
+        endurance_burn=2.0,               # Low cost but no longer free
         intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
-        notes="Average in all things. Regains endurance.",
+        notes="Average in all things. Low but real endurance cost.",
     ),
     "Engage & Withdraw": StyleProperties(
         apm_modifier=-0.3, damage_modifier=-1.0,
         parry_bonus=0, dodge_bonus=5,
-        endurance_burn=-1.0,              # Can gain endurance
+        endurance_burn=2.0,               # Low cost — hit and run is tiring but efficient
         intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
         notes="Very high dodge. Low endurance cost.",
@@ -485,32 +490,32 @@ STYLE_PROPERTIES: dict[str, StyleProperties] = {
     "Counterstrike": StyleProperties(
         apm_modifier=-1.5, damage_modifier=2.0,
         parry_bonus=2, dodge_bonus=0,
-        endurance_burn=2.0, intimidate=False,
+        endurance_burn=3.5, intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
         notes="Low native APM; counters provide extra attacks.",
     ),
     "Decoy": StyleProperties(
         apm_modifier=-0.5, damage_modifier=1.0,
         parry_bonus=3, dodge_bonus=-1,
-        endurance_burn=4.0, intimidate=False,
+        endurance_burn=5.0, intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
         notes="Negates defense point. Can block parry.",
     ),
     "Sure Strike": StyleProperties(
         apm_modifier=-1.0, damage_modifier=0.0,
         parry_bonus=0, dodge_bonus=0,
-        endurance_burn=-1.0,
+        endurance_burn=1.5,               # Slow and deliberate — efficient but not free
         intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
-        notes="Highest hit %. Slow. Gains endurance.",
+        notes="Highest hit %. Slow. Low endurance cost.",
     ),
     "Calculated Attack": StyleProperties(
         apm_modifier=-1.0, damage_modifier=2.0,
         parry_bonus=0, dodge_bonus=0,
-        endurance_burn=-1.0,
+        endurance_burn=1.5,               # Methodical — low cost
         intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
-        notes="Hits critical locations. Slow. AP-targeting ability.",
+        notes="Hits critical locations. Slow. Low endurance cost.",
     ),
     "Opportunity Throw": StyleProperties(
         apm_modifier=0.0, damage_modifier=0.0,
@@ -522,22 +527,22 @@ STYLE_PROPERTIES: dict[str, StyleProperties] = {
     "Martial Combat": StyleProperties(
         apm_modifier=0.3, damage_modifier=-2.0,
         parry_bonus=1, dodge_bonus=2,
-        endurance_burn=3.0, intimidate=False,
+        endurance_burn=4.0, intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
         notes="Special brawl attacks. Kick, punch, sweep.",
     ),
     "Parry": StyleProperties(
         apm_modifier=-2.5, damage_modifier=-4.0,
         parry_bonus=6, dodge_bonus=2,
-        endurance_burn=-3.0,              # GAINS endurance
+        endurance_burn=1.0,               # Near-passive — breaks even in a quiet fight
         intimidate=False,
         anxiously_awaits=False, total_kill_mode=False,
-        notes="Purely defensive. Drains foe endurance. Very low attack.",
+        notes="Purely defensive. Very low endurance cost.",
     ),
     "Defend": StyleProperties(
         apm_modifier=-2.0, damage_modifier=-3.0,
         parry_bonus=4, dodge_bonus=2,
-        endurance_burn=-2.0,              # GAINS endurance
+        endurance_burn=1.0,               # Slightly cheaper than Parry's old -2
         intimidate=False,
         anxiously_awaits=True, total_kill_mode=False,
         notes="Slightly more active than Parry. Still very defensive.",

@@ -422,7 +422,7 @@ def _calc_damage_hybrid(
     
     ceiling = max(3, int(base))
 
-    fraction = max(0.10, min(1.00, margin / 80.0))
+    fraction = max(0.10, min(1.00, margin / 55.0))
     raw      = max(1, int(ceiling * fraction))
     
     # Favorite weapon bonus: +1 damage when using favorite weapon
@@ -783,8 +783,9 @@ class CombatEngine:
         self._apply_presence_hesitation()
         while True:
             minute += 1
-            # Referee intervention: starts minute 7, pressures the losing warrior
-            if minute >= 7:
+            # Referee intervention: occasional from minute 9 (not every minute).
+            # Fires ~40% of the time so it's an event, not the fight's engine.
+            if minute >= 9 and random.random() < 0.40:
                 self._throw_stones(minute)
             result  = self._run_minute(minute)
             if result:
@@ -1467,7 +1468,7 @@ class CombatEngine:
             self._prev_attacks_a if target_state is self.state_a
             else self._prev_attacks_b
         )
-        if target_attacks <= 1 and random.random() < 0.55:
+        if target_attacks <= 1 and random.random() < 0.30:
             action2, effect2 = random.choice(_REF_FOLLOWUP_EVENTS)
             target_state.current_hp = max(1, target_state.current_hp - dmg)
             self._emit(action2.format(n=n))

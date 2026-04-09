@@ -1740,10 +1740,12 @@ function buildArchivesTab(team) {
         Slain by: <b>${esc(a.archived_killed_by||a.killed_by||'Unknown')}</b>
       </div>
       <table style="border-collapse:collapse; font-size:11px;">
-        ${['strength','dexterity','constitution','intelligence','presence','size'].map(attr =>
-          `<tr><td style="padding:1px 6px; color:#555; width:90px;">${capitalize(attr)}</td>
-               <td style="padding:1px 6px; font-weight:bold;">${a[attr]||'—'}</td></tr>`
-        ).join('')}
+        ${['strength','dexterity','constitution','intelligence','presence','size'].map(attr => {
+          const deathVal = a[attr] != null ? a[attr] : '—';
+          const baseVal  = (a.initial_stats && a.initial_stats[attr] != null) ? ` (${a.initial_stats[attr]})` : '';
+          return `<tr><td style="padding:1px 6px; color:#555; width:90px;">${capitalize(attr)}</td>
+               <td style="padding:1px 6px; font-weight:bold;">${deathVal}${baseVal}</td></tr>`;
+        }).join('')}
       </table>
     </div>
     <div>
@@ -3542,9 +3544,13 @@ document.addEventListener('click', () => {
   if (dd) dd.style.display = 'none';
 });
 
-// Browser close detection — gracefully shutdown server when page unloads
+// Keep server alive while client is open; server auto-exits if pings stop.
+setInterval(() => {
+  fetch('/api/heartbeat', { method: 'POST', body: '{}' }).catch(() => {});
+}, 1000);
+
+// Best-effort shutdown on explicit close (may not fire in all browsers)
 window.addEventListener('beforeunload', () => {
-  // Fire-and-forget shutdown request (don't wait for response)
   navigator.sendBeacon('/api/shutdown', '');
 });
 

@@ -143,7 +143,8 @@ def _challenge_succeeds(
 def _find_rival_opponent(
     player_warrior : Warrior,
     rivals         : List[RivalManager],
-    already_matched: set,          # rival_manager_id values already used
+    already_matched: set,          # rival_manager_id values already used this card
+    global_used    : set = None,   # warrior names used across ALL cards this turn
 ) -> Optional[Tuple[Warrior, RivalManager]]:
     """
     Find the best-matched rival warrior for a player warrior.
@@ -152,46 +153,53 @@ def _find_rival_opponent(
       1. Rival whose average team rating is closest to the player warrior.
       2. Pick the individual warrior on that rival's team with the closest rating.
       3. Skip rivals already matched this turn.
+      4. Skip individual warriors already scheduled globally this turn.
     """
     player_rating = _warrior_rating(player_warrior)
-
     player_fights = player_warrior.total_fights
+    _used = global_used or set()
+
+    def _available_warriors(rm):
+        """Active warriors on this rival team not yet used globally."""
+        return [w for w in rm.team.active_warriors if w.name not in _used]
 
     candidates = [
         rm for rm in rivals
         if rm.manager_id not in already_matched
-        and rm.team.active_warriors
-        # At least one warrior on this rival team falls within the bracket
         and any(_in_bracket(player_fights, w.total_fights)
-                for w in rm.team.active_warriors)
+                for w in _available_warriors(rm))
     ]
 
-    # If bracket filtering leaves no candidates, relax and use all rivals
+    # If bracket filtering leaves no candidates, relax to any available rival warrior
     if not candidates:
         candidates = [
             rm for rm in rivals
             if rm.manager_id not in already_matched
-            and rm.team.active_warriors
+            and _available_warriors(rm)
         ]
 
     if not candidates:
         return None
 
-    # Sort by closeness of team average rating
-    candidates.sort(key=lambda rm: abs(_team_avg_rating(rm.team) - player_rating))
+    # Sort by closeness of team average rating (using only available warriors)
+    candidates.sort(key=lambda rm: abs(
+        sum(_warrior_rating(w) for w in _available_warriors(rm)) /
+        max(1, len(_available_warriors(rm)))
+        - player_rating
+    ))
 
-    best_rival = candidates[0]
+    # Walk candidates until we find one with available warriors
+    for best_rival in candidates:
+        avail = _available_warriors(best_rival)
+        if not avail:
+            continue
+        in_bracket = [w for w in avail
+                      if _in_bracket(player_warrior.total_fights, w.total_fights)]
+        pool = in_bracket if in_bracket else avail
+        pool.sort(key=lambda w: abs(_warrior_rating(w) - player_rating))
+        return pool[0], best_rival
 
-    # Pick closest individual warrior from that rival's team,
-    # preferring within-bracket opponents first.
-    rival_warriors = best_rival.team.active_warriors
-    in_bracket = [w for w in rival_warriors
-                  if _in_bracket(player_warrior.total_fights, w.total_fights)]
-    pool = in_bracket if in_bracket else rival_warriors
-    pool.sort(key=lambda w: abs(_warrior_rating(w) - player_rating))
-    chosen = pool[0]
-
-    return chosen, best_rival
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -237,27 +245,42 @@ def _absorb_into_monsters(warrior: Warrior, player_team: Team):
 
 
 def build_fight_card(
-    player_team : Team,
-    rivals      : List[RivalManager],
+    player_team  : Team,
+    rivals       : List[RivalManager],
     champion_state: dict = None,
+    global_used  : set = None,    # shared set of warrior names used across ALL teams this turn
 ) -> List[ScheduledFight]:
     """
     Build the complete fight card for the current turn.
     Returns a list of ScheduledFight objects.
 
     Steps:
-      1. Blood challenges (highest priority, skip if no pending BCs)
-      2. Player-issued challenges
-      3. Match remaining warriors against rivals
-      4. Fill unmatched slots with peasants
+      1. Monster challenges
+      2. Blood challenges
+      3. Champion / regular challenges
+      4. Match remaining warriors against rivals
+      5. Fill unmatched slots with peasants
+
+    global_used is a mutable set shared across all team card builds in a turn.
+    Warriors from either side of a fight are added to it so no warrior fights
+    more than once per turn regardless of how many player teams are processing.
     """
     if champion_state is None:
         champion_state = {}
-    
+    if global_used is None:
+        global_used = set()
+
     current_champion = champion_state.get("name", "")
     card          : List[ScheduledFight]  = []
-    matched_players : set = set()         # player warrior names already scheduled
-    matched_rivals  : set = set()         # rival manager IDs already used
+    matched_players : set = set()         # player warrior names already scheduled this card
+    matched_rivals  : set = set()         # rival manager IDs already used this card
+
+    def _schedule(fight: ScheduledFight):
+        """Add a fight to the card and mark both warriors as used globally."""
+        card.append(fight)
+        global_used.add(fight.player_warrior.name)
+        if fight.fight_type not in ("monster", "peasant"):
+            global_used.add(fight.opponent.name)
 
     active_players = player_team.active_warriors
     if not active_players:
@@ -287,6 +310,9 @@ def build_fight_card(
                 continue
             for w in rm.team.active_warriors:
                 if w.name.lower() == (bc_target_name or "").lower():
+                    if w.name in global_used:
+                        print(f"  Blood challenge target '{w.name}' already fighting this turn. Skipping.")
+                        break
                     target_warrior = w
                     target_rival   = rm
                     break
@@ -294,7 +320,7 @@ def build_fight_card(
                 break
 
         if target_warrior is None:
-            print(f"  Blood challenge target '{bc_target_name}' not found. Skipping.")
+            print(f"  Blood challenge target '{bc_target_name}' not found or already matched. Skipping.")
             continue
 
         succeeds = _challenge_succeeds(
@@ -303,7 +329,7 @@ def build_fight_card(
             is_blood_challenge=True,
         )
         if succeeds:
-            card.append(ScheduledFight(
+            _schedule(ScheduledFight(
                 player_warrior   = challenger,
                 opponent         = target_warrior,
                 player_team      = player_team,
@@ -333,7 +359,7 @@ def build_fight_card(
             monster_team = create_monster_team()
         import random as _rnd
         monster = _rnd.choice(monster_team.active_warriors)
-        card.append(ScheduledFight(
+        _schedule(ScheduledFight(
             player_warrior   = pw,
             opponent         = monster,
             player_team      = player_team,
@@ -412,7 +438,7 @@ def build_fight_card(
                         is_champion_challenge=True,
                     )
                     if succeeds:
-                        card.append(ScheduledFight(
+                        _schedule(ScheduledFight(
                             player_warrior   = challenger,
                             opponent         = champion_warrior,
                             player_team      = player_team,
@@ -435,10 +461,10 @@ def build_fight_card(
                         recognition = getattr(challenger, "recognition", 0)
                         win_ratio = challenger.wins / max(1, challenger.total_fights)
                         return (-presence, -recognition, -win_ratio)
-                    
+
                     champ_challengers.sort(key=_challenger_priority)
                     challenger, chal_name, target_name = champ_challengers[0]
-                    
+
                     # Allow the selected challenger through with high success rate
                     succeeds = _challenge_succeeds(
                         challenger.presence,
@@ -447,7 +473,7 @@ def build_fight_card(
                         is_champion_challenge=True,
                     )
                     if succeeds:
-                        card.append(ScheduledFight(
+                        _schedule(ScheduledFight(
                             player_warrior   = challenger,
                             opponent         = champion_warrior,
                             player_team      = player_team,
@@ -501,6 +527,9 @@ def build_fight_card(
 
                 for w in rm.team.active_warriors:
                     if target_name.lower() in w.name.lower():
+                        if w.name in global_used:
+                            print(f"  Challenge target '{w.name}' already fighting this turn. Skipping.")
+                            break
                         # Bully-prevention: cannot challenge someone too far below
                         if not _challenge_in_bracket(challenger.total_fights,
                                                      w.total_fights):
@@ -519,7 +548,7 @@ def build_fight_card(
                     break
 
             if target_warrior is None:
-                print(f"  Challenge target '{target_name}' not found.")
+                print(f"  Challenge target '{target_name}' not found or already matched.")
                 continue
 
             succeeds = _challenge_succeeds(
@@ -529,7 +558,7 @@ def build_fight_card(
                 is_champion_challenge=False,
             )
             if succeeds:
-                card.append(ScheduledFight(
+                _schedule(ScheduledFight(
                     player_warrior   = challenger,
                     opponent         = target_warrior,
                     player_team      = player_team,
@@ -557,10 +586,10 @@ def build_fight_card(
     remaining = [w for w in active_players if w.name not in matched_players]
 
     for player_warrior in remaining:
-        result = _find_rival_opponent(player_warrior, rivals, matched_rivals)
+        result = _find_rival_opponent(player_warrior, rivals, matched_rivals, global_used)
         if result:
             opponent, rival_manager = result
-            card.append(ScheduledFight(
+            _schedule(ScheduledFight(
                 player_warrior   = player_warrior,
                 opponent         = opponent,
                 player_team      = player_team,
@@ -590,7 +619,7 @@ def build_fight_card(
                 peasants = peasant_team.active_warriors
             peasant = random.choice(peasants)
 
-            card.append(ScheduledFight(
+            _schedule(ScheduledFight(
                 player_warrior   = player_warrior,
                 opponent         = peasant,
                 player_team      = player_team,
@@ -609,23 +638,31 @@ def build_fight_card(
 # ---------------------------------------------------------------------------
 
 def run_turn(
-    player_team  : Team,
-    rivals       : List[RivalManager],
-    verbose      : bool = True,
+    player_team    : Team,
+    rivals         : List[RivalManager],
+    verbose        : bool = True,
     champion_state : dict = None,
+    global_used    : set  = None,   # shared warrior-name set across all teams this turn
 ) -> List[ScheduledFight]:
     """Build and execute all fights for one turn.
     Returns the completed ScheduledFight list with results attached.
     Saves fight logs, updates records, triggers post-fight rival training.
     Marks fights against the current champion as 'champion' fight type.
+
+    global_used is mutated in-place as fights are scheduled so callers
+    running multiple teams can share it to prevent warriors fighting twice.
     """
     if champion_state is None:
         champion_state = {}
+    if global_used is None:
+        global_used = set()
     current_champion = champion_state.get("name", "")
     print(f"\n  === RUNNING TURN — {player_team.team_name} ===\n")
     print(f"  [run_turn start] archived_warriors={len(getattr(player_team,'archived_warriors',[]))}")
 
-    card = build_fight_card(player_team, rivals)
+    card = build_fight_card(player_team, rivals,
+                            champion_state=champion_state,
+                            global_used=global_used)
 
     for i, bout in enumerate(card, 1):
         pw = bout.player_warrior
