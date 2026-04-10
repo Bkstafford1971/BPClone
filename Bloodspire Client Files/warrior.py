@@ -766,19 +766,34 @@ class Warrior:
           1. Base chance from governing stat (INT for skills, CON for attributes):
                stat  3-8  -> 38%    stat  9-14 -> 65%
                stat 15-20 -> 82%    stat 21-25 -> 94%
-          2. Difficulty multiplier from number of increases (gains):
-               gains 0-3 : x1.00   gains 4-5 : x0.52
-               gains 6-7 : x0.29   gains 8+  : x0.16
-          Mastery bonus (gains>=8, stat>=15): +(stat-14)*2%.  Clamped 4%-96%.
+          2. Difficulty multiplier from current level / gains so far:
+               0-3 : x1.00   4-5 : x0.65   6-7 : x0.40   8+ : x0.25
+          3. Mastery bonus (level/gains >= 8, stat >= 15): +(stat-14)*1.5
+          4. Racial bonus (Humans & Gnomes): +7 to chance after multiply, capped 94.
+             Applies to BOTH skill and attribute training.
+          Final chance clamped 5%-96%.
 
         SKILL training (weapon skills + non-weapon skills):
           Governed by Intelligence. gains = current skill level (0-based).
 
         ATTRIBUTE training (STR / DEX / CON / INT / PRE, not SIZE):
           Governed by Constitution. Gains tracked in self.attribute_gains.
-          Human racial bonus: +6 to base_chance (before multiplier, capped at 94).
         """
         key = skill.lower().replace(" ", "_")
+
+        # Shared helper: base chance from stat band
+        def _base_chance(stat: int) -> int:
+            if stat <= 8:   return 38
+            if stat <= 14:  return 65
+            if stat <= 20:  return 82
+            return 94
+
+        # Shared helper: difficulty multiplier from gains
+        def _multiplier(gains: int) -> float:
+            if gains < 4:  return 1.00
+            if gains < 6:  return 0.65
+            if gains < 8:  return 0.40
+            return 0.25
 
         # --- Attribute training ---
         if key in ATTRIBUTES:
@@ -792,36 +807,17 @@ class Warrior:
             gains = self.attribute_gains.get(key, 0)
             stat  = self.constitution
 
-            # 1. Base chance from CON band
-            if stat <= 8:
-                base_chance = 38
-            elif stat <= 14:
-                base_chance = 65
-            elif stat <= 20:
-                base_chance = 82
-            else:
-                base_chance = 94
+            chance = int(_base_chance(stat) * _multiplier(gains))
 
-            if self.race.modifiers.trains_stats_faster:
-                base_chance = min(94, base_chance + 6)   # Human racial bonus
-
-            # 2. Difficulty multiplier based on gains
-            if gains < 4:
-                multiplier = 1.00
-            elif gains < 6:
-                multiplier = 0.52
-            elif gains < 8:
-                multiplier = 0.29
-            else:
-                multiplier = 0.16
-
-            chance = int(base_chance * multiplier)
-
-            # High CON still helps at Mastery (gains >= 8)
+            # Mastery bonus: high CON still helps at the very top tier
             if gains >= 8 and stat >= 15:
-                chance += (stat - 14) * 2
+                chance += int((stat - 14) * 1.5)
 
-            chance = max(4, min(96, chance))
+            # Racial bonus (Humans & Gnomes) — applies to attributes
+            if self.race.modifiers.trains_stats_faster:
+                chance = min(94, chance + 7)
+
+            chance = max(5, min(96, chance))
 
             if random.randint(1, 100) > chance:
                 tier_label = (
@@ -842,7 +838,7 @@ class Warrior:
 
             # --- Attribute-specific side effects ---
             if key == "strength":
-                # +2-3 lbs per STR point gained; STR already feeds into _calc_max_hp
+                # +2-3 lbs per STR point gained
                 wt = random.randint(2, 3)
                 self.training_weight_bonus = getattr(self, "training_weight_bonus", 0) + wt
             elif key == "constitution":
@@ -867,33 +863,17 @@ class Warrior:
             gains = current_level          # skill level == number of increases so far
             stat  = self.intelligence
 
-            # 1. Base chance from INT band
-            if stat <= 8:
-                base_chance = 38
-            elif stat <= 14:
-                base_chance = 65
-            elif stat <= 20:
-                base_chance = 82
-            else:
-                base_chance = 94
+            chance = int(_base_chance(stat) * _multiplier(gains))
 
-            # 2. Difficulty multiplier based on skill level (gains)
-            if gains < 4:
-                multiplier = 1.00
-            elif gains < 6:
-                multiplier = 0.52
-            elif gains < 8:
-                multiplier = 0.29
-            else:
-                multiplier = 0.16
-
-            chance = int(base_chance * multiplier)
-
-            # High INT still helps at Mastery (level 8->9)
+            # Mastery bonus: high INT still helps at the very top tier
             if gains >= 8 and stat >= 15:
-                chance += (stat - 14) * 2
+                chance += int((stat - 14) * 1.5)
 
-            chance = max(4, min(96, chance))
+            # Racial bonus (Humans & Gnomes) — now applies to skills too
+            if self.race.modifiers.trains_stats_faster:
+                chance = min(94, chance + 7)
+
+            chance = max(5, min(96, chance))
 
             if random.randint(1, 100) > chance:
                 return (

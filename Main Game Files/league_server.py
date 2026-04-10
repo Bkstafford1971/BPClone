@@ -1081,8 +1081,10 @@ def _admin_page():
         for w in warriors_flat
     ) or "<tr><td colspan=4 style='color:#888'>No completed turns yet</td></tr>"
 
-    # Re-run button only available for the turn that was just completed
-    if state == "results_ready":
+    # Re-run button available whenever at least one turn has been completed
+    # (current_turn > 1 means turn 1 has already run).  State doesn't matter —
+    # results_ready flips back to open the moment any team uploads for the next turn.
+    if turn > 1:
         last_turn = turn - 1
         rerun_section = (
             f'<div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px">'

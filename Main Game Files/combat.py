@@ -1352,9 +1352,9 @@ class CombatEngine:
             res.append(w.train_skill(sk))
 
         # INT 4th train: learn a skill from opponent
-        # Chance = (intelligence - 14) * 5%, triggered when INT >= 15
+        # Chance = max(3, (intelligence - 14) * 4%), triggered when INT >= 15
         if opponent and w.intelligence >= 15:
-            bonus_chance = (w.intelligence - 14) * 5
+            bonus_chance = max(3, (w.intelligence - 14) * 4)
             if random.randint(1, 100) <= bonus_chance:
                 # Derive what skills the opponent actually used this fight
                 candidate_skills = []

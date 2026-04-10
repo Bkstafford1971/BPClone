@@ -81,6 +81,7 @@ input[type=number] { width: 44px; text-align: center; }
   font: var(--fs) var(--font); z-index: 1;
 }
 .tab:not(.active) { background: #bbb8b0; bottom: 0; padding-top: 3px; border-bottom-color: var(--mid); color: #333; }
+.tab.tab-disabled  { color: var(--mid); pointer-events: none; font-style: italic; }
 .tab-body { border: 2px solid; border-color: var(--mid) var(--white) var(--white) var(--mid); padding: 10px; background: var(--bg); }
 .tab-content { display: none; } .tab-content.active { display: block; }
 
@@ -589,18 +590,24 @@ async function treeSelectWarrior(tid, idx) {
    MANAGER PANEL  (tabbed: Account | Newsletters | New Team)
    ============================================================ */
 function buildManagerPanel() {
-  const acc   = S.account || {};
-  const tab   = S.mgrTab || 'account';
-  const tabs  = [['account','Account'],['newsletters','Newsletters'],['scouting','Scouting'],['new_team','New Team']];
-  let tabHtml = '<div class="tabs">';
+  const acc    = S.account || {};
+  const tab    = S.mgrTab || 'account';
+  const canAdd = acc.team_ids && acc.team_ids.length < 5;
+  const tabs   = [['account','Account'],['newsletters','Newsletters'],['scouting','Scouting'],['new_team','New Team']];
+  let tabHtml  = '<div class="tabs">';
   tabs.forEach(([key,lbl]) => {
-    tabHtml += `<div class="tab ${tab===key?'active':''}" onclick="setMgrTab('${key}')">${lbl}</div>`;
+    const isDisabled = key === 'new_team' && !canAdd;
+    const label      = isDisabled ? `${lbl} (max 5)` : lbl;
+    tabHtml += `<div class="tab ${tab===key?'active':''} ${isDisabled?'tab-disabled':''}" onclick="${isDisabled?'':` setMgrTab('${key}')`}">${label}</div>`;
   });
   tabHtml += '</div>';
 
+  // If somehow on new_team tab at max capacity, fall back to account tab
+  const activeTab = (tab === 'new_team' && !canAdd) ? 'account' : tab;
+
   let body = '';
 
-  if (tab === 'account') {
+  if (activeTab === 'account') {
     // Match the screenshot layout exactly
     const record = (() => {
       let w=0,l=0,k=0;
@@ -667,7 +674,7 @@ function buildManagerPanel() {
 </div>`;
   }
 
-  else if (tab === 'newsletters') {
+  else if (activeTab === 'newsletters') {
     // Inline newsletter selector (reuse newsletter panel logic)
     const turns = S.newsletters || [];
     const cur   = S.newsletterTurn;
@@ -715,11 +722,11 @@ function buildManagerPanel() {
     }
   }
 
-  else if (tab === 'scouting') {
+  else if (activeTab === 'scouting') {
     body = buildScoutingTab();
   }
 
-  else if (tab === 'new_team') {
+  else if (activeTab === 'new_team') {
     body = `<div style="padding:12px;">
       <p style="color:#555; font-size:11px;">Use <b>Action → New Team</b> to create a team.</p>
       <button onclick="initCreateTeam()">+ New Team</button>
