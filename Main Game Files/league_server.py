@@ -184,6 +184,12 @@ def _run_turn(request_password, rerun_turn=None):
             return {"success": False, "error": "Not authorised."}
         if cfg["turn_state"] == "processing":
             return {"success": False, "error": "Turn is already running."}
+        if rerun_turn:
+            # Only the most recently completed turn may be re-run
+            last_completed = cfg["current_turn"] - 1
+            if rerun_turn != last_completed:
+                return {"success": False,
+                        "error": f"Only turn {last_completed} (the last completed turn) can be re-run."}
         turn_num = rerun_turn if rerun_turn else cfg["current_turn"]
         uploads  = _load_uploads(turn_num)
 
@@ -781,8 +787,15 @@ def _run_turn(request_password, rerun_turn=None):
         for mid, res in all_results.items():
             if mid not in standings:
                 standings[mid] = {"manager_name": res["manager_name"], "turns_played": 0,
-                                  "warriors": {}, "is_ai": mid.startswith("ai_")}
-            e = standings[mid]; e["turns_played"] += 1
+                                  "warriors": {}, "is_ai": mid.startswith("ai_"),
+                                  "turns_counted": []}
+            e = standings[mid]
+            # Track which turns have been counted to avoid double-counting on reruns
+            if "turns_counted" not in e:
+                e["turns_counted"] = []
+            if turn_num not in e["turns_counted"]:
+                e["turns_played"] += 1
+                e["turns_counted"].append(turn_num)
             for wd in res["team"].get("warriors", []):
                 if not wd: continue
                 wn = wd["name"]
@@ -885,9 +898,9 @@ def _run_turn(request_password, rerun_turn=None):
                     deaths_nl.append({
                         "name"     : oname,
                         "team"     : b.get("opponent_team", "?"),
-                        "w"        : 0,
-                        "l"        : 0,
-                        "k"        : 0,
+                        "w"        : b.get("opponent_wins",   0),
+                        "l"        : b.get("opponent_losses", 0),
+                        "k"        : b.get("opponent_kills",  0),
                         "killed_by": b.get("warrior_name", "?"),
                     })
 
@@ -1068,6 +1081,19 @@ def _admin_page():
         for w in warriors_flat
     ) or "<tr><td colspan=4 style='color:#888'>No completed turns yet</td></tr>"
 
+    # Re-run button only available for the turn that was just completed
+    if state == "results_ready":
+        last_turn = turn - 1
+        rerun_section = (
+            f'<div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px">'
+            f'<b style="font-size:11px">Re-run Turn {last_turn}:</b><br>'
+            f'<span style="font-size:11px;color:#800">⚠ Replaces all results for turn {last_turn} as if it never ran.</span><br>'
+            f'<button onclick="rerunTurn({last_turn})">↺ Re-run Turn {last_turn}</button>'
+            f'</div>'
+        )
+    else:
+        rerun_section = ""
+
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BLOODSPIRE League — Admin</title>
@@ -1118,12 +1144,7 @@ def _admin_page():
    <div id="prog-bar" class="prog-bar" style="width:0%"></div>
    <div id="prog-lbl" class="prog-lbl">Starting...</div>
   </div>
-  <div style="margin-top:10px;border-top:1px solid #ddd;padding-top:8px">
-   <b style="font-size:11px">Re-run a past turn:</b><br>
-   <input type="number" id="rerun-turn" min="1" max="{turn}" placeholder="Turn #"
-          style="width:80px"> &nbsp;
-   <button onclick="rerunTurn()">↺ Re-run</button>
-  </div>
+  {rerun_section}
  </div>
 
  <div class="panel">
@@ -1212,17 +1233,16 @@ async function runTurn(){{
  }}catch(e){{show('Connection error: '+e.message,'err');stopPoll();}}
 }}
 
-async function rerunTurn(){{
+async function rerunTurn(t){{
  const pw=pw_val();
- const t=document.getElementById('rerun-turn')?.value;
  if(!pw){{show('Enter the host password first.','err');return;}}
- if(!t){{show('Enter a turn number to re-run.','err');return;}}
+ if(!confirm(`Re-run turn ${{t}}? All results from the first run will be replaced as if it never happened.`))return;
  show(`Re-running turn ${{t}}...`,'ok');
  startPoll();
  try{{
   const r=await fetch('/api/run_turn',{{method:'POST',
    headers:{{'Content-Type':'application/json'}},
-   body:JSON.stringify({{host_password:pw,rerun_turn:parseInt(t)}})}});
+   body:JSON.stringify({{host_password:pw,rerun_turn:t}})}});
   const d=await r.json();
   if(!d.success){{show('Error: '+d.error,'err');stopPoll();}}
  }}catch(e){{show('Connection error: '+e.message,'err');stopPoll();}}

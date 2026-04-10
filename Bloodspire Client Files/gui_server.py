@@ -39,10 +39,7 @@ LEAGUE_SETTINGS_FILE = os.path.join(BASE_DIR, "saves", "league_settings.json")
 # Global server reference for graceful shutdown from request handlers
 _global_server = None
 
-# Heartbeat tracking — updated by /api/heartbeat, checked by watcher thread
 import time as _time
-_last_heartbeat: float = 0.0
-_HEARTBEAT_TIMEOUT = 3   # seconds; client pings every 1s, so 3s = 3 missed pings
 
 
 def _exit_and_close_terminal():
@@ -601,8 +598,6 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(_league_proxy_post("/league/run_turn", body))
 
         elif p == "/api/heartbeat":
-            global _last_heartbeat
-            _last_heartbeat = _time.monotonic()
             self.send_json({"ok": True})
 
         elif p == "/api/shutdown":
@@ -1213,6 +1208,9 @@ def _run_turn_for_team(body: dict) -> dict:
                 "warrior_slain"  : r.loser_died and r.loser is bout.player_warrior,
                 "opponent_slain" : r.loser_died and r.winner is not None
                                    and r.winner.name == pw.name,
+                "opponent_wins"  : getattr(bout.opponent, "wins",   0),
+                "opponent_losses": getattr(bout.opponent, "losses", 0),
+                "opponent_kills" : getattr(bout.opponent, "kills",  0),
                 "fight_id"       : bout.fight_id,
                 "training"       : r.training_results.get("warrior_a", []),
             })
@@ -1972,25 +1970,6 @@ def main():
         return
 
     threading.Timer(0.6, lambda: webbrowser.open(url)).start()
-
-    # Heartbeat watcher — shuts down if client disappears for too long
-    def _heartbeat_watcher():
-        global _last_heartbeat
-        _last_heartbeat = _time.monotonic()  # grace period on startup
-        _time.sleep(10)  # extra grace at launch for browser to connect
-        while True:
-            _time.sleep(0.5)
-            if _time.monotonic() - _last_heartbeat > _HEARTBEAT_TIMEOUT:
-                print("\n  Client disconnected. Shutting down server.")
-                try:
-                    _global_server.shutdown()
-                    _global_server.server_close()
-                except Exception:
-                    pass
-                _exit_and_close_terminal()
-
-    watcher = threading.Thread(target=_heartbeat_watcher, daemon=True)
-    watcher.start()
 
     try:
         server.serve_forever()

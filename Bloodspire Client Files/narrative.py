@@ -94,7 +94,7 @@ def _strategy_table(w: Warrior) -> list:
     """Return the strategy table lines for the player warrior."""
     if not w.strategies:
         return []
-    hdr = f"{'TRIGGER':<32}{'FIGHTING STYLE':<20}{'LEVEL':>5}  {'AIMING POINT':<16}{'DEFENSE POINT'}"
+    hdr = f"{'TRIGGER':<42}{'FIGHTING STYLE':<20}{'LEVEL':>5}  {'AIMING POINT':<16}{'DEFENSE POINT'}"
     sep = "-" * len(hdr)
     lines = ["", hdr, sep]
     for i, s in enumerate(w.strategies, 1):
@@ -103,7 +103,7 @@ def _strategy_table(w: Warrior) -> list:
         aim  = s.aim_point    if s.aim_point    else "None"
         dfe  = s.defense_point if s.defense_point else "None"
         sty  = s.style        if s.style        else "None"
-        lines.append(f"{trig:<32}{sty:<20}{s.activity:>5}  {aim:<16}{dfe}")
+        lines.append(f"{trig:<42}{sty:<20}{s.activity:>5}  {aim:<16}{dfe}")
     return lines
 
 
@@ -1710,7 +1710,7 @@ MERCY_DENIED = [
 DEATH_LINES = [
     "{warrior} has perished in the BLOODSPIRE!!!",
     "{warrior} breathes {his} last on the arena floor!!!",
-    "The {warrior} is dead. The crowd erupts!!!",
+    "{warrior} is dead. The crowd erupts!!!",
     "{warrior} falls, never to rise again!!!",
 ]
 

@@ -187,6 +187,38 @@ table.grid tr.sel td input, table.grid tr.sel td select { background: var(--sel)
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--bg); border: 2px solid; border-color: var(--white) var(--mid) var(--mid) var(--white); }
 ::-webkit-scrollbar-button { background: var(--bg); border: 2px solid; border-color: var(--white) var(--mid) var(--mid) var(--white); height: 14px; width: 14px; }
+
+/* Narrative overlay styling */
+.nar-sep       { border-top:2px solid #aaa; margin:8px 0; }
+.nar-row       { display:flex; align-items:baseline; font-family:'Courier New',monospace; margin:1px 0; }
+.nar-col-l     { flex:1; }
+.nar-col-vs    { flex:0 0 48px; text-align:center; color:#555; font-size:15px; font-weight:bold; align-self:center; }
+.nar-col-r     { flex:1; font-size:12px; color:#333; }
+.nar-wname     { font-weight:bold; font-size:15px; color:#000; }
+.nar-wrec      { color:#555; font-size:12px; }
+.nar-prose     { font-family:'Courier New',monospace; font-size:12px; line-height:1.5; margin:1px 0; color:#000; }
+/* Strategy table */
+.nar-strat-tbl           { width:100%; border-collapse:collapse; font-family:'Courier New',monospace; font-size:11px; margin:6px 0; }
+.nar-strat-tbl thead tr  { border-bottom:1px solid #aaa; }
+.nar-strat-tbl th        { font-weight:bold; text-align:left; padding:3px 10px 3px 0; color:#000; }
+.nar-strat-tbl td        { text-align:left; padding:2px 10px 2px 0; color:#000; }
+.nar-st-trig             { width:40%; }
+.nar-st-style            { width:18%; }
+.nar-st-level                   { width:7%; }
+.nar-strat-tbl th.nar-st-level  { text-align:center; padding-left:0 !important; padding-right:0 !important; }
+.nar-strat-tbl td.nar-st-level  { text-align:center; padding-left:0 !important; padding-right:0 !important; }
+.nar-st-aim              { width:17%; }
+/* Narrative section */
+.nar-event    { color:#c60; font-weight:bold; margin:4px 0; font-family:'Courier New',monospace; }
+.nar-minute   { color:#a80; font-weight:bold; margin-top:6px; font-family:'Courier New',monospace; }
+.nar-death    { color:#c00; font-weight:bold; font-family:'Courier New',monospace; }
+.nar-win      { color:#070; font-weight:bold; font-family:'Courier New',monospace; }
+.nar-training { color:#00a; font-family:'Courier New',monospace; }
+.nar-hp       { color:#888; font-size:11px; font-family:'Courier New',monospace; }
+.nar-line     { font-family:'Courier New',monospace; font-size:12px; line-height:1.5; color:#000; }
+.nar-damage-light  { font-family:'Courier New',monospace; font-size:12px; line-height:1.5; color:#1a6b1a; padding-left:1.8em; }
+.nar-damage-medium { font-family:'Courier New',monospace; font-size:12px; line-height:1.5; color:#00008b; padding-left:1.8em; }
+.nar-damage-heavy  { font-family:'Courier New',monospace; font-size:12px; line-height:1.5; color:#8b0000; padding-left:1.8em; }
 </style>
 </head>
 <body>
@@ -543,6 +575,8 @@ async function treeSelectWarrior(tid, idx) {
     await flushSave();
   }
   S.sel  = {type:'warrior', teamId: tid, wIdx: idx};
+  // Fetch fresh data so streak/favorite_weapon always reflect server state
+  await reloadTeam(tid);
   // Dead warriors open straight to the Replacement tab
   const team = S.teams[tid];
   const w    = team && team.warriors && team.warriors[idx];
@@ -2625,6 +2659,164 @@ function buildTurnResults() {
 /* ============================================================
    NARRATIVE OVERLAY
    ============================================================ */
+function _damageClass(text) {
+  const t = text.toLowerCase();
+  // Light — superficial, grazes, nicks, barely connects
+  if (/superficial|shallow|barely|minor|skim|kisses|merely|beads|sting|prick|lightly|scrapes|nicks|glances|slap|little real harm|little more than|little effect/.test(t))
+    return 'nar-damage-light';
+  // Heavy — horrific, savage, bone-breaking, devastating
+  if (/horrific|terrible|savage|gruesome|brutal|devastating|shattering|violently|gaping|ghastly|erupts|sprays wildly|impales|skewered|ragged|bone-|nearly severing|nearly takes|wide open|ruin|pulps/.test(t))
+    return 'nar-damage-heavy';
+  // Default — medium
+  return 'nar-damage-medium';
+}
+
+function narrativeToHtml(text) {
+  // The narrative has 3 === separators:
+  //   ===1 … ===2  →  matchup header  (NAME vs NAME / team / race)
+  //   ===2 … ===3  →  prose + strategy table
+  //   after ===3   →  blow-by-blow fight narrative
+  const lines = text.split('\n');
+  const out   = [];
+  let sepCount    = 0;
+  let matchupDone = false;
+  let inStrat     = false;  // inside the strategy <table>
+
+  // Column positions detected dynamically from the TRIGGER header line.
+  // This handles both old saves (32-char trigger column) and new (42-char).
+  let _cols = null;
+
+  function detectCols(hdr) {
+    const fs  = hdr.indexOf('FIGHTING STYLE');
+    const lv  = hdr.indexOf('LEVEL', fs + 14); // skip past 'FIGHTING STY…'
+    const aim = hdr.indexOf('AIMING POINT');
+    const def = hdr.indexOf('DEFENSE POINT');
+    _cols = { fs, lv, aim, def };
+  }
+
+  function parseStrat(ln) {
+    if (!_cols) return { trigger: ln, style: '', level: '', aim: '', def: '' };
+    const { fs, lv, aim, def } = _cols;
+    return {
+      trigger: ln.slice(0, fs).trim(),
+      style:   ln.slice(fs, lv).trim(),
+      level:   ln.slice(lv, aim - 2).trim(),  // level is 5 chars; -2 skips the 2-space gap
+      aim:     ln.slice(aim, def).trim(),
+      def:     ln.slice(def).trim(),
+    };
+  }
+
+  function closeStrat() {
+    if (inStrat) { out.push('</tbody></table>'); inStrat = false; }
+  }
+
+  for (const ln of lines) {
+    // === separator ─────────────────────────────────────────────────
+    if (/^={5,}/.test(ln)) {
+      closeStrat();
+      sepCount++;
+      out.push('<div class="nar-sep"></div>');
+      if (sepCount === 1) matchupDone = false;
+      continue;
+    }
+
+    // ── Section 1: matchup header (===1 … ===2) ────────────────────
+    if (sepCount === 1) {
+      if (!matchupDone) {
+        if (!ln.trim()) { matchupDone = true; out.push('<div style="height:8px"></div>'); continue; }
+        const vsIdx = ln.indexOf('   vs   ');
+        if (vsIdx >= 0) {
+          const L = ln.slice(0, vsIdx).trim();
+          const R = ln.slice(vsIdx + 8).trim();
+          if (/\(\d+[-–]\d+/.test(L)) {
+            // Warrior name line — bold + larger
+            const fw = p => {
+              const m = p.match(/^(.*?)\s+(\([^)]+\))$/);
+              return m
+                ? `<span class="nar-wname">${esc(m[1])}</span> <span class="nar-wrec">${esc(m[2])}</span>`
+                : `<span class="nar-wname">${esc(p)}</span>`;
+            };
+            out.push(`<div class="nar-row" style="margin:6px 0"><span class="nar-col-l">${fw(L)}</span><span class="nar-col-vs">vs</span><span class="nar-col-r">${fw(R)}</span></div>`);
+          } else {
+            // Team / race lines — same column structure, empty vs cell so columns align
+            out.push(`<div class="nar-row"><span class="nar-col-l">${esc(L)}</span><span class="nar-col-vs"></span><span class="nar-col-r">${esc(R)}</span></div>`);
+          }
+        } else {
+          out.push(`<div class="nar-line">${esc(ln)}</div>`);
+        }
+      }
+      continue;
+    }
+
+    // ── Section 2: prose + strategy table (===2 … ===3) ───────────
+    if (sepCount === 2) {
+      if (/^-{5,}/.test(ln)) continue; // skip the --- under TRIGGER header
+
+      if (!ln.trim()) { closeStrat(); out.push('<div style="height:6px"></div>'); continue; }
+
+      // Strategy table header — detect column positions first, then parse
+      if (/^TRIGGER\s/.test(ln.trim())) {
+        detectCols(ln);
+        const c = parseStrat(ln);
+        inStrat = true;
+        out.push(
+          `<table class="nar-strat-tbl"><thead><tr>` +
+          `<th class="nar-st-trig">${esc(c.trigger)}</th>` +
+          `<th class="nar-st-style">${esc(c.style)}</th>` +
+          `<th class="nar-st-level">${esc(c.level)}</th>` +
+          `<th class="nar-st-aim">${esc(c.aim)}</th>` +
+          `<th>${esc(c.def)}</th>` +
+          `</tr></thead><tbody>`
+        );
+        continue;
+      }
+
+      // Strategy data rows
+      if (inStrat) {
+        const c = parseStrat(ln);
+        out.push(
+          `<tr>` +
+          `<td class="nar-st-trig">${esc(c.trigger)}</td>` +
+          `<td class="nar-st-style">${esc(c.style)}</td>` +
+          `<td class="nar-st-level">${esc(c.level)}</td>` +
+          `<td class="nar-st-aim">${esc(c.aim)}</td>` +
+          `<td>${esc(c.def)}</td>` +
+          `</tr>`
+        );
+        continue;
+      }
+
+      // Prose lines — bold warrior name prefix + any ALL-CAPS items (armor, weapons)
+      const pm = ln.match(/^([A-Z][A-Z ']{2,}?)(\s+(?:is |weighs |Has |enters |fights |has ))/);
+      if (pm) {
+        const name = pm[1];
+        const rest = ln.slice(name.length);
+        const restHtml = esc(rest).replace(/\b([A-Z]{2,}(?:[-\s][A-Z]{2,})*)\b/g, '<strong>$1</strong>');
+        out.push(`<div class="nar-prose"><strong>${esc(name)}</strong>${restHtml}</div>`);
+      } else {
+        out.push(`<div class="nar-prose">${esc(ln)}</div>`);
+      }
+      continue;
+    }
+
+    // ── Section 3: fight narrative (after ===3) ────────────────────
+    if (sepCount >= 3) {
+      if (/^\*\*\*.*\*\*\*$/.test(ln))                                         { out.push(`<div class="nar-event">${esc(ln)}</div>`);   continue; }
+      if (/^MINUTE\s+\d+/.test(ln.trim()))                                      { out.push(`<div class="nar-minute">${esc(ln)}</div>`);  continue; }
+      if (/SLAIN/.test(ln) || /collapses/i.test(ln) || /\bfalls\b/i.test(ln)) { out.push(`<div class="nar-death">${esc(ln)}</div>`);   continue; }
+      if (/wins/i.test(ln) && (/judge/i.test(ln) || /victory/i.test(ln)))      { out.push(`<div class="nar-win">${esc(ln)}</div>`);     continue; }
+      if (/trained/i.test(ln) || /observed/i.test(ln))                         { out.push(`<div class="nar-training">${esc(ln)}</div>`); continue; }
+      if (/^\s+HP/.test(ln) || /HP:/.test(ln) || /damage/i.test(ln))           { out.push(`<div class="nar-hp">${esc(ln)}</div>`);      continue; }
+      if (!ln.trim())                                                            { out.push('<br>');                                       continue; }
+      // Damage result lines arrive with 3 leading spaces from narrative.py
+      if (/^   \S/.test(ln))                                                    { out.push(`<div class="${_damageClass(ln)}">${esc(ln.trim())}</div>`); continue; }
+      out.push(`<div class="nar-line">${esc(ln)}</div>`);
+    }
+  }
+  closeStrat();
+  return out.join('');
+}
+
 function showNarrativeOverlay() {
   let ov = el('narrative-overlay');
   if (!ov) {
@@ -2643,14 +2835,13 @@ function showNarrativeOverlay() {
       <button onclick="closeNarrative()" style="margin-left:auto; min-width:0; width:16px; height:14px;
         padding:0; font-size:9px; background:#d4d0c8; border:1px solid #808080; cursor:default;">✕</button>
     </div>
-    <div style="flex:1; overflow-y:auto; padding:10px; background:#fff;">
-      <pre style="font-family:'Courier New',Courier,monospace; font-size:11px; line-height:1.5;
-           white-space:pre-wrap; color:#000;">${esc(t.text || '')}</pre>
+    <div id="nar-body" style="flex:1; overflow-y:auto; padding:12px 16px; background:#fff;">
     </div>
     <div style="padding:6px 8px; border-top:1px solid #808080; text-align:right; background:#d4d0c8;">
       <button onclick="closeNarrative()">Close</button>
     </div>
   </div>`;
+  el('nar-body').innerHTML = narrativeToHtml(t.text || '');
 }
 
 function hideNarrativeOverlay() {

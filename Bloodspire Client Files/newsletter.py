@@ -235,7 +235,7 @@ def _warrior_tiers(teams, champion_state: dict) -> str:
 
 def _dead_section(deaths: list, turn_num: int) -> str:
     if not deaths: return ""
-    sep="="*75
+    sep="="*87
     lines=["\nTHE DEAD",
            f"{'NAME':<22}{'W':>4}{'L':>4}{'K':>4}  {'TEAM':<24}{'SLAIN BY':<22}{'TURN':>5}",sep]
     for d in deaths:
@@ -470,6 +470,148 @@ _BLK_OUTRO = [
     "Until the brackets change again, this is what happened.  — {byline}",
 ]
 
+# ---------------------------------------------------------------------------
+# ADDITIONAL NARRATIVE POOLS — weave into the spy-report body
+# ---------------------------------------------------------------------------
+
+_BLK_WARRIOR_RISER = [
+    "Hey everybody, keep your eye on {warrior} of {team} — after dispatching {opponent} this turn, this fighter sits at {points} recognition and is moving fast.  Rival managers are adjusting their schedules accordingly.",
+    "Watch out for {warrior} of {team}, who turned {opponent} into a stepping stone this turn and climbed to {points} recognition doing it.  That performance won't be forgotten by the bookmakers.",
+    "Word travels fast in {arena}, and right now it's all about {warrior} of {team}.  They made {opponent} look thoroughly outmatched and now sit at {points} recognition.  The kind of turn that changes how rivals plan.",
+    "The stands were buzzing after {warrior} of {team} finished with {opponent}.  Efficient, controlled, and effective — {points} recognition now, and the number is still climbing.",
+    "If you weren't watching {warrior} of {team} before, you should have been.  They dismantled {opponent} this turn and now carry {points} recognition.  Rival managers are circling this name with a worried quill.",
+    "There's a name to write down: {warrior} of {team}.  After running through {opponent} this turn, they've climbed to {points} recognition and show no signs of slowing.",
+    "The crowd got what they wanted when {warrior} stepped out and made quick work of {opponent}.  Now at {points} recognition, this fighter is becoming a problem for opponents at this level.",
+    "No debate after {warrior} of {team} handled {opponent} this turn.  Sitting at {points} recognition, this one is simple math — and bad news for whoever faces them next.",
+    "Quietly and efficiently, {warrior} of {team} put {opponent} down and climbed to {points} recognition.  The quiet ones are always the ones you didn't adjust for in time.",
+    "Someone's going to challenge {warrior} of {team} soon and discover they've made a bad decision.  After handling {opponent} this turn and reaching {points} recognition, the gap between reputation and reality has officially closed.",
+]
+
+_BLK_WARRIOR_FALLER = [
+    "And tumbling down the standings was {warrior}, who ran headlong into {opponent} and paid the price.  The records are unforgiving in {arena}, and right now they're not forgiving {warrior}.",
+    "Falling like a fighter who forgot to block — {warrior} dropped a costly bout against {opponent} this turn.  Painful, and the standings will confirm it.",
+    "Not every story has a happy ending, and {warrior}'s this turn doesn't even have a satisfying middle.  {opponent} handed them a loss that will linger longer than the bruises.",
+    "{opponent} made a point at {warrior}'s expense this turn, and the point was well received by the crowd.  Less so by {warrior}'s team manager, one suspects.",
+    "The {arena} crowd can be cruel, and when {warrior} fell to {opponent} this turn, the response was not sympathetic.  A loss at this stage carries consequences.",
+    "On the wrong end of the highlights this turn was {warrior}, who had no answer for {opponent}.  The records now reflect what the crowd already knew.",
+    "{warrior} left the arena considerably less confident than they entered it, courtesy of {opponent}.  That kind of adjustment tends to be educational — eventually.",
+    "Somewhere between planning and execution, {warrior}'s turn fell apart against {opponent}.  It happens.  In {arena}, it tends to happen loudly.",
+    "It wasn't {warrior}'s turn.  Or their fight.  Or their afternoon.  {opponent} took care of all of that efficiently and without apparent difficulty.",
+    "The standings now officially reflect what the fight already told us: {warrior} was not ready for {opponent} this turn.  The gap between tiers is rarely as polite as the schedule implies.",
+]
+
+_BLK_CHALLENGE_WIN = [
+    "I just want to tip my hat to {warrior}, who took on {opponent} from a lower spot in the rankings and came out ahead.  The smart money wasn't on it.  The smart money was wrong.",
+    "Congratulations are in order for {warrior}, who overcame both {opponent} and the recognition gap between them.  That kind of result earns more than points — it earns a reputation.",
+    "Not everyone challenges up and survives to tell it.  {warrior} did, putting {opponent} down in a result that surprised most of {arena}.  Well earned.",
+    "They said {warrior} was overmatched against {opponent}.  {warrior} apparently didn't hear that part.  The result speaks clearly enough.",
+    "Challenging up is brave.  Winning is better.  {warrior} managed both this turn against {opponent}, and the recognition that followed was entirely deserved.",
+]
+
+_BLK_CHALLENGE_LOSS = [
+    "{warrior} had better have a very good reason for challenging down against {opponent} and still coming away with a loss.  I thought {warrior} showed great skill and promise when they were absolutely flattened.  All right, I slept through it.  Big deal.",
+    "Challenging down is supposed to be the safe play.  Someone should tell {warrior} that, since they managed to lose to {opponent} anyway.  That requires a special kind of effort.",
+    "The most charitable reading of {warrior}'s challenge against {opponent} is that they underestimated the competition.  The least charitable reading is also probably correct.",
+    "I've seen bad challenges before, but {warrior} going after {opponent} — a lower-ranked opponent — and losing is a special kind of expensive.  The recognition gap made it look safe.  It wasn't.",
+    "Some lessons cost coin.  Some cost pride.  {warrior}'s loss to {opponent} in what should have been a comfortable challenge cost both.  Thoroughly.",
+]
+
+_BLK_DIG_DEEPER = [
+    "     Let's dig a little deeper into what's been going on in {arena} this turn.",
+    "     Now let me tell you what the standings board won't.",
+    "     Scratch the surface of this turn and the interesting parts start showing.",
+    "     The official results tell one story.  Here's the version worth knowing.",
+    "     There's always more to a turn than the final records.  Let's have a look.",
+    "     You want the real story?  Here it is.",
+    "     Beyond the numbers, there are names worth discussing in {arena}.",
+    "     Pull up a chair — there's more to unpack from this turn in {arena}.",
+    "     The ledger tells you who won.  I'll tell you what it means.",
+    "     Now that we've got the scores, let's talk about what's actually happening in {arena}.",
+]
+
+_BLK_WORST_TEAM = [
+    "A stormcloud is brewing over the {team} guildhouse.  A {record} showing is the kind of result that makes managers nervous and fighters start questioning their contracts.",
+    "Meanwhile, {team} had a turn they'd rather forget — {record} is the sort of record that generates uncomfortable conversations in the team quarters.",
+    "Not everyone came out of this turn smiling.  {team} posted a {record} showing that the standings will remember even if the warriors prefer not to.",
+    "The {record} outing from {team} will be discussed quietly, in corners, by people who are worried.  That kind of record doesn't just disappear.",
+    "Someone in the {team} camp needs to have a serious talk.  A {record} turn like that has consequences, and the standings are already keeping score.",
+    "Rumor has it that any more turns like this one's {record} may send the {team} roster toward some difficult decisions.  The arena is not a forgiving accountant.",
+    "Hard to put a bright face on a {record} turn.  {team} will try anyway, but the standings don't grade on effort.",
+    "If {team} was hoping this turn would turn things around, the {record} result suggests otherwise.  Hope and execution remain on separate schedules.",
+    "{team} limped out of this turn with a {record} showing that raised more questions than it answered.  Answers are expected before the next turn.",
+    "Let's just say {team}'s {record} this turn is the kind of performance that motivates rival managers to schedule challenges.  Weakness, real or perceived, gets noticed fast in {arena}.",
+]
+
+_BLK_PHILOSOPHICAL = [
+    "Being a spy is great — other people die and you spend the rest of the day drinking to their memory.  Better tanked than dead.  Ask not the elves for counsel, for they will say both yes and no.  Silly buggers.",
+    "I've been doing this long enough to know that the best fights are the ones that prove me wrong.  This turn had a few of those.  I've already started forgetting them.",
+    "They pay me to write this down.  Some turns I feel guilty about taking the coin.  This was not one of those turns.  {arena} delivered.",
+    "A warrior's lot is filled with strife, revenge, and killing.  Some fighters don't accept this.  The best do.  The ones who argue about it never last long enough to change the subject.",
+    "I was once told that the key to wisdom is knowing what you don't know.  I don't know how some of these managers keep their jobs.  There you have it.",
+    "Remember: in {arena}, even a bad turn teaches something.  Whether anyone learns it is a different question entirely.",
+    "Every turn ends the same way — with the stands emptying and the managers arguing about what went wrong.  It's the most honest part of the whole enterprise.",
+    "Time for my medication.  Or another drink.  In this profession, the distinction rarely matters.",
+    "All work and no play makes for a dull career.  All play and no training makes for a short one.  Somewhere in the middle is the winning formula.  Most warriors are still looking for it.",
+    "Someone once asked me if I ever feel bad writing about losses.  I told them no.  They stopped asking me things after that, which I consider a personal victory.",
+]
+
+_BLK_KILL_HIGHLIGHT = [
+    "{warrior} of {team} didn't just win this turn — they finished {opponent} permanently.  A kill is the arena's most definitive verdict, and {warrior} delivered it without ambiguity.  The other managers are adjusting their calculations accordingly.",
+    "When {warrior} of {team} and {opponent} met this turn, only one of them left on their own terms.  Kills generate a particular kind of attention in {arena}, and {warrior} now has more of it than they may have wanted.",
+    "The arena went quieter than usual when {warrior} of {team} finished {opponent} for good.  Then it got loud.  It always does.  In {arena}, kills are remembered long after wins are forgotten.",
+    "Not all victories are created equal.  {warrior} of {team} collected the kind this turn that removes {opponent} from the schedule permanently.  The standing are adjusted.  The opponent's are not.",
+    "Managers who have been casual about scheduling against {warrior} of {team} should revise their casualness.  After what was done to {opponent}, the risk calculation has changed considerably.",
+    "A kill is a statement in {arena}.  {warrior} of {team} made one this turn.  {opponent} will not be contesting it, attending future turns, or offering a different interpretation.  The matter is settled.",
+    "The most decisive result of the turn belonged to {warrior} of {team}.  {opponent} will not dispute it from where they are now.  The Dark Arena does not offer second opinions.",
+    "They say {arena} forgets quickly.  That may be true — but it records everything first.  {warrior} of {team} has a kill on their ledger now, and that particular entry does not fade.",
+    "Some fights end.  Some careers end.  When {warrior} of {team} met {opponent} this turn, it was the latter.  The crowd understood the distinction.  The bookmakers adjusted their lines before the body was cold.",
+    "Word spreads fast after a kill, and the word this turn involves {warrior} of {team} and the permanent absence of {opponent}.  Recognition follows performance in {arena}, and nothing performs quite like finality.",
+]
+
+_BLK_BLOODY_TURN = [
+    "This was not a gentle turn at {arena}.  Multiple careers ended today, and the atmosphere in the aftermath reflected that.  The business continues regardless, but some turns leave a mark on the crowd.",
+    "The stands emptied more quietly than usual after this turn.  Multiple kills have a way of doing that.  {arena} earned its name today.",
+    "I've covered bloodier turns, but not many in recent memory.  When the final accounting came in, the kill count was high enough that even the regulars took notice.  Some turns are reminders of what this place actually is.",
+    "A reminder from {arena}: this is not sport.  Multiple deaths in a single turn communicate that clearly enough.  The survivors continue.  The others have concluded their participation permanently.",
+    "Some turns are for standings.  Some are for lesson-learning.  This one was for the record books.  Multiple kills in a single turn is the arena's way of ensuring no one mistakes enthusiasm for preparation.",
+]
+
+_BLK_STREAK = [
+    "While others debate matchups and massage their schedules, {warrior} of {team} has simply kept winning.  Sustained success in {arena} attracts attention, and that attention is no longer politely ignoring this fighter.",
+    "{warrior} of {team} continues building something that is becoming difficult to dismiss.  Turn after turn, the wins accumulate.  The streak is long enough now that rival managers are no longer pretending not to notice.",
+    "At some point a winning run stops being fortunate and starts being a pattern.  {warrior} of {team} has crossed that line, and the managers scheduling around them have already drawn the conclusion.",
+    "Sustained winning is harder than one great performance, and {warrior} of {team} is proving it.  The streak puts this fighter in a different category of concern for anyone at this tier.",
+    "The easiest prediction in {arena} right now involves {warrior} of {team} and an aggressive challenge appearing on the schedule soon.  Sustained success invites attention.  The streak has crossed a threshold.",
+    "When a warrior keeps winning, {arena} eventually takes formal notice.  {warrior} of {team} is at that point.  The bookmakers have updated their lines.  The cautious managers have updated their schedules.",
+    "{warrior} of {team} has a streak worth watching — and worth worrying about if you're the manager who has to face them next.  Momentum in {arena} is real, and this fighter has it.",
+    "Not everyone survives long enough to build a streak in {arena}.  {warrior} of {team} is building one, and the length of it has become a topic of conversation in corners where scheduling decisions are made.",
+]
+
+_BLK_STANDINGS_LOOK = [
+    "Step back from the individual results for a moment and look at what the standings are actually saying.  The distance between top and bottom is growing, and the middle tier is where all the meaningful maneuvering is still happening.",
+    "The standings after this turn tell a story for anyone reading carefully.  Some managers are building toward something.  Others are surviving.  Both approaches produce a result — though not always the intended one.",
+    "Standings in {arena} don't lie, but they do oversimplify.  Behind the records are patterns: managers adjusting, warriors peaking, and momentum that the numbers alone can't fully capture.  Worth watching.",
+    "The scoreboard shows wins and losses.  What it doesn't show is which teams are trending in the right direction and which are sliding despite a respectable record.  In {arena}, direction matters as much as position.",
+    "Every manager in {arena} is reading the same standings and drawing different conclusions.  That's the nature of this place.  The ones who read it correctly tend to keep doing so.  The ones who don't have an explanation ready.",
+    "After this turn, the standings have sorted themselves into a picture that will define scheduling decisions for what comes next.  Some fighters are becoming commodities.  Others are becoming problems.  The ledger knows the difference.",
+    "If you look at the trend lines rather than just this turn's results, {arena} is quietly separating into tiers that won't shift easily.  Managers in the top half have reason for optimism.  The rest have reason for urgency.",
+    "It's worth remembering that every fight this turn had context — recognition gaps, grudges, avoidance patterns — that the final W-L record doesn't capture.  The standings are accurate.  They are also incomplete.",
+]
+
+_BLK_SECOND_TEAM = [
+    "Worth keeping an eye on as well: {team}, whose {record} turn has them quietly positioned better than their current standing suggests.  Not the story of the turn, but perhaps the beginning of one.",
+    "{team} didn't top the board, but their {record} showing this turn was more instructive than the standings give credit for.  Fights are often decided before they begin, and {team} is winning that preparation battle.",
+    "While the top and bottom of the standings absorb attention, {team} turned in a {record} showing that deserves a mention.  Consistency in the middle is how teams eventually reach the top — or stop pretending they won't.",
+    "The {record} posted by {team} this turn is the kind of result that makes observers revise their estimates.  Neither the best nor the worst showing, but one that suggested more than it confirmed.",
+    "In a turn with bigger headlines elsewhere, {team} quietly posted a {record} record that says something about their direction.  {arena} tends to reward the teams that don't need the biggest story to keep moving forward.",
+]
+
+_BLK_MULTIPLE_DEATHS = [
+    "The Dark Arena had a busy turn.  Multiple warriors will not be appearing on future schedules — their careers concluded, their records final.  {arena} moves on without ceremony, as it always does.",
+    "More than one manager left this turn with a vacancy to fill.  The Dark Arena was active today, and the rosters that entered the turn are not the same ones that will prepare for the next one.",
+    "When a turn produces multiple deaths, {arena} has a habit of becoming very quiet for a short time and then very loud.  Today followed that pattern exactly.  The scheduling implications are immediate.",
+]
+
 
 def _pick_block(pool: list, used: set, ctx: dict) -> str:
     """Pick an unused block from pool, format it with ctx, mark raw template as used."""
@@ -483,114 +625,145 @@ def _pick_block(pool: list, used: set, ctx: dict) -> str:
 
 def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) -> str:
     """
-    Generate a 4-6 paragraph newspaper article from fight data.
-    Comprehensive narrative with team performance, warrior highlights, 
-    ranking shifts, and meta-game analysis.
+    Generate a flowing spy-report style narrative for Arena Happenings.
+    Pool blocks are used as sentence-level building pieces woven together
+    by the reporter's voice — not as disconnected standalone paragraphs.
+
+    Structure:
+      Para 1 — Intro + champion headline + best team + worst team
+      Para 2 — Warrior risers, fallers, notable challenge results
+      Para 3 — Transition ("dig deeper") + avoidance/challenge meta
+                + champion defends (if no title change this turn)
+      Para 4 — Deaths (if any) + philosophical aside
+      Para 5 — Outro / sign-off
     """
     arena  = ARENA_NAME.upper()
     venue  = "Bloodspire"
     byline = random.choice(_BLK_BYLINES)
     random.seed()
-    
-    # ==================================================================
-    # DATA EXTRACTION & ANALYSIS
-    # ==================================================================
-    
-    # 1. Team standings analysis
+    used   = set()   # shared across ALL _pick_block calls — no repeats in one report
+
+    # ------------------------------------------------------------------
+    # DATA EXTRACTION
+    # ------------------------------------------------------------------
+
+    # Deduplicate fight pairs (card may list each bout from both teams' POV)
+    seen_pairs   = set()
+    unique_bouts = []
+    for bout in card:
+        if not bout.result: continue
+        pair = frozenset([bout.player_warrior.name, bout.opponent.name])
+        if pair in seen_pairs: continue
+        seen_pairs.add(pair)
+        unique_bouts.append(bout)
+
+    # Team records this turn
     team_records = {}
-    team_changes = {}  # Track which teams moved
     for team in teams:
         if _is_npc_team(team): continue
         tname = team.team_name if hasattr(team, "team_name") else team.get("team_name", "?")
-        w, l, k = 0, 0, 0
-        for bout in card:
-            if not bout.result: continue
-            pteam = bout.player_team
-            pteam_name = pteam.team_name if hasattr(pteam, "team_name") else pteam.get("team_name", "?")
-            oteam = bout.opponent_team
-            oteam_name = oteam.team_name if hasattr(oteam, "team_name") else oteam.get("team_name", "?")
-            
+        w = l = k = 0
+        for bout in unique_bouts:
+            pt = bout.player_team
+            ot = bout.opponent_team
+            ptname = pt.team_name if hasattr(pt, "team_name") else pt.get("team_name", "?")
+            otname = ot.team_name if hasattr(ot, "team_name") else ot.get("team_name", "?")
             pw_won = bout.result.winner and bout.result.winner.name == bout.player_warrior.name
-            
-            if pteam_name == tname:
-                if pw_won:
-                    w += 1
-                    if bout.result.loser_died: k += 1
-                else:
-                    l += 1
-            elif oteam_name == tname:
-                if not pw_won:
-                    w += 1
-                    if bout.result.loser_died: k += 1
-                else:
-                    l += 1
-        
-        team_records[tname] = {"w": w, "l": l, "k": k, "team": team}
-    
-    # 2. Warrior performance tracking (recognition changes, fight counts)
-    warrior_stats = {}  # {name: {team, wins, losses, kills, recs_pt, tier}}
-    for bout in card:
-        if not bout.result: continue
-        pw = bout.player_warrior
-        op = bout.opponent
+            if ptname == tname:
+                if pw_won: w += 1; k += (1 if bout.result.loser_died else 0)
+                else: l += 1
+            elif otname == tname:
+                if not pw_won: w += 1; k += (1 if bout.result.loser_died else 0)
+                else: l += 1
+        team_records[tname] = {"w": w, "l": l, "k": k}
+
+    sorted_teams = sorted(team_records.items(), key=lambda x: (-x[1]["w"], x[1]["l"]))
+    best_name,  best_rec  = sorted_teams[0]  if sorted_teams else (None, None)
+    worst_name, worst_rec = sorted_teams[-1] if sorted_teams else (None, None)
+
+    # Per-fight warrior data  (winners and notable losers)
+    winners_list  = []  # dicts: warrior, team, opponent, recs, is_kill
+    losers_list   = []  # same
+    for bout in unique_bouts:
+        pw     = bout.player_warrior
+        op     = bout.opponent
         pw_won = bout.result.winner and bout.result.winner.name == pw.name
-        
-        for warrior, won, team in [(pw, pw_won, bout.player_team), 
-                                   (op, not pw_won, bout.opponent_team)]:
-            if not warrior or not hasattr(warrior, "name"): continue
-            name = warrior.name
-            tname = team.team_name if hasattr(team, "team_name") else team.get("team_name", "?")
-            if tname in _NPC_TEAM_NAMES: continue
-            
-            if name not in warrior_stats:
-                rec = getattr(warrior, "recognition", 0)
-                warrior_stats[name] = {
-                    "team": tname, "wins": 0, "losses": 0, "kills": 0,
-                    "recs": rec, "fights": [], "warrior_obj": warrior
-                }
-            
-            ws = warrior_stats[name]
-            if won:
-                ws["wins"] += 1
-                if bout.result.loser_died: ws["kills"] += 1
-            else:
-                ws["losses"] += 1
-            
-            ws["fights"].append({
-                "opponent": op.name if hasattr(op, "name") else "?",
-                "won": won, "died": won and bout.result.loser_died,
-                "minutes": bout.result.minutes_elapsed
-            })
-    
-    # 3. Challenge tracking (who was challenged most, who avoided most)
-    challenge_counts = {}  # {warrior: count}
-    avoidance_counts = {}  # {team: count}
-    for bout in card:
-        if not bout.result or bout.fight_type not in ["challenge", "blood_challenge"]:
-            continue
-        challenger = bout.player_warrior
-        chal_name = challenger.name if hasattr(challenger, "name") else "?"
-        challenged_team = bout.opponent_team
-        cteam_name = challenged_team.team_name if hasattr(challenged_team, "team_name") else "?"
-        
-        challenge_counts[chal_name] = challenge_counts.get(chal_name, 0) + 1
-        avoidance_counts[cteam_name] = avoidance_counts.get(cteam_name, 0) + 1
-    
-    most_challenged = max(challenge_counts.items(), key=lambda x: x[1])[0] if challenge_counts else None
-    most_avoided = max(avoidance_counts.items(), key=lambda x: x[1])[0] if avoidance_counts else None
-    
-    # 4. Top performers this turn
-    top_warriors = sorted(
-        [(name, ws) for name, ws in warrior_stats.items() if ws["wins"] + ws["losses"] > 0],
-        key=lambda x: (-x[1]["wins"], x[1]["losses"], -x[1]["recs"])
-    )[:3]
-    
-    # 5. Champion tracking
-    champ = champion_state.get("name", "")
-    champ_t = champion_state.get("team_name", "")
+        winner, loser   = (pw, op) if pw_won else (op, pw)
+        w_team, l_team  = (bout.player_team, bout.opponent_team) if pw_won else (bout.opponent_team, bout.player_team)
+        wtname = w_team.team_name if hasattr(w_team, "team_name") else w_team.get("team_name", "?")
+        ltname = l_team.team_name if hasattr(l_team, "team_name") else l_team.get("team_name", "?")
+        if wtname not in _NPC_TEAM_NAMES:
+            winners_list.append({"warrior": winner.name, "team": wtname,
+                                  "opponent": loser.name,
+                                  "recs": getattr(winner, "recognition", 0),
+                                  "is_kill": bout.result.loser_died})
+        if ltname not in _NPC_TEAM_NAMES:
+            losers_list.append({"warrior": loser.name, "team": ltname,
+                                 "opponent": winner.name,
+                                 "recs": getattr(loser, "recognition", 0),
+                                 "is_kill": bout.result.loser_died})
+    winners_list.sort(key=lambda x: -x["recs"])
+    # Notable losers = fighters with something to lose (higher recognition)
+    losers_list.sort(key=lambda x: -x["recs"])
+
+    # Challenge data
+    challenge_results = []   # notable challenge bouts (challenging up win, challenging down loss)
+    challenge_counts  = {}   # {warrior_name: times challenged}
+    targeted_counts   = {}   # {team_name: times challenged against}
+
+    for bout in unique_bouts:
+        if bout.fight_type not in ["challenge", "blood_challenge"]: continue
+        pw     = bout.player_warrior
+        op     = bout.opponent
+        pw_won = bout.result.winner and bout.result.winner.name == pw.name
+        pt     = bout.player_team
+        ot     = bout.opponent_team
+        ptname = pt.team_name if hasattr(pt, "team_name") else pt.get("team_name", "?")
+        otname = ot.team_name if hasattr(ot, "team_name") else ot.get("team_name", "?")
+        pw_rec = getattr(pw, "recognition", 0)
+        op_rec = getattr(op, "recognition", 0)
+        # rec_diff > 0 means challenger has MORE recognition (challenging down)
+        rec_diff = pw_rec - op_rec
+        challenge_results.append({
+            "challenger": pw.name, "challenger_team": ptname,
+            "challenged": op.name, "challenged_team": otname,
+            "challenger_won": pw_won, "rec_diff": rec_diff,
+            "abs_diff": abs(rec_diff), "is_kill": bout.result.loser_died,
+        })
+        challenge_counts[op.name] = challenge_counts.get(op.name, 0) + 1
+        targeted_counts[otname]   = targeted_counts.get(otname, 0) + 1
+
+    most_challenged_warrior = max(challenge_counts.items(), key=lambda x: x[1])[0] if challenge_counts else None
+    most_targeted_team      = max(targeted_counts.items(),  key=lambda x: x[1])[0] if targeted_counts else None
+    if most_targeted_team in _NPC_TEAM_NAMES: most_targeted_team = None
+
+    # Kill highlights (winners who scored a kill this turn)
+    kill_highlights = [w for w in winners_list if w["is_kill"]]
+    kill_count      = len(kill_highlights)
+
+    # Streak warriors — 3+ consecutive wins, player teams only
+    seen_streak  = set()
+    streak_warriors = []
+    for bout in unique_bouts:
+        pw     = bout.player_warrior
+        pt     = bout.player_team
+        ptname = pt.team_name if hasattr(pt, "team_name") else pt.get("team_name", "?")
+        if ptname in _NPC_TEAM_NAMES: continue
+        streak = getattr(pw, "streak", 0)
+        if streak and streak >= 3 and pw.name not in seen_streak:
+            seen_streak.add(pw.name)
+            streak_warriors.append({"warrior": pw.name, "team": ptname, "streak": streak})
+    streak_warriors.sort(key=lambda x: -x["streak"])
+
+    # Middle teams — between best and worst for secondary team coverage
+    middle_teams = sorted_teams[1:-1] if len(sorted_teams) > 2 else []
+
+    # Champion data
+    champ     = champion_state.get("name", "")
+    champ_t   = champion_state.get("team_name", "")
     champ_src = champion_state.get("source", "")
-    
-    # Base context
+
+    # Base context — always keep every key present so format() never raises
     ctx = dict(
         arena=arena, venue=venue, byline=byline,
         turn=turn_num, next_turn=turn_num + 1,
@@ -599,227 +772,204 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
         points="", champion=champ.upper() if champ else "",
         champ_team=champ_t.upper() if champ_t else "",
     )
-    
+
     paragraphs = []
-    
-    # ==================================================================
-    # PARAGRAPH 1: OPENING + TEAM STANDINGS
-    # ==================================================================
-    intro = _pick_block(_BLK_INTRO, set(), ctx)
-    
-    # Find top/bottom team for opening
-    if team_records:
-        best_team = max(team_records.items(), key=lambda x: (x[1]["w"], -x[1]["l"]))
-        worst_team = min(team_records.items(), key=lambda x: (x[1]["w"], -x[1]["l"]))
-        
-        best_name, best_rec = best_team
-        worst_name, worst_rec = worst_team
-        
-        record_str = f"{best_rec['w']}-{best_rec['l']}-{best_rec['k']}"
-        ctx["team"] = best_name.upper()
-        ctx["record"] = record_str
-        
-        if best_rec["w"] > best_rec["l"]:
-            ctx["rank_change"] = "climbing the standings"
-        elif best_rec["l"] > best_rec["w"]:
-            ctx["rank_change"] = "slipping lower"
-        else:
-            ctx["rank_change"] = "holding steady"
-        
-        team_perf = _pick_block(_BLK_TEAM_PERF, set(), ctx)
-        para1 = f"{intro}  {team_perf}"
-    else:
-        para1 = f"{intro}"
-    
-    paragraphs.append(para1)
-    
-    # ==================================================================
-    # PARAGRAPH 2: WARRIOR HIGHLIGHTS & INDIVIDUAL PERFORMANCES
-    # ==================================================================
-    para2_parts = []
-    
-    if top_warriors:
-        for name, ws in top_warriors[:2]:
-            if ws["wins"] > 0:
-                ctx["warrior"] = name.upper()
-                ctx["points"] = str(ws["recs"])
-                rec_gain = ws["recs"] - (ws["recs"] - ws["wins"] * 5)  # rough estimate
-                
-                if ws["wins"] == len(ws["fights"]) and len(ws["fights"]) > 0:
-                    # Perfect record this turn
-                    line = f"{name.upper()} dominated this turn with a perfect {ws['wins']}-{ws['losses']} record, gaining recognition and notoriety in equal measure.  Managers are taking notice."
-                else:
-                    line = f"{name.upper()} emerged from the turn {ws['wins']}-{ws['losses']}, further establishing their presence in {arena}.  The crowd remembers winners."
-                
-                para2_parts.append(line)
-    
-    # Add meta about challenges or avoidance
-    if most_challenged and most_challenged not in [w[0] for w in top_warriors]:
-        ctx["warrior"] = most_challenged.upper()
-        meta_warrior = _pick_block(_BLK_META_WARRIOR, set(), ctx)
-        para2_parts.append(meta_warrior)
-    
-    if para2_parts:
-        para2 = "  ".join(para2_parts)
-        paragraphs.append(para2)
-    
-    # ==================================================================
-    # PARAGRAPH 3: TEAM META & AVOIDANCE / STRATEGY
-    # ==================================================================
-    para3_parts = []
-    
-    if most_avoided and most_avoided not in _NPC_TEAM_NAMES:
-        ctx["team"] = most_avoided.upper()
-        meta_team = _pick_block(_BLK_META_TEAM, set(), ctx)
-        para3_parts.append(meta_team)
-    
-    if worst_team and worst_rec["w"] < worst_rec["l"]:
-        wname, wrec = worst_team
-        ctx["team"] = wname.upper()
-        ctx["record"] = f"{wrec['w']}-{wrec['l']}-{wrec['k']}"
-        para3_parts.append(f"{wname} walked into trouble and couldn't escape it.  A {wrec['w']}-{wrec['l']}-{wrec['k']} turn like that carries consequences.  The standings don't forget.")
-    
-    if para3_parts:
-        para3 = "  ".join(para3_parts)
-        paragraphs.append(para3)
-    
-    # ==================================================================
-    # PARAGRAPH 4: CHAMPION STATUS
-    # ==================================================================
-    para4_parts = []
-    
-    if champ:
-        if champ_src == "beat_champion":
-            ctx["champion"] = champ.upper()
-            ctx["champ_team"] = champ_t.upper()
-            champ_line = _pick_block(_BLK_CHAMP_NEW, set(), ctx)
-        else:
-            ctx["champion"] = champ.upper()
-            ctx["champ_team"] = champ_t.upper() if champ_t else "?"
-            champ_line = _pick_block(_BLK_CHAMP_HOLDS, set(), ctx)
-    else:
-        champ_line = _pick_block(_BLK_CHAMP_VACANT, set(), ctx)
-    
-    para4_parts.append(champ_line)
-    
-    if para4_parts:
-        para4 = "  ".join(para4_parts)
-        paragraphs.append(para4)
-    
-    # ==================================================================
-    # PARAGRAPH 4b: ADDITIONAL WARRIOR SPOTLIGHT (3rd place and beyond)
-    # ==================================================================
-    if len(top_warriors) >= 3:
-        para4b_parts = []
-        for name, ws in top_warriors[2:4]:
-            if ws["wins"] + ws["losses"] > 0:
-                ratio = ws["wins"] / max(1, ws["wins"] + ws["losses"])
-                if ratio >= 0.5:
-                    line = (f"{name.upper()} rounds out the notable performances this turn with a "
-                            f"{ws['wins']}-{ws['losses']} showing.  Not spectacular — but consistent "
-                            f"fighters build records one turn at a time.")
-                else:
-                    line = (f"{name.upper()} finished the turn at {ws['wins']}-{ws['losses']}.  "
-                            f"Losses at this level tend to concentrate the mind quickly in {arena}.")
-                para4b_parts.append(line)
-        if para4b_parts:
-            paragraphs.append("  ".join(para4b_parts))
 
     # ==================================================================
-    # PARAGRAPH 4c: FIGHT PACE & SPECTACLE
+    # PARAGRAPH 1 — INTRO + CHAMPION HEADLINE
+    # Champion news (new or vacant) follows the intro as the biggest story.
     # ==================================================================
-    all_bouts = [b for b in card if b.result]
-    if all_bouts:
-        fight_times = [b.result.minutes_elapsed for b in all_bouts if hasattr(b.result, "minutes_elapsed") and b.result.minutes_elapsed]
-        kills_this_turn = sum(1 for b in all_bouts if b.result.loser_died)
-        total_fights = len(all_bouts)
+    p1 = []
 
-        pace_parts = []
+    p1.append(_pick_block(_BLK_INTRO, used, ctx))
 
-        if fight_times:
-            avg_mins = sum(fight_times) / len(fight_times)
-            if avg_mins <= 4:
-                pace_parts.append(
-                    f"This was a fast turn in {arena}.  Fights resolved quickly and with conviction — "
-                    f"few debates, fewer prolonged engagements.  The crowd rarely had time to grow restless.")
-            elif avg_mins >= 10:
-                pace_parts.append(
-                    f"The fights ran long this turn.  Endurance was tested across the card, "
-                    f"and not every warrior answered the call.  A slow turn tends to favor patience over flash.")
-            else:
-                pace_parts.append(
-                    f"Turn {turn_num} ran at a measured pace across the board.  No wild swings in duration — "
-                    f"most fights found their conclusion at the expected moment, which tells its own story.")
+    # Champion — new champ is the biggest news; lead with it right after intro
+    if champ and champ_src == "beat_champion":
+        ctx["champion"]   = champ.upper()
+        ctx["champ_team"] = champ_t.upper()
+        p1.append(_pick_block(_BLK_CHAMP_NEW, used, ctx))
+    elif not champ:
+        p1.append(_pick_block(_BLK_CHAMP_VACANT, used, ctx))
 
-        if total_fights > 0:
-            kill_rate = kills_this_turn / total_fights
-            if kills_this_turn == 0:
-                pace_parts.append(
-                    f"The Dark Arena went unclaimed this turn — every bout ended with a loser still breathing.  "
-                    f"Rare in {arena}, and notable enough to record.")
-            elif kill_rate >= 0.3:
-                pace_parts.append(
-                    f"{kills_this_turn} warriors did not walk away from their fight this turn.  "
-                    f"A high toll for a single card.  Managers should study the results carefully before next turn's scheduling.")
-            elif kills_this_turn >= 1:
-                pace_parts.append(
-                    f"The Dark Arena collected {kills_this_turn} this turn.  "
-                    f"Every warrior still standing should note that the odds eventually balance.")
-
-        if pace_parts:
-            paragraphs.append("  ".join(pace_parts))
+    paragraphs.append("  ".join(p1))
 
     # ==================================================================
-    # PARAGRAPH 4d: TEAM PERFORMANCE SPREAD
+    # PARAGRAPH 2 — TEAM PERFORMANCES + STANDINGS PERSPECTIVE
+    # Best team, worst team, a middle-pack note, and a broader standings look.
     # ==================================================================
-    if len(team_records) >= 2:
-        spread_parts = []
-        sorted_teams = sorted(team_records.items(), key=lambda x: (-x[1]["w"], x[1]["l"]))
-        top2 = sorted_teams[:2]
-        bottom2 = sorted_teams[-2:]
+    p2 = []
 
-        if len(sorted_teams) >= 3:
-            t1_name, t1_rec = top2[0]
-            t2_name, t2_rec = top2[1]
-            spread_parts.append(
-                f"{t1_name.upper()} and {t2_name.upper()} led the table this turn "
-                f"at {t1_rec['w']}-{t1_rec['l']}-{t1_rec['k']} and "
-                f"{t2_rec['w']}-{t2_rec['l']}-{t2_rec['k']} respectively.  "
-                f"The gap between the top teams and the rest was clear and deliberate.")
+    if best_name and best_rec:
+        ctx["team"]        = best_name.upper()
+        ctx["record"]      = f"{best_rec['w']}-{best_rec['l']}-{best_rec['k']}"
+        ctx["rank_change"] = ("advancing in the standings" if best_rec["w"] > best_rec["l"]
+                              else "holding steady" if best_rec["w"] == best_rec["l"]
+                              else "sliding in the standings")
+        p2.append(_pick_block(_BLK_TEAM_PERF, used, ctx))
 
-            b1_name, b1_rec = bottom2[-1]
-            if b1_name not in [t1_name, t2_name] and b1_rec["l"] > b1_rec["w"]:
-                spread_parts.append(
-                    f"At the other end, {b1_name.upper()} finished the turn below the line.  "
-                    f"A {b1_rec['w']}-{b1_rec['l']}-{b1_rec['k']} record in {arena} "
-                    f"is not a disaster — but it requires a response, not an excuse.")
+    # Worst team (if genuinely different and had a losing record)
+    if worst_name and worst_rec and worst_name != best_name and worst_rec["l"] > worst_rec["w"]:
+        ctx["team"]   = worst_name.upper()
+        ctx["record"] = f"{worst_rec['w']}-{worst_rec['l']}-{worst_rec['k']}"
+        p2.append(_pick_block(_BLK_WORST_TEAM, used, ctx))
 
-        if spread_parts:
-            paragraphs.append("  ".join(spread_parts))
+    # Second notable team from the middle of the pack
+    if middle_teams:
+        mt_name, mt_rec = random.choice(middle_teams)
+        if mt_name not in _NPC_TEAM_NAMES:
+            ctx["team"]   = mt_name.upper()
+            ctx["record"] = f"{mt_rec['w']}-{mt_rec['l']}-{mt_rec['k']}"
+            p2.append(_pick_block(_BLK_SECOND_TEAM, used, ctx))
+
+    # Broader standings perspective
+    p2.append(_pick_block(_BLK_STANDINGS_LOOK, used, ctx))
+
+    if p2:
+        paragraphs.append("  ".join(p2))
 
     # ==================================================================
-    # PARAGRAPH 5 (CONDITIONAL): DEATHS
+    # PARAGRAPH 3 — WARRIOR HIGHLIGHTS: RISERS AND FALLERS
+    # Cover top 2 winners and top 2 notable losers.
     # ==================================================================
-    if deaths and len(deaths) > 0:
-        para5_parts = []
-        for d in deaths[:2]:  # Show up to 2 deaths
-            d_record = f"{d.get('w', 0)}-{d.get('l', 0)}-{d.get('k', 0)}"
+    p3 = []
+
+    # Top two winner spotlights
+    for w_data in winners_list[:2]:
+        ctx["warrior"]  = w_data["warrior"].upper()
+        ctx["team"]     = w_data["team"].upper()
+        ctx["opponent"] = w_data["opponent"].upper()
+        ctx["points"]   = str(w_data["recs"])
+        p3.append(_pick_block(_BLK_WARRIOR_RISER, used, ctx))
+
+    # Up to two notable losers (skip killed warriors — they get their own paragraph)
+    used_warriors = {w["warrior"] for w in winners_list[:2]}
+    notable_losers = [x for x in losers_list
+                      if not x["is_kill"] and x["recs"] > 10
+                      and x["warrior"] not in used_warriors]
+    for l_data in notable_losers[:2]:
+        ctx["warrior"]  = l_data["warrior"].upper()
+        ctx["team"]     = l_data["team"].upper()
+        ctx["opponent"] = l_data["opponent"].upper()
+        ctx["points"]   = str(l_data["recs"])
+        p3.append(_pick_block(_BLK_WARRIOR_FALLER, used, ctx))
+
+    # If we have a third notable winner and no good loser story, spotlight them
+    if len(notable_losers) < 1 and len(winners_list) > 2:
+        w2 = winners_list[2]
+        ctx["warrior"]  = w2["warrior"].upper()
+        ctx["team"]     = w2["team"].upper()
+        ctx["opponent"] = w2["opponent"].upper()
+        ctx["points"]   = str(w2["recs"])
+        p3.append(_pick_block(_BLK_WARRIOR_HI, used, ctx))
+
+    if p3:
+        paragraphs.append("  ".join(p3))
+
+    # ==================================================================
+    # PARAGRAPH 4 — CHALLENGE DRAMA + STREAK WARRIORS
+    # Notable challenge results and any warriors on extended winning runs.
+    # ==================================================================
+    p4 = []
+
+    up_wins     = [c for c in challenge_results if c["challenger_won"]  and c["rec_diff"] < 0]
+    down_losses = [c for c in challenge_results if not c["challenger_won"] and c["rec_diff"] > 0]
+
+    # Up to two notable challenge results
+    if up_wins:
+        best = sorted(up_wins, key=lambda x: -x["abs_diff"])[0]
+        ctx["warrior"]  = best["challenger"].upper()
+        ctx["team"]     = best["challenger_team"].upper()
+        ctx["opponent"] = best["challenged"].upper()
+        ctx["points"]   = str(best["abs_diff"])
+        p4.append(_pick_block(_BLK_CHALLENGE_WIN, used, ctx))
+
+    if down_losses:
+        worst = sorted(down_losses, key=lambda x: -x["abs_diff"])[0]
+        ctx["warrior"]  = worst["challenger"].upper()
+        ctx["team"]     = worst["challenger_team"].upper()
+        ctx["opponent"] = worst["challenged"].upper()
+        ctx["points"]   = str(worst["abs_diff"])
+        p4.append(_pick_block(_BLK_CHALLENGE_LOSS, used, ctx))
+
+    # Streak warrior spotlight
+    if streak_warriors:
+        sw = streak_warriors[0]
+        ctx["warrior"] = sw["warrior"].upper()
+        ctx["team"]    = sw["team"].upper()
+        p4.append(_pick_block(_BLK_STREAK, used, ctx))
+
+    if p4:
+        paragraphs.append("  ".join(p4))
+
+    # ==================================================================
+    # PARAGRAPH 5 — KILL HIGHLIGHTS (only if kills occurred this turn)
+    # Covers the kills from the killer's perspective; deaths get their own
+    # paragraph later from the slain warrior's perspective.
+    # ==================================================================
+    if kill_highlights:
+        p5 = []
+        if kill_count >= 2:
+            p5.append(_pick_block(_BLK_BLOODY_TURN, used, ctx))
+        for kh in kill_highlights[:2]:
+            ctx["warrior"]  = kh["warrior"].upper()
+            ctx["team"]     = kh["team"].upper()
+            ctx["opponent"] = kh["opponent"].upper()
+            ctx["points"]   = str(kh["recs"])
+            p5.append(_pick_block(_BLK_KILL_HIGHLIGHT, used, ctx))
+        paragraphs.append("  ".join(p5))
+
+    # ==================================================================
+    # PARAGRAPH 6 — DIG DEEPER: META, AVOIDANCE, MOST CHALLENGED WARRIOR
+    # Opens with a transition, weaves in meta observations and champion defense.
+    # ==================================================================
+    p6 = [_pick_block(_BLK_DIG_DEEPER, used, ctx)]
+
+    if most_targeted_team:
+        ctx["team"] = most_targeted_team.upper()
+        p6.append(_pick_block(_BLK_META_TEAM, used, ctx))
+
+    if most_challenged_warrior:
+        ctx["warrior"] = most_challenged_warrior.upper()
+        for bout in unique_bouts:
+            if bout.opponent.name == most_challenged_warrior:
+                ot = bout.opponent_team
+                ctx["team"] = (ot.team_name if hasattr(ot, "team_name") else ot.get("team_name", "?")).upper()
+                break
+        p6.append(_pick_block(_BLK_META_WARRIOR, used, ctx))
+
+    # Champion holds their title (if no title change in para 1)
+    if champ and champ_src != "beat_champion":
+        ctx["champion"]   = champ.upper()
+        ctx["champ_team"] = champ_t.upper() if champ_t else "?"
+        p6.append(_pick_block(_BLK_CHAMP_HOLDS, used, ctx))
+
+    if len(p6) > 1:
+        paragraphs.append("  ".join(p6))
+
+    # ==================================================================
+    # PARAGRAPH 7 — DEATHS + PHILOSOPHICAL ASIDE
+    # Each death gets its own line; multiple deaths get a framing note first.
+    # ==================================================================
+    p7 = []
+
+    if deaths:
+        if len(deaths) >= 3:
+            p7.append(_pick_block(_BLK_MULTIPLE_DEATHS, used, ctx))
+        for d in deaths:
             ctx["warrior"] = d["name"].upper()
-            ctx["record"] = d_record
-            death_line = _pick_block(_BLK_DEATH, set(), ctx)
-            para5_parts.append(death_line)
-        
-        para5 = "  ".join(para5_parts)
-        paragraphs.append(para5)
-    
-    # ==================================================================
-    # PARAGRAPH 6: CLOSING / PHILOSOPHICAL
-    # ==================================================================
-    outro = _pick_block(_BLK_OUTRO, set(), ctx)
-    para_final = f"{outro}"
-    paragraphs.append(para_final)
+            ctx["team"]    = d.get("team", "?").upper()
+            ctx["record"]  = f"{d.get('w', 0)}-{d.get('l', 0)}-{d.get('k', 0)}"
+            p7.append(_pick_block(_BLK_DEATH, used, ctx))
 
-    # Join with double line breaks for readability
+    p7.append(_pick_block(_BLK_PHILOSOPHICAL, used, ctx))
+
+    paragraphs.append("  ".join(p7))
+
+    # ==================================================================
+    # PARAGRAPH 8 — OUTRO / SIGN-OFF
+    # ==================================================================
+    paragraphs.append(_pick_block(_BLK_OUTRO, used, ctx))
+
     article = "\n\n".join(paragraphs)
     return "\n\nArena Happenings\n\n" + article
 
@@ -837,9 +987,9 @@ def generate_newsletter(turn_num, card, teams, deaths, champion_state,
     sections.append(_team_standings(teams, turn_num))
     sections.append("\n\n" + _block_commentary(card, teams, deaths, turn_num, champion_state))
     sections.append("\n\n" + _warrior_tiers(teams, champion_state))
+    sections.append("\n\n" + _fights_section(card))
     dead = _dead_section(deaths, turn_num)
     if dead: sections.append("\n\n" + dead)
-    sections.append("\n\n" + _fights_section(card))
     sections.append("\n\n" + _race_report(teams))
     return "\n".join(sections)
 
