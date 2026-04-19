@@ -575,4 +575,178 @@ public class Warrior {
     }
     
     public Set<String> getShownMaxMessages() { return shownMaxMessages; }
+    
+    // =========================================================================
+    // SERIALIZATION
+    // =========================================================================
+    
+    @SuppressWarnings("unchecked")
+    public static Warrior fromMap(Map<String, Object> data) {
+        String name = (String) data.get("name");
+        String raceName = (String) data.get("race");
+        String gender = (String) data.get("gender");
+        
+        Race race = Race.fromName(raceName);
+        // Create warrior with minimal constructor then populate all fields
+        Warrior w = new Warrior(name, raceName, gender, 0, 0, 0, 0, 0, 0);
+        
+        // Restore attributes
+        w.strength = (int) data.getOrDefault("strength", 0);
+        w.dexterity = (int) data.getOrDefault("dexterity", 0);
+        w.constitution = (int) data.getOrDefault("constitution", 0);
+        w.intelligence = (int) data.getOrDefault("intelligence", 0);
+        w.presence = (int) data.getOrDefault("presence", 0);
+        w.size = (int) data.getOrDefault("size", 0);
+        
+        // Restore stats
+        w.maxHp = (int) data.getOrDefault("max_hp", 0);
+        w.currentHp = w.maxHp;
+        w.wins = (int) data.getOrDefault("wins", 0);
+        w.losses = (int) data.getOrDefault("losses", 0);
+        w.kills = (int) data.getOrDefault("kills", 0);
+        w.totalFights = (int) data.getOrDefault("total_fights", 0);
+        w.luck = (int) data.getOrDefault("luck", 0);
+        w.popularity = (int) data.getOrDefault("popularity", 0);
+        w.recognition = (int) data.getOrDefault("recognition", 0);
+        w.streak = (int) data.getOrDefault("streak", 0);
+        w.turnsActive = (int) data.getOrDefault("turns_active", 0);
+        
+        // Restore equipment
+        String armorName = (String) data.get("armor");
+        if (armorName != null) {
+            w.armor = ArmorUtil.getArmorByName(armorName);
+        }
+        String helmName = (String) data.get("helm");
+        if (helmName != null) {
+            w.helm = ArmorUtil.getHelmByName(helmName);
+        }
+        String primaryWeaponName = (String) data.get("primary_weapon");
+        if (primaryWeaponName != null) {
+            w.primaryWeapon = WeaponsUtil.getWeaponByName(primaryWeaponName);
+        }
+        String secondaryWeaponName = (String) data.get("secondary_weapon");
+        if (secondaryWeaponName != null) {
+            w.secondaryWeapon = WeaponsUtil.getWeaponByName(secondaryWeaponName);
+        }
+        String backupWeaponName = (String) data.get("backup_weapon");
+        if (backupWeaponName != null) {
+            w.backupWeapon = WeaponsUtil.getWeaponByName(backupWeaponName);
+        }
+        
+        // Restore skills
+        Map<String, Integer> skillsData = (Map<String, Integer>) data.get("skills");
+        if (skillsData != null) {
+            w.skills.clear();
+            w.skills.putAll(skillsData);
+        }
+        
+        // Restore injuries
+        Map<String, Integer> injuriesData = (Map<String, Integer>) data.get("injuries");
+        if (injuriesData != null) {
+            for (Map.Entry<String, Integer> entry : injuriesData.entrySet()) {
+                w.injuries.setInjury(entry.getKey(), entry.getValue());
+            }
+        }
+        
+        // Restore flags
+        w.isDead = (boolean) data.getOrDefault("is_dead", false);
+        w.ascendedToMonster = (boolean) data.getOrDefault("ascended_to_monster", false);
+        w.wantMonsterFight = (boolean) data.getOrDefault("want_monster_fight", false);
+        w.wantRetire = (boolean) data.getOrDefault("want_retire", false);
+        w.killedBy = (String) data.get("killed_by");
+        w.favoriteWeapon = (String) data.get("favorite_weapon");
+        
+        // Restore height/weight
+        w.heightIn = (int) data.getOrDefault("height_in", 0);
+        w.weightLbs = (int) data.getOrDefault("weight_lbs", 0);
+        w.trainingWeightBonus = (int) data.getOrDefault("training_weight_bonus", 0);
+        
+        // Restore avoid warriors
+        List<Object> avoidData = (List<Object>) data.get("avoid_warriors");
+        if (avoidData != null) {
+            w.avoidWarriors.clear();
+            for (Object a : avoidData) {
+                if (a instanceof String) {
+                    w.avoidWarriors.add((String) a);
+                }
+            }
+        }
+        
+        // Restore initial stats
+        Map<String, Integer> initialStatsData = (Map<String, Integer>) data.get("initial_stats");
+        if (initialStatsData != null) {
+            w.initialStats.clear();
+            w.initialStats.putAll(initialStatsData);
+        }
+        
+        // Restore attribute gains
+        Map<String, Integer> attrGainsData = (Map<String, Integer>) data.get("attribute_gains");
+        if (attrGainsData != null) {
+            w.attributeGains.clear();
+            w.attributeGains.putAll(attrGainsData);
+        }
+        
+        // Restore fight history
+        List<Object> fightHistoryData = (List<Object>) data.get("fight_history");
+        if (fightHistoryData != null) {
+            w.fightHistory.clear();
+            for (Object f : fightHistoryData) {
+                if (f instanceof Map) {
+                    w.fightHistory.add((Map<String, Object>) f);
+                }
+            }
+        }
+        
+        return w;
+    }
+    
+    public Map<String, Object> toMap() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("name", name);
+        data.put("race", race.getName());
+        data.put("gender", gender);
+        data.put("strength", strength);
+        data.put("dexterity", dexterity);
+        data.put("constitution", constitution);
+        data.put("intelligence", intelligence);
+        data.put("presence", presence);
+        data.put("size", size);
+        data.put("max_hp", maxHp);
+        data.put("wins", wins);
+        data.put("losses", losses);
+        data.put("kills", kills);
+        data.put("total_fights", totalFights);
+        data.put("luck", luck);
+        data.put("popularity", popularity);
+        data.put("recognition", recognition);
+        data.put("streak", streak);
+        data.put("turns_active", turnsActive);
+        
+        data.put("armor", armor != null ? armor.getName() : null);
+        data.put("helm", helm != null ? helm.getName() : null);
+        data.put("primary_weapon", primaryWeapon != null ? primaryWeapon.getName() : null);
+        data.put("secondary_weapon", secondaryWeapon != null ? secondaryWeapon.getName() : null);
+        data.put("backup_weapon", backupWeapon != null ? backupWeapon.getName() : null);
+        
+        data.put("skills", new HashMap<>(skills));
+        data.put("injuries", injuries.toDict());
+        
+        data.put("is_dead", isDead);
+        data.put("ascended_to_monster", ascendedToMonster);
+        data.put("want_monster_fight", wantMonsterFight);
+        data.put("want_retire", wantRetire);
+        data.put("killed_by", killedBy);
+        data.put("favorite_weapon", favoriteWeapon);
+        
+        data.put("height_in", heightIn);
+        data.put("weight_lbs", weightLbs);
+        data.put("training_weight_bonus", trainingWeightBonus);
+        
+        data.put("avoid_warriors", new ArrayList<>(avoidWarriors));
+        data.put("initial_stats", new HashMap<>(initialStats));
+        data.put("attribute_gains", new HashMap<>(attributeGains));
+        data.put("fight_history", new ArrayList<>(fightHistory));
+        
+        return data;
+    }
 }

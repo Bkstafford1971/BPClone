@@ -41,4 +41,10 @@ public class StyleProperties {
     // Package-private setters for builder pattern
     void setParryBonus(int parryBonus) { this.parryBonus = parryBonus; }
     void setDodgeBonus(int dodgeBonus) { this.dodgeBonus = dodgeBonus; }
+    void setApmModifier(double apmModifier) { this.apmModifier = apmModifier; }
+    void setDamageModifier(double damageModifier) { this.damageModifier = damageModifier; }
+    void setEnduranceBurn(double enduranceBurn) { this.enduranceBurn = enduranceBurn; }
+    void setIntimidate(boolean intimidate) { this.intimidate = intimidate; }
+    void setAnxiouslyAwaits(boolean anxiouslyAwaits) { this.anxiouslyAwaits = anxiouslyAwaits; }
+    void setTotalKillMode(boolean totalKillMode) { this.totalKillMode = totalKillMode; }
 }
