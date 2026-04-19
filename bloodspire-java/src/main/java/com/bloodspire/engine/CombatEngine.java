@@ -397,23 +397,7 @@ public class CombatEngine {
         return null;
     }
 
-    // Stub methods - full implementation continues in next part
-    private FightResult resolveAction(CombatState as_, CombatState ds_, Strategy ax, Strategy dx, int minute) { return null; }
-    private void applyPresenceHesitation() {}
-    private void throwStones(int minute) {}
-    private List<String> updateEndurance(CombatState st, Strategy s, int acts, CombatState foe) { return new ArrayList<>(); }
-    private int calcApm(Warrior w, Strategy s, CombatState st) { return 1; }
-    private List<String> applyTraining(Warrior w, Warrior opp) { return new ArrayList<>(); }
-    private FightResult attemptConcede(CombatState dy, CombatState kl, int min) { return null; }
-    private String handleOpportunityThrowLoss(Warrior w, CombatState st) { return null; }
-    private FightResult counterstrike(CombatState as_, CombatState ds_, Strategy ax, Strategy dx, int min) { return null; }
-    private FightResult handleZeroHp(CombatState dy, CombatState kl, int prev, int dmg, int min) { return null; }
-    private boolean checkEntangle(Warrior w, CombatState st, Weapon wp, boolean thrown) { return false; }
-    private boolean checkKnockdown(Warrior w, CombatState st, int dmg, String cat) { return false; }
-    private boolean checkPermInjury(Warrior w, int dmg, String aim) { return false; }
-    private boolean deathCheck(int prev, int dmg) { return false; }
-    private boolean concedeCheck(Warrior w, CombatState st) { return false; }
-    private String getFavoriteWeaponFlavor(Warrior w, String wn, CombatState st) { return null; }
+    // Check weapon/style compatibility
     private boolean checkWeaponStyleCompatibility(String wn, String style) {
         Weapon wp; try { wp = Weapons.getWeapon(wn); } catch(Exception e) { return true; }
         if (style.equals(wp.getWeakStyles()!=null?wp.getWeakStyles().contains(style):false)) return false;

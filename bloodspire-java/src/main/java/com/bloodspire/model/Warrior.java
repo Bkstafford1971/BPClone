@@ -481,6 +481,7 @@ public class Warrior {
     // =========================================================================
 
     public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
     public Race getRace() { return race; }
     public String getGender() { return gender; }
     
@@ -546,6 +547,15 @@ public class Warrior {
     public void setWantRetire(boolean wantRetire) { this.wantRetire = wantRetire; }
     public List<String> getAvoidWarriors() { return avoidWarriors; }
     public void setAvoidWarriors(List<String> avoidWarriors) { this.avoidWarriors = avoidWarriors; }
+    
+    public boolean isAvoidingWarrior(String challengerName) {
+        for (String w : avoidWarriors) {
+            if (w != null && w.equalsIgnoreCase(challengerName)) {
+                return true;
+            }
+        }
+        return false;
+    }
     
     public boolean isDead() { return isDead; }
     public void setDead(boolean dead) { isDead = dead; }

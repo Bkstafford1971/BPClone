@@ -386,6 +386,15 @@ public class Team {
         return new ArrayList<>(avoidManagers);
     }
     
+    public boolean isAvoidingManager(String challengerManager) {
+        for (String m : avoidManagers) {
+            if (m != null && m.equalsIgnoreCase(challengerManager)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
     // =========================================================================
     // UTILITY METHODS
     // =========================================================================
