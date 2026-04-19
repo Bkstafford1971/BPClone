@@ -61,7 +61,7 @@ public class CombatEngine {
         
         if (!state.isFinished) {
             // Time limit reached - judge decision
-            state.winner = determineWinnerByStats(state);
+            state.winner = determineWinnerByStats(state.warrior1, state.warrior2);
             if (generateNarrative) {
                 narrative.add(narrativeEngine.generateJudgeDecision(state.warrior1, state.warrior2, state.winner));
             }
@@ -95,7 +95,7 @@ public class CombatEngine {
         
         // Style modifiers
         Strategy primaryStrategy = warrior.getStrategies().isEmpty() ? 
-            new Strategy("Strike", "Short Sword", "Leather Armor") :
+            new Strategy("Always", "Strike", 5, "None", "Chest") :
             warrior.getStrategies().get(0);
         
         String style = primaryStrategy.getStyle();
@@ -182,7 +182,7 @@ public class CombatEngine {
         
         // Get attacker's strategy and weapons
         Strategy strategy = attacker.getStrategies().isEmpty() ?
-            new Strategy("Strike", "Short Sword", "Leather Armor") :
+            new Strategy("Always", "Strike", 5, "None", "Chest") :
             attacker.getStrategies().get(0);
         
         Weapon mainWeapon = WeaponsUtil.getWeaponByName(strategy.getWeapon());
@@ -303,7 +303,7 @@ public class CombatEngine {
         
         // Dodge/parry based on defender's style
         Strategy defenderStrategy = warrior.getStrategies().isEmpty() ?
-            new Strategy("Strike", "Short Sword", "Leather Armor") :
+            new Strategy("Always", "Strike", 5, "None", "Chest") :
             warrior.getStrategies().get(0);
         
         String style = defenderStrategy.getStyle();
@@ -383,7 +383,7 @@ public class CombatEngine {
         
         // Defender's armor reduction
         Strategy defStrategy = defender.getStrategies().isEmpty() ?
-            new Strategy("Strike", "Short Sword", "Leather Armor") :
+            new Strategy("Always", "Strike", 5, "None", "Chest") :
             defender.getStrategies().get(0);
         
         String armor = defStrategy.getArmor();
