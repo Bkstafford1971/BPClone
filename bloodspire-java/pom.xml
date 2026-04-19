@@ -19,11 +19,11 @@
     </properties>
 
     <dependencies>
-        <!-- JSON processing -->
+        <!-- JSON processing - Jackson -->
         <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.10.1</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.16.1</version>
         </dependency>
 
         <!-- HTTP Server (built into Java 17, but we add Jetty for better support) -->
