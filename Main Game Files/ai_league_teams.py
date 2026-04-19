@@ -455,6 +455,7 @@ def evolve_ai_teams(teams: List[dict], turn_results: dict) -> List[dict]:
                     new_warriors.append(replacement)
                 else:
                     # Train surviving warriors
+                    w.reset_training_session()  # Reset message tracking for this training turn
                     for sk in w.trains[:3]:
                         try: w.train_skill(sk)
                         except Exception: pass
@@ -480,43 +481,3 @@ def evolve_ai_teams(teams: List[dict], turn_results: dict) -> List[dict]:
     return teams
 
 
-# ---------------------------------------------------------------------------
-# BUILD RivalManager-COMPATIBLE OBJECTS FROM AI TEAMS (for local matchmaking)
-# ---------------------------------------------------------------------------
-
-def ai_teams_as_rivals(ai_teams: List[dict]):
-    """
-    Convert AI team dicts into objects compatible with build_fight_card()'s
-    rival list. Returns a list of lightweight rival objects.
-    """
-    import sys; sys.path.insert(0, BASE_DIR)
-    from team import Team
-
-    class _AIRival:
-        """Minimal RivalManager-compatible wrapper for an AI team."""
-        def __init__(self, mid, mname, team, tier=2):
-            self.manager_id        = mid
-            self.manager_name      = mname
-            self.team_name         = team.team_name
-            self.team              = team
-            self.tier              = tier
-            self.fights_completed  = 0
-
-        def post_fight_update(self):
-            pass   # AI rivals don't need local training updates
-
-    rivals = []
-    for at in ai_teams:
-        try:
-            team = Team.from_dict(at)
-            if not team.active_warriors:
-                continue
-            rivals.append(_AIRival(
-                mid   = at["manager_id"],
-                mname = at["manager_name"],
-                team  = team,
-                tier  = at.get("tier", 2),
-            ))
-        except Exception as e:
-            print(f"  WARNING: could not build rival from AI team {at.get('team_name','?')}: {e}")
-    return rivals

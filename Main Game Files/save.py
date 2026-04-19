@@ -38,12 +38,46 @@ FIGHTS_DIR     = os.path.join(SAVES_DIR, "fights")
 LOGS_DIR       = os.path.join(SAVES_DIR, "logs")
 GAME_STATE_FILE= os.path.join(SAVES_DIR, "game_state.json")
 SCOUTING_FILE  = os.path.join(SAVES_DIR, "scouting.json")
+MONSTER_TEAM_FILE = os.path.join(SAVES_DIR, "monster_team.json")
 
 
 def _ensure_dirs():
     """Create save directories if they don't already exist."""
     for path in (SAVES_DIR, TEAMS_DIR, FIGHTS_DIR, LOGS_DIR):
         os.makedirs(path, exist_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# MONSTER TEAM PERSISTENCE
+# ---------------------------------------------------------------------------
+# The Monster team roster is normally rebuilt from the hardcoded MONSTER_ROSTER
+# in team.py. But when a player warrior kills a monster, that warrior replaces
+# the slain monster on the roster. To make that persistent across turns, we
+# snapshot the monster team to disk after absorption. Delete the file to
+# reset to the hardcoded default roster.
+
+def load_monster_team() -> Optional[Team]:
+    """Load persisted monster team from disk. Returns None if no save exists."""
+    _ensure_dirs()
+    if not os.path.exists(MONSTER_TEAM_FILE):
+        return None
+    try:
+        with open(MONSTER_TEAM_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Team.from_dict(data)
+    except (json.JSONDecodeError, IOError, KeyError) as e:
+        print(f"  WARNING: Could not load monster_team.json ({e}). Using hardcoded roster.")
+        return None
+
+
+def save_monster_team(team: Team):
+    """Persist the monster team to disk."""
+    _ensure_dirs()
+    try:
+        with open(MONSTER_TEAM_FILE, "w", encoding="utf-8") as f:
+            json.dump(team.to_dict(), f, indent=2)
+    except IOError as e:
+        print(f"  ERROR: Could not save monster_team.json: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +578,7 @@ def reset_arena_state():
                     w["total_fights"] = 0
                     w["fight_history"]= []
                     w["injuries"]     = {}
-                    w["popularity"]   = 50
+                    w["popularity"]   = 0
                     w["streak"]       = 0
                     w["turns_active"] = 0
                     w["attribute_gains"] = {k:0 for k in ["strength","dexterity","constitution","intelligence","presence"]}
@@ -611,9 +645,17 @@ def load_champion_state() -> dict:
         return {}
     try:
         with open(CHAMPION_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception:
         return {}
+    # Defensive: an older bug wrote the (state, is_new) tuple as a JSON list.
+    # Recover the dict half so the game keeps running.
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                return item
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def save_champion_state(state: dict):
@@ -642,7 +684,9 @@ def save_newsletter_voice(voice: str):
 # ---------------------------------------------------------------------------
 # SCOUTING (per-manager scout selections, reset each turn)
 # ---------------------------------------------------------------------------
-# Structure: { str(manager_id): { "turn": int, "selections": [warrior_name, ...] } }
+# Structure: { str(manager_id): { "turn": int, "selections": [
+#   { "warrior_name": str, "team_name": str, "team_id": int, "confirmed": bool }, ...
+# ] } }
 
 def load_scouting() -> dict:
     """Load all manager scouting selections."""
@@ -664,8 +708,9 @@ def save_scouting(data: dict) -> None:
 
 def get_manager_scouting(manager_id: int, current_turn: int) -> list:
     """
-    Return this manager's scout list for the current turn.
+    Return this manager's scout list for the current turn (all selections, confirmed or not).
     Automatically resets to [] if stored turn doesn't match current_turn.
+    Returns list of dicts with: warrior_name, team_name, team_id, confirmed.
     """
     data = load_scouting()
     key  = str(manager_id)
@@ -682,10 +727,104 @@ def set_manager_scouting(manager_id: int, current_turn: int, selections: list) -
     save_scouting(data)
 
 
+def add_manager_scouting(manager_id: int, current_turn: int, warrior_name: str, team_name: str, team_id: int, confirmed: bool = True) -> tuple:
+    """
+    Add a warrior to scout for a manager/turn. Returns (success, error_msg).
+    Confirmed selections cannot be removed.
+    """
+    data = load_scouting()
+    key  = str(manager_id)
+    entry= data.get(key, {})
+    
+    # Reset if different turn
+    if entry.get("turn") != current_turn:
+        entry = {"turn": current_turn, "selections": []}
+    
+    # Check if already scouting
+    for sel in entry.get("selections", []):
+        if sel.get("warrior_name") == warrior_name:
+            return (False, "Already scouting that warrior")
+    
+    # Check if at max capacity
+    if len(entry.get("selections", [])) >= 3:
+        return (False, "All 3 scout slots are full")
+    
+    # Add the selection
+    entry.setdefault("selections", []).append({
+        "warrior_name": warrior_name,
+        "team_name": team_name,
+        "team_id": team_id,
+        "confirmed": confirmed
+    })
+    
+    data[key] = entry
+    save_scouting(data)
+    return (True, "")
+
+
+def remove_manager_scouting(manager_id: int, current_turn: int, warrior_name: str) -> tuple:
+    """
+    Remove a warrior from scout list (only if not confirmed).
+    Returns (success, error_msg).
+    """
+    data = load_scouting()
+    key  = str(manager_id)
+    entry= data.get(key, {})
+    
+    if entry.get("turn") != current_turn:
+        return (False, "No active scouting for this turn")
+    
+    selections = entry.get("selections", [])
+    for i, sel in enumerate(selections):
+        if sel.get("warrior_name") == warrior_name:
+            if sel.get("confirmed"):
+                return (False, "Cannot remove a confirmed scout selection")
+            selections.pop(i)
+            data[key] = entry
+            save_scouting(data)
+            return (True, "")
+    
+    return (False, "Warrior not found in scout list")
+
+
+def confirm_manager_scouting(manager_id: int, current_turn: int, warrior_name: str) -> tuple:
+    """
+    Confirm a scouting selection (locks it permanently until turn ends).
+    Returns (success, error_msg).
+    """
+    data = load_scouting()
+    key  = str(manager_id)
+    entry= data.get(key, {})
+    
+    if entry.get("turn") != current_turn:
+        return (False, "No active scouting for this turn")
+    
+    selections = entry.get("selections", [])
+    for sel in selections:
+        if sel.get("warrior_name") == warrior_name:
+            if sel.get("confirmed"):
+                return (False, "Already confirmed")
+            sel["confirmed"] = True
+            data[key] = entry
+            save_scouting(data)
+            return (True, "")
+    
+    return (False, "Warrior not found in scout list")
+
+
+def clear_manager_scouting(manager_id: int) -> None:
+    """Remove all scouting selections for a manager (used after a turn completes)."""
+    data = load_scouting()
+    key  = str(manager_id)
+    if key in data:
+        del data[key]
+        save_scouting(data)
+
+
 def get_all_scouted_warriors(current_turn: int) -> dict:
     """
     Return a mapping of warrior_name → [manager_name, ...] for the current turn.
-    Used during fight resolution to inject scout-attendance flavor text.
+    Only includes confirmed scouts. Used during fight resolution to inject scout-attendance flavor text.
     """
     from accounts import get_account  # avoid circular import at module level
     data   = load_scouting()
@@ -698,8 +837,13 @@ def get_all_scouted_warriors(current_turn: int) -> dict:
             mname = acc.get("manager_name", f"Manager {mid_str}") if acc else f"Manager {mid_str}"
         except Exception:
             mname = f"Manager {mid_str}"
-        for wname in entry.get("selections", []):
-            result.setdefault(wname, []).append(mname)
+        for sel in entry.get("selections", []):
+            # Only count confirmed scouts
+            if not sel.get("confirmed"):
+                continue
+            wname = sel.get("warrior_name", "")
+            if wname:
+                result.setdefault(wname, []).append(mname)
     return result
 
 

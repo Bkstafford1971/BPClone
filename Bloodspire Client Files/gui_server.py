@@ -65,14 +65,17 @@ def warrior_to_json(w: Warrior) -> dict:
     d["height_in"]   = w.height_in
     d["weight_lbs"]  = w.weight_lbs
     d["kills"]       = w.kills
+    d["monster_kills"] = getattr(w, "monster_kills", 0)
     d["luck"]        = w.luck
     d["is_dead"]     = getattr(w, "is_dead",   False)
+    d["ascended_to_monster"] = getattr(w, "ascended_to_monster", False)
     d["killed_by"]   = getattr(w, "killed_by", "")
     d["streak"]      = getattr(w, "streak", 0)
     d["turns_active"]= getattr(w, "turns_active", 0)
-    d["popularity"]  = getattr(w, "popularity", 50)
+    d["popularity"]  = getattr(w, "popularity", 0)
     d["want_monster_fight"] = getattr(w, "want_monster_fight", False)
     d["want_retire"]        = getattr(w, "want_retire", False)
+    d["avoid_warriors"]     = getattr(w, "avoid_warriors", [])
 
     # Format height as ft'in"
     ft  = w.height_in // 12
@@ -147,7 +150,8 @@ def team_to_json(team: Team) -> dict:
         "pending_replacements" : {str(k): v for k, v in getattr(team, "pending_replacements", {}).items()},
         "turn_history"         : getattr(team, "turn_history", []),
         "challenges"           : dict(getattr(team, "challenges", {})),
-        "blood_challenges"     : [list(bc) for bc in getattr(team, "blood_challenges", [])],
+        "blood_challenges"     : getattr(team, "blood_challenges", []),
+        "avoid_managers"       : getattr(team, "avoid_managers", []),
     }
 
 
@@ -410,13 +414,14 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                     continue
                 for w in t.active_warriors:
                     warriors.append({
-                        "name"        : w.name,
-                        "team_name"   : t.team_name,
-                        "race"        : w.race.name if hasattr(w.race, "name") else str(w.race),
-                        "total_fights": w.total_fights,
-                        "wins"        : w.wins,
-                        "losses"      : w.losses,
-                        "kills"       : w.kills,
+                        "name"         : w.name,
+                        "team_name"    : t.team_name,
+                        "manager_name" : t.manager_name,
+                        "race"         : w.race.name if hasattr(w.race, "name") else str(w.race),
+                        "total_fights" : w.total_fights,
+                        "wins"         : w.wins,
+                        "losses"       : w.losses,
+                        "kills"        : w.kills,
                     })
 
             # AI teams — read raw dicts to avoid any Warrior.from_dict failures
@@ -424,17 +429,19 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                 team_name = at.get("team_name", "")
                 if team_name in _NPC:
                     continue
+                mgr_name = at.get("manager_name", "")
                 for wd in at.get("warriors", []):
                     if not wd or wd.get("is_dead"):
                         continue
                     warriors.append({
-                        "name"        : wd.get("name", "Unknown"),
-                        "team_name"   : team_name,
-                        "race"        : wd.get("race", "Human"),
-                        "total_fights": wd.get("total_fights", 0),
-                        "wins"        : wd.get("wins", 0),
-                        "losses"      : wd.get("losses", 0),
-                        "kills"       : wd.get("kills", 0),
+                        "name"         : wd.get("name", "Unknown"),
+                        "team_name"    : team_name,
+                        "manager_name" : mgr_name,
+                        "race"         : wd.get("race", "Human"),
+                        "total_fights" : wd.get("total_fights", 0),
+                        "wins"         : wd.get("wins", 0),
+                        "losses"       : wd.get("losses", 0),
+                        "kills"        : wd.get("kills", 0),
                     })
 
             warriors.sort(key=lambda x: x["total_fights"])
@@ -620,9 +627,6 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
         elif p == "/api/arena/reset":
             from save import reset_arena_state
             result = reset_arena_state()
-            # Also reload rivals so they restart fresh
-            from ai import save_rivals
-            save_rivals([])
             self.send_json(result)
 
         elif p == "/api/team/challenge":
@@ -650,36 +654,127 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
             save_team(team)
             self.send_json({"success": True, "challenges": dict(team.challenges)})
 
+        elif p == "/api/team/blood_challenge":
+            # Set or update the selected challenger for a blood challenge
+            team_id           = int(body.get("team_id", 0))
+            target_name       = body.get("target_name", "")  # killer's name
+            challenger_name   = body.get("challenger_name", "")  # selected warrior
+            if not target_name:
+                self.send_json({"success": False, "error": "target_name required"}); return
+            team = load_team(team_id)
+            if not challenger_name:
+                self.send_json({"success": False, "error": "challenger_name required"}); return
+            success = team.set_blood_challenge_challenger(target_name, challenger_name)
+            if success:
+                save_team(team)
+                self.send_json({"success": True, "blood_challenges": team.blood_challenges})
+            else:
+                self.send_json({"success": False, "error": "Warrior not found or blood challenge not available"})
+
+        elif p == "/api/warrior/avoid_warrior":
+            # Add or remove a specific warrior to avoid for a specific warrior
+            team_id           = int(body.get("team_id", 0))
+            warrior_name      = body.get("warrior_name", "")  # warrior doing the avoiding
+            avoid_warrior_name = body.get("avoid_warrior_name", "")  # warrior to avoid
+            action            = body.get("action", "add")  # "add" or "remove"
+            if not warrior_name or not avoid_warrior_name:
+                self.send_json({"success": False, "error": "warrior_name and avoid_warrior_name required"}); return
+            team = load_team(team_id)
+            warrior = team.warrior_by_name(warrior_name)
+            if not warrior:
+                self.send_json({"success": False, "error": "Warrior not found"}); return
+            if action == "add":
+                success = warrior.add_avoid_warrior(avoid_warrior_name)
+                if not success:
+                    self.send_json({"success": False, "error": "Cannot add: list full or already exists"}); return
+            elif action == "remove":
+                success = warrior.remove_avoid_warrior(avoid_warrior_name)
+                if not success:
+                    self.send_json({"success": False, "error": "Warrior not in avoid list"}); return
+            else:
+                self.send_json({"success": False, "error": "Invalid action"}); return
+            save_team(team)
+            self.send_json({"success": True, "avoid_warriors": warrior.avoid_warriors})
+
+        elif p == "/api/team/avoid_manager":
+            # Add or remove a manager to avoid at the team level
+            team_id      = int(body.get("team_id", 0))
+            manager_name = body.get("manager_name", "")  # manager name to avoid
+            action       = body.get("action", "add")  # "add" or "remove"
+            if not manager_name:
+                self.send_json({"success": False, "error": "manager_name required"}); return
+            team = load_team(team_id)
+            if action == "add":
+                success = team.add_avoid_manager(manager_name)
+                if not success:
+                    self.send_json({"success": False, "error": "Cannot add: list full or already exists"}); return
+            elif action == "remove":
+                success = team.remove_avoid_manager(manager_name)
+                if not success:
+                    self.send_json({"success": False, "error": "Manager not in avoid list"}); return
+            else:
+                self.send_json({"success": False, "error": "Invalid action"}); return
+            save_team(team)
+            self.send_json({"success": True, "avoid_managers": team.avoid_managers})
+
         elif p == "/api/scout/select":
-            from save import get_manager_scouting, set_manager_scouting, current_turn
+            from save import add_manager_scouting, get_manager_scouting, current_turn
             manager_id   = int(body.get("manager_id", 0))
             warrior_name = body.get("warrior_name", "")
-            if not warrior_name:
-                self.send_json({"success": False, "error": "warrior_name required"}); return
-            turn       = current_turn()
+            team_name    = body.get("team_name", "")
+            team_id      = int(body.get("team_id", 0))
+            turn         = current_turn()
+            
+            success, error = add_manager_scouting(manager_id, turn, warrior_name, team_name, team_id, confirmed=True)
+            if not success:
+                self.send_json({"success": False, "error": error})
+                return
+            
             selections = get_manager_scouting(manager_id, turn)
-            if warrior_name in selections:
-                self.send_json({"success": True, "selections": selections,
-                                "slots_used": len(selections), "slots_left": 3 - len(selections)}); return
-            if len(selections) >= 3:
-                self.send_json({"success": False,
-                                "error": "Maximum 3 warriors can be scouted per turn."}); return
-            selections.append(warrior_name)
-            set_manager_scouting(manager_id, turn, selections)
-            self.send_json({"success": True, "selections": selections,
-                            "slots_used": len(selections), "slots_left": 3 - len(selections)})
+            self.send_json({
+                "success": True,
+                "selections": selections,
+                "slots_used": len(selections),
+                "slots_left": 3 - len(selections)
+            })
 
         elif p == "/api/scout/remove":
-            from save import get_manager_scouting, set_manager_scouting, current_turn
+            from save import remove_manager_scouting, get_manager_scouting, current_turn
             manager_id   = int(body.get("manager_id", 0))
             warrior_name = body.get("warrior_name", "")
-            turn       = current_turn()
+            turn         = current_turn()
+            
+            success, error = remove_manager_scouting(manager_id, turn, warrior_name)
+            if not success:
+                self.send_json({"success": False, "error": error})
+                return
+            
             selections = get_manager_scouting(manager_id, turn)
-            try:   selections.remove(warrior_name)
-            except ValueError: pass
-            set_manager_scouting(manager_id, turn, selections)
-            self.send_json({"success": True, "selections": selections,
-                            "slots_used": len(selections), "slots_left": 3 - len(selections)})
+            self.send_json({
+                "success": True,
+                "selections": selections,
+                "slots_used": len(selections),
+                "slots_left": 3 - len(selections)
+            })
+
+        elif p == "/api/scout/confirm":
+            from save import confirm_manager_scouting, get_manager_scouting, current_turn
+            manager_id   = int(body.get("manager_id", 0))
+            warrior_name = body.get("warrior_name", "")
+            turn         = current_turn()
+            
+            success, error = confirm_manager_scouting(manager_id, turn, warrior_name)
+            if not success:
+                self.send_json({"success": False, "error": error})
+                return
+            
+            selections = get_manager_scouting(manager_id, turn)
+            self.send_json({
+                "success": True,
+                "selections": selections,
+                "slots_used": len(selections),
+                "slots_left": 3 - len(selections)
+            })
 
         elif p == "/api/team/run_next_turn":
             from accounts import set_run_next_turn
@@ -733,29 +828,36 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
 
         elif p == "/api/run_all_turns":
             from accounts        import get_teams_to_run
-            from ai              import get_or_create_rivals, save_rivals
-            from ai_league_teams import get_or_create_ai_teams, ai_teams_as_rivals, evolve_ai_teams
+            from ai_league_teams import get_or_create_ai_teams, evolve_ai_teams
             from matchmaking     import run_turn as _do_run_turn
-            from save            import load_champion_state
+            from save            import load_champion_state, load_all_teams
+            from team            import Team
             manager_id = int(body.get("manager_id", 0))
             team_ids   = [int(x) for x in body.get("team_ids", [])]
             to_run     = get_teams_to_run(manager_id, team_ids)
             if not to_run:
                 self.send_json({"success": False, "error": "No teams flagged to run."}); return
-            rivals     = get_or_create_rivals()
             ai_teams   = get_or_create_ai_teams()
             champion_state = load_champion_state()
-            ai_rivals  = ai_teams_as_rivals(ai_teams)
-            all_rivals = ai_rivals + [r for r in rivals if r.manager_id not in
-                                      {ar.manager_id for ar in ai_rivals}]
+            # Build opponent pool: all AI teams + all player teams not owned by this manager
+            own_ids = set(to_run)
+            opponent_teams = []
+            for at in ai_teams:
+                try:
+                    opponent_teams.append(Team.from_dict(at))
+                except Exception:
+                    pass
+            for pt in load_all_teams():
+                if pt.team_id not in own_ids:
+                    opponent_teams.append(pt)
             results        = []
             turn_num       = increment_turn()
             ai_results_agg = {}
-            global_used    = set()   # warrior names matched this turn — shared across all teams
+            global_used    = set()
             for tid in to_run:
                 try:
                     team = load_team(tid)
-                    card = _do_run_turn(team, all_rivals, verbose=False,
+                    card = _do_run_turn(team, opponent_teams, verbose=False,
                                        champion_state=champion_state,
                                        global_used=global_used)
                     bouts = []
@@ -785,19 +887,14 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                     results.append({"team_id": tid, "success": False, "error": str(e)})
             if ai_results_agg:
                 evolve_ai_teams(ai_teams, ai_results_agg)
-            save_rivals(rivals)
 
-            # Create exhibition fights for any scouted warriors that didn't
-            # fight this turn so scout reports have a narrative to display.
             try:
                 from ai_league_teams import save_ai_teams as _save_ai_teams
-                _ai_chg, _rv_chg = _process_scout_fights(
-                    manager_id, turn_num, all_rivals, ai_teams, rivals
+                _ai_chg = _process_scout_fights(
+                    manager_id, turn_num, opponent_teams, ai_teams
                 )
                 if _ai_chg:
                     _save_ai_teams(ai_teams)
-                if _rv_chg:
-                    save_rivals(rivals)
             except Exception as _se:
                 print(f"  WARNING: scout fight generation failed: {_se}")
 
@@ -833,6 +930,36 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
                 except Exception as e:
                     errors.append({"team_id": tid, "error": str(e)})
             self.send_json({"success": True, "uploaded": uploaded, "errors": errors})
+
+        elif p == "/api/league/upload_one":
+            # Upload a single team to the league server. Used by the client's
+            # progress-indicator loop so each team ticks through individually.
+            team_id    = int(body.get("team_id", 0))
+            league_url = body.get("league_url", "")
+            league_id  = body.get("league_manager_id", "")
+            password   = body.get("password", "")
+            if not team_id:
+                self.send_json({"success": False, "error": "team_id required"}); return
+            try:
+                import urllib.request as _ur
+                team = load_team(team_id)
+                slim = _slim_team_for_upload(team_to_json(team))
+                payload = json.dumps({
+                    "manager_id": league_id, "password": password,
+                    "team": slim,
+                }).encode()
+                req  = _ur.Request(f"{league_url}/api/upload", data=payload,
+                                   headers={"Content-Type":"application/json"}, method="POST")
+                resp = json.loads(_ur.urlopen(req, timeout=30).read())
+                if resp.get("success"):
+                    self.send_json({"success": True, "team_id": team_id,
+                                    "team_name": team.team_name, "turn": resp.get("turn")})
+                else:
+                    self.send_json({"success": False, "team_id": team_id,
+                                    "team_name": team.team_name,
+                                    "error": resp.get("error","?")})
+            except Exception as e:
+                self.send_json({"success": False, "team_id": team_id, "error": str(e)})
 
         elif p == "/api/session/save":
             from save import save_session
@@ -893,13 +1020,12 @@ class BloodspireHandler(http.server.BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 
 def _process_scout_fights(manager_id: int, turn_num: int,
-                           all_rivals: list, ai_teams: list, rivals: list):
+                           opponent_teams: list, ai_teams: list):
     """
     For each warrior scouted this turn that hasn't fought yet, simulate an
     exhibition fight against a peasant so the scout report has a narrative.
 
-    Modifies warrior fight_history in-place (both _AIRival.team objects and
-    ai_team dicts).  Returns (ai_changed, rivals_changed).
+    Returns True if ai_teams were modified.
     """
     import random
     from save            import get_manager_scouting, save_fight_log, current_turn as _ct
@@ -907,19 +1033,17 @@ def _process_scout_fights(manager_id: int, turn_num: int,
     from team            import create_peasant_team
     from warrior         import Warrior
 
-    # Scouts are stored BEFORE increment_turn() is called (at turn_num - 1).
     scouted_names = get_manager_scouting(manager_id, turn_num - 1)
     if not scouted_names:
-        return False, False
+        return False
 
     ai_changed = False
-    rv_changed = False
 
     for warrior_name in scouted_names:
-        # ── Search AI team dicts ────────────────────────────────────────────
-        found_ai_team = None    # the ai_teams[idx] dict
-        found_ai_idx  = None    # index into ai_teams[idx]["warriors"]
-        found_ai_w    = None    # Warrior object
+        # Search AI team dicts first
+        found_ai_team = None
+        found_ai_idx  = None
+        found_ai_w    = None
 
         for at in ai_teams:
             wlist = at.get("warriors", [])
@@ -935,34 +1059,31 @@ def _process_scout_fights(manager_id: int, turn_num: int,
             if found_ai_team:
                 break
 
-        # ── Search regular rivals ───────────────────────────────────────────
-        found_rv_rm = None      # RivalManager
-        found_rv_w  = None      # Warrior object (live, in rm.team)
-
+        # Search opponent teams (player teams loaded as Team objects)
+        found_team = None
+        found_w    = None
         if not found_ai_team:
-            for rm in rivals:
-                for w in rm.team.active_warriors:
+            for ot in opponent_teams:
+                for w in ot.active_warriors:
                     if w.name.lower() == warrior_name.lower():
-                        found_rv_rm = rm
-                        found_rv_w  = w
+                        found_team = ot
+                        found_w    = w
                         break
-                if found_rv_rm:
+                if found_team:
                     break
 
-        if not found_ai_team and not found_rv_rm:
-            continue    # not found in any rival / AI team
+        if not found_ai_team and not found_team:
+            continue
 
-        target_w  = found_ai_w  if found_ai_team else found_rv_w
-        team_name = found_ai_team["team_name"] if found_ai_team else found_rv_rm.team.team_name
+        target_w  = found_ai_w if found_ai_team else found_w
+        team_name = found_ai_team["team_name"] if found_ai_team else found_team.team_name
         mgr_name  = found_ai_team.get("manager_name", "Unknown") if found_ai_team \
-                    else found_rv_rm.manager_name
+                    else found_team.manager_name
 
-        # ── Skip if already fought this turn ───────────────────────────────
         if any(e.get("turn") == turn_num and e.get("fight_id")
                for e in (target_w.fight_history or [])):
             continue
 
-        # ── Simulate exhibition fight vs. peasant ──────────────────────────
         try:
             peasant_team = create_peasant_team(
                 target_fight_count=max(1, target_w.total_fights)
@@ -1003,20 +1124,16 @@ def _process_scout_fights(manager_id: int, turn_num: int,
                 "scout_fight"   : True,
             })
 
-            # Write updated warrior back to the appropriate storage
             if found_ai_team:
                 found_ai_team["warriors"][found_ai_idx] = target_w.to_dict()
                 ai_changed = True
-            else:
-                # found_rv_w is the live Warrior object — already updated in-place
-                rv_changed = True
 
             print(f"  Scout fight created for {warrior_name} (fight #{fight_id})")
 
         except Exception as exc:
             print(f"  WARNING: Could not create scout fight for {warrior_name}: {exc}")
 
-    return ai_changed, rv_changed
+    return ai_changed
 
 
 # ---------------------------------------------------------------------------
@@ -1141,45 +1258,55 @@ def _run_turn_for_team(body: dict) -> dict:
     Returns a JSON summary with per-fight results and the refreshed team data.
     """
     try:
-        from ai              import get_or_create_rivals, save_rivals
         from matchmaking     import run_turn as _do_run_turn
-        from ai_league_teams import get_or_create_ai_teams, ai_teams_as_rivals, evolve_ai_teams
-        from save            import load_champion_state
+        from ai_league_teams import get_or_create_ai_teams, evolve_ai_teams
+        from save            import load_champion_state, load_all_teams
 
         team_id = int(body.get("team_id", 0))
         team    = load_team(team_id)
 
-        # Build rivals: generic pool + all 12 AI league teams
-        rivals    = get_or_create_rivals()
+        # Build opponent pool: AI league teams + all other saved teams
         ai_teams  = get_or_create_ai_teams()
-        ai_rivals = ai_teams_as_rivals(ai_teams)
-        # Merge: use AI rivals as the primary pool, keep generic rivals as fallback
-        all_rivals = ai_rivals + [r for r in rivals if r.manager_id not in
-                                  {ar.manager_id for ar in ai_rivals}]
+        ai_team_objects = []
+        ai_tid_to_mid = {}
+        for at in ai_teams:
+            try:
+                t = Team.from_dict(at)
+                if t.active_warriors:
+                    ai_team_objects.append(t)
+                    ai_tid_to_mid[t.team_id] = at["manager_id"]
+            except Exception:
+                pass
+
+        all_saved = load_all_teams()
+        ai_team_ids = {t.team_id for t in ai_team_objects}
+        opponent_teams = ai_team_objects + [
+            t for t in all_saved
+            if t.team_id != team_id and t.team_id not in ai_team_ids
+        ]
 
         turn_num = increment_turn()
         champion_state = load_champion_state()
 
-        card = _do_run_turn(team, all_rivals, verbose=False, champion_state=champion_state)
+        card = _do_run_turn(team, opponent_teams, verbose=False, champion_state=champion_state)
 
         # Update AI team records from this turn's fights
         ai_results = {}
-        for rm in ai_rivals:
-            mid = rm.manager_id
-            bouts_for_ai = []
-            for bout in card:
-                if bout.opponent_team.team_id == rm.team.team_id:
-                    ow_won = bout.result and bout.result.winner and \
-                             bout.result.winner.name == bout.opponent.name
-                    bouts_for_ai.append({
-                        "result": "WIN" if ow_won else "LOSS",
-                        "opponent_slain": bout.result and bout.result.loser_died
-                                          and ow_won,
-                        "warrior_slain" : bout.result and bout.result.loser_died
-                                          and not ow_won,
-                    })
-            if bouts_for_ai:
-                ai_results[mid] = {"bouts": bouts_for_ai, "team": rm.team.to_dict()}
+        for bout in card:
+            mid = ai_tid_to_mid.get(bout.opponent_team.team_id)
+            if mid is None:
+                continue
+            ow_won = bout.result and bout.result.winner and \
+                     bout.result.winner.name == bout.opponent.name
+            entry = ai_results.setdefault(mid, {"bouts": [], "team": None})
+            entry["bouts"].append({
+                "result": "WIN" if ow_won else "LOSS",
+                "opponent_slain": bout.result and bout.result.loser_died
+                                  and ow_won,
+                "warrior_slain" : bout.result and bout.result.loser_died
+                                  and not ow_won,
+            })
+            entry["team"] = bout.opponent_team.to_dict()
         if ai_results:
             evolve_ai_teams(ai_teams, ai_results)
 
@@ -1214,8 +1341,6 @@ def _run_turn_for_team(body: dict) -> dict:
                 "fight_id"       : bout.fight_id,
                 "training"       : r.training_results.get("warrior_a", []),
             })
-
-        save_rivals(rivals)
 
         # Reload fresh team (may contain replacement warriors)
         fresh_team = load_team(team_id)
@@ -1491,9 +1616,10 @@ def _confirm_replacement(body: dict) -> dict:
 def _slim_team_for_upload(team_json: dict) -> dict:
     """
     Strip fields the league server doesn't need for running fights.
-    Keeps: team identity, warrior stats, gear, strategies, trains, skills, archived_warriors.
-    Drops: fight_history, injuries (reset each fight anyway),
-           turn_history, pending_replacements — all bulk data not needed server-side.
+    Keeps: team identity, warrior stats, gear, strategies, trains, skills, injuries,
+           archived_warriors.
+    Drops: fight_history, turn_history, pending_replacements — bulk data not needed
+           server-side.
     """
     slim = {
         "team_id"     : team_json.get("team_id"),
@@ -1518,8 +1644,9 @@ def _slim_team_for_upload(team_json: dict) -> dict:
             "intelligence"  : w.get("intelligence"),
             "presence"      : w.get("presence"),
             "size"          : w.get("size"),
-            "primary_weapon": w.get("primary_weapon"),
+            "primary_weapon"  : w.get("primary_weapon"),
             "secondary_weapon": w.get("secondary_weapon"),
+            "backup_weapon"   : w.get("backup_weapon"),
             "armor"         : w.get("armor"),
             "helm"          : w.get("helm"),
             "skills"        : w.get("skills", {}),
@@ -1530,7 +1657,7 @@ def _slim_team_for_upload(team_json: dict) -> dict:
             "losses"        : w.get("losses", 0),
             "kills"         : w.get("kills", 0),
             "total_fights"  : w.get("total_fights", 0),
-            "popularity"    : w.get("popularity", 50),
+            "popularity"    : w.get("popularity", 0),
             "recognition"   : w.get("recognition", 0),
             "attribute_gains": w.get("attribute_gains", {}),
             "training_weight_bonus": w.get("training_weight_bonus", 0),
@@ -1539,6 +1666,7 @@ def _slim_team_for_upload(team_json: dict) -> dict:
             "want_retire"        : w.get("want_retire", False),
             # Needed for favorite-weapon flavor text in fight narratives
             "favorite_weapon"    : w.get("favorite_weapon", ""),
+            "injuries"           : w.get("injuries", {}),
         })
     return slim
 
@@ -1702,12 +1830,6 @@ def _acknowledge_league_reset(body: dict) -> dict:
     result = reset_arena_state()
     if not result.get("success"):
         return result
-    # Clear rival AI state too
-    try:
-        from ai import save_rivals
-        save_rivals([])
-    except Exception:
-        pass
     # Persist the new reset count so we don't prompt again
     settings_data = _get_league_settings().get("settings", {})
     settings_data["last_reset_count"] = body.get("server_reset_count", 0)
@@ -1767,17 +1889,18 @@ def _apply_league_results(body: dict) -> dict:
             local_w.total_fights  = server_w.total_fights
             local_w.popularity    = server_w.popularity
             # Take the higher of local (historical) and server (this turn) values.
-            # Then enforce minimum floor: kills×5 + non-kill-wins×3 + losses×1.
+            # Then enforce minimum floor: total_fights (wins + losses).
             local_w.recognition   = max(local_w.recognition, server_w.recognition)
-            _min_rec = (local_w.kills * 5
-                        + (local_w.wins - local_w.kills) * 3
-                        + local_w.losses)
+            _min_rec = local_w.total_fights
             local_w.recognition   = max(local_w.recognition, _min_rec)
             local_w.streak        = server_w.streak
             local_w.turns_active  = server_w.turns_active
             local_w.injuries      = server_w.injuries
             local_w.is_dead       = server_w.is_dead
             local_w.killed_by     = server_w.killed_by
+            # Monster ascension flags — server-authoritative
+            local_w.ascended_to_monster = getattr(server_w, "ascended_to_monster", False)
+            local_w.monster_kills       = getattr(server_w, "monster_kills", 0)
 
             # ── Skills — merge: take max so local gains are never lost ───
             for sk, val in server_w.skills.items():
@@ -1797,9 +1920,7 @@ def _apply_league_results(body: dict) -> dict:
 
             local_w.recalculate_derived()
 
-            # ── Fight history — append new entries from this turn ────────
-            known_fids = {e.get("fight_id") for e in local_w.fight_history if e.get("fight_id")}
-
+            # ── Fight history — apply new entries from this turn ────────
             # server_w.fight_history may be empty if result was stored by old
             # code that stripped it. Fall back to reconstructing from bouts.
             source_history = server_w.fight_history
@@ -1821,15 +1942,19 @@ def _apply_league_results(body: dict) -> dict:
                         }]
                         break
 
-            for entry in source_history:
-                fid = entry.get("fight_id")
-                if fid and fid not in known_fids:
-                    local_w.fight_history.append(entry)
-                    known_fids.add(fid)
-                elif not fid:
-                    known_turns = {e.get("turn") for e in local_w.fight_history}
-                    if entry.get("turn") not in known_turns:
-                        local_w.fight_history.append(entry)
+            if source_history:
+                # The league server is authoritative for the turns it ran.
+                # Remove any local entries for those turns first (handles fight_id
+                # collisions between the local counter and the league server's
+                # counter, which are independent and can overlap if the player
+                # ran local test turns before joining the league).
+                source_turns = {e.get("turn") for e in source_history if e.get("turn")}
+                if source_turns:
+                    local_w.fight_history = [
+                        e for e in local_w.fight_history
+                        if e.get("turn") not in source_turns
+                    ]
+                local_w.fight_history.extend(source_history)
 
             # ── Keep local user-set fields ────────────────────────────────
             # (trains, strategies, gear, initial_stats preserved as-is)
@@ -1847,6 +1972,16 @@ def _apply_league_results(body: dict) -> dict:
                     local_known_turns.add(turn_n)
 
         save_team(team)
+
+        # Scouting locks reset after a league turn is downloaded.
+        try:
+            from accounts import get_manager_for_team
+            from save     import clear_manager_scouting
+            mid = get_manager_for_team(team_id)
+            if mid is not None:
+                clear_manager_scouting(mid)
+        except Exception:
+            pass
 
         # Build bout summary for the turn-results view
         bouts = list(result.get("bouts", []))
@@ -1878,7 +2013,7 @@ def _full_reset() -> dict:
       - All team archives    (saves/team_archives/)
       - League server data   (saves/league/  — all turns, standings, ai_teams, uploads)
       - Champion state       (saves/champion.json)
-      - Rivals pool          (saves/rivals.json)
+      - Legacy rivals pool    (saves/rivals.json — if present)
       - League client settings (saves/league_client.json, saves/league_settings.json)
       - Session cache        (saves/session.json)
       - Game state counters  (turn number, fight ID — reset to 0/1)
@@ -1941,7 +2076,7 @@ def _full_reset() -> dict:
         "message": (
             "Full arena reset complete. "
             "All teams, warriors, fight records, logs, newsletters, "
-            "league data, and rivals have been wiped. "
+            "league data have been wiped. "
             "Accounts and passwords preserved."
         ),
     }

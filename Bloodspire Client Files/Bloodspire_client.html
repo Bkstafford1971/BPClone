@@ -501,6 +501,7 @@ function buildTree() {
         if (!w) return;
         const wSel   = (S.sel.type === 'warrior' && S.sel.teamId == tid && S.sel.wIdx == idx) ? 'sel' : '';
         const isDead = w.is_dead || false;
+        const isAscended = w.ascended_to_monster || false;
 
         // Injury indicator: count active permanent injuries
         const injLevels   = w.injury_levels || {};
@@ -527,8 +528,11 @@ function buildTree() {
           : '';
 
         const deadStyle  = isDead ? 'opacity:0.55; font-style:italic;' : '';
-        const deadIcon   = isDead ? '💀' : '👤';
-        const deadBadge  = isDead
+        const deadIcon   = isAscended ? '👹' : (isDead ? '💀' : '👤');
+        const deadBadge  = isAscended
+          ? `<span title="Ascended to Monsterdom on The Monsters roster — replacement needed"
+               style="color:#844;font-size:10px;margin-left:4px;">👹 ASCENDED</span>`
+          : isDead
           ? `<span title="Slain by ${esc(w.killed_by||'unknown')} — replacement needed"
                style="color:#800;font-size:10px;margin-left:4px;">✝</span>`
           : '';
@@ -696,6 +700,24 @@ function buildManagerPanel() {
     } else if (!turns.length) {
       body = '<div style="padding:20px; color:#666;">No newsletters yet — run a turn first.</div>';
     } else {
+      // Background refresh so new turns appear without requiring manual invalidation
+      API.get('/api/newsletters').then(r => {
+        const fresh = r.turns || [];
+        const prev  = S.newsletters || [];
+        const changed = fresh.length !== prev.length ||
+                        fresh.some((t,i) => t !== prev[i]);
+        if (!changed) return;
+        const prevLatest = prev.length ? prev[prev.length - 1] : null;
+        const latest     = fresh.length ? fresh[fresh.length - 1] : null;
+        S.newsletters = fresh;
+        if (latest && prevLatest !== null && latest > prevLatest) {
+          S.newsletterTurn = latest;
+          S.newsletterText = null;
+          loadNewsletterTurn(latest);
+        } else {
+          refreshContent();
+        }
+      });
       const opts = turns.map(t =>
         `<option value="${t}" ${t===cur?'selected':''}>${'Turn ' + t}</option>`
       ).join('');
@@ -770,15 +792,20 @@ function buildScoutingTab() {
   // ── Current selections ────────────────────────────────────────────────────
   let selRows = '';
   (sc.selections || []).forEach(entry => {
+    const isConfirmed = entry.confirmed !== undefined ? entry.confirmed : true;
+    const btn = isConfirmed
+      ? `<span style="font-size:11px; color:#666; font-style:italic;">🔒 Locked</span>`
+      : `<button onclick='removeScout(${jsq(entry.warrior_name)})'
+                style="color:#800; font-size:11px; padding:1px 6px; border-color:#f88 #800 #800 #f88;">✕ Remove</button>`;
+    
     selRows += `
     <tr style="border-bottom:1px solid #eee;">
       <td style="padding:4px 8px; font-weight:bold;">${esc(entry.warrior_name)}</td>
       <td style="padding:4px 8px; color:#555;">${esc(entry.team_name||'—')}</td>
-      <td style="padding:4px 8px;">
+      <td style="padding:4px 8px; display:flex; gap:4px;">
         <button onclick='viewScoutReport(${jsq(entry.warrior_name)})'
                 style="font-size:11px; padding:1px 6px; margin-right:4px;">View Report</button>
-        <button onclick='removeScout(${jsq(entry.warrior_name)})'
-                style="color:#800; font-size:11px; padding:1px 6px; border-color:#f88 #800 #800 #f88;">✕ Remove</button>
+        ${btn}
       </td>
     </tr>`;
   });
@@ -812,7 +839,7 @@ function buildScoutingTab() {
       if (queued) {
         btn = `<button disabled style="font-size:11px; padding:1px 6px; opacity:0.5;">Scouted</button>`;
       } else if (slotsLeft > 0) {
-        btn = `<button onclick='addScout(${jsq(w.name)}, ${jsq(w.team_name)})'
+        btn = `<button onclick='addScout(${jsq(w.name)}, ${jsq(w.team_name)}, ${w.team_id})'
                        style="font-size:11px; padding:1px 6px;">+ Scout</button>`;
       } else {
         btn = `<button disabled style="font-size:11px; padding:1px 6px; opacity:0.5;" title="3 scouts used">Full</button>`;
@@ -858,8 +885,9 @@ function buildScoutingTab() {
   <div class="group" style="margin:0;">
     <span class="group-label">Scouting Assignments — ${slotsLeft} slot${slotsLeft===1?'':'s'} remaining this turn</span>
     <p style="font-size:11px; color:#555; margin:4px 0 8px;">
-      Select up to <b>3</b> opposing warriors to scout each turn. Your scout will attend their fight
-      and report back on their equipment and recent combat performance. Scouting resets each turn.
+      Select up to <b>3</b> opposing warriors to scout each turn. When you select a warrior, your scout will be
+      confirmed, and you'll see the scouting report. Once confirmed, scouts are locked and cannot be removed.
+      Scouting resets after the turn runs.
     </p>
     <table style="border-collapse:collapse; width:100%; font-size:12px;">
       <thead>
@@ -1005,8 +1033,19 @@ async function loadScoutStatus() {
     if (r.success) {
       S.scout.loaded     = true;
       S.scout.slotsLeft  = r.slots_left;
-      // selections from server are just warrior names; resolve team names from targets or skip
-      S.scout.selections = (r.selections || []).map(n => ({ warrior_name: n, team_name: '' }));
+      // selections from server now have full object structure with confirmed status
+      S.scout.selections = (r.selections || []).map(sel => {
+        if (typeof sel === 'string') {
+          // Legacy support for string-only format
+          return { warrior_name: sel, team_name: '', team_id: 0, confirmed: true };
+        }
+        return {
+          warrior_name: sel.warrior_name || '',
+          team_name: sel.team_name || '',
+          team_id: sel.team_id || 0,
+          confirmed: sel.confirmed !== undefined ? sel.confirmed : true
+        };
+      });
     }
   } catch(e) {}
   // Also load targets if not yet loaded
@@ -1027,7 +1066,12 @@ async function loadScoutTargets() {
       // Back-fill team names on selections now that we have target data
       S.scout.selections = S.scout.selections.map(sel => {
         const found = S.scout.targets.find(t => t.name === sel.warrior_name);
-        return { warrior_name: sel.warrior_name, team_name: found ? found.team_name : sel.team_name };
+        return {
+          warrior_name: sel.warrior_name,
+          team_name: found ? found.team_name : sel.team_name,
+          team_id: found ? found.team_id : sel.team_id,
+          confirmed: sel.confirmed
+        };
       });
     }
   } catch(e) { S.scout.targets = []; }
@@ -1044,17 +1088,28 @@ async function loadChallengeTargets() {
   refreshContent();
 }
 
-async function addScout(warriorName, teamName) {
+async function addScout(warriorName, teamName, teamId) {
   const mid = (S.account || {}).id || 0;
-  const r   = await API.post('/api/scout/select', { manager_id: mid, warrior_name: warriorName });
+  // Add scout with immediate confirmation
+  const r = await API.post('/api/scout/select', {
+    manager_id: mid,
+    warrior_name: warriorName,
+    team_name: teamName,
+    team_id: teamId
+  });
+  
   if (r.success) {
-    S.scout.slotsLeft  = r.slots_left;
-    S.scout.selections = (r.selections || []).map(n => {
-      const existing = S.scout.selections.find(e => e.warrior_name === n);
-      const found    = (S.scout.targets||[]).find(t => t.name === n);
-      return { warrior_name: n, team_name: (existing||found||{}).team_name || teamName || '' };
-    });
-    render();
+    // Update selections list
+    S.scout.slotsLeft = r.slots_left;
+    S.scout.selections = (r.selections || []).map(sel => ({
+      warrior_name: sel.warrior_name || sel,
+      team_name: sel.team_name || '',
+      team_id: sel.team_id || 0,
+      confirmed: sel.confirmed !== undefined ? sel.confirmed : true
+    }));
+    
+    // Now fetch and show the scout report immediately
+    await viewScoutReport(warriorName);
   } else {
     alert('Could not add scout: ' + r.error);
   }
@@ -1062,14 +1117,23 @@ async function addScout(warriorName, teamName) {
 
 async function removeScout(warriorName) {
   const mid = (S.account || {}).id || 0;
-  const r   = await API.post('/api/scout/remove', { manager_id: mid, warrior_name: warriorName });
+  const selection = (S.scout.selections || []).find(s => s.warrior_name === warriorName);
+  
+  // Only allow removal of unconfirmed selections
+  if (selection && selection.confirmed) {
+    alert('Cannot remove a confirmed scout selection. Confirmed scouts are locked until the turn ends.');
+    return;
+  }
+  
+  const r = await API.post('/api/scout/remove', { manager_id: mid, warrior_name: warriorName });
   if (r.success) {
-    S.scout.slotsLeft  = r.slots_left;
-    S.scout.selections = (r.selections || []).map(n => {
-      const existing = S.scout.selections.find(e => e.warrior_name === n);
-      const found    = (S.scout.targets||[]).find(t => t.name === n);
-      return { warrior_name: n, team_name: (existing||found||{}).team_name || '' };
-    });
+    S.scout.slotsLeft = r.slots_left;
+    S.scout.selections = (r.selections || []).map(sel => ({
+      warrior_name: sel.warrior_name || sel,
+      team_name: sel.team_name || '',
+      team_id: sel.team_id || 0,
+      confirmed: sel.confirmed !== undefined ? sel.confirmed : true
+    }));
     render();
   } else {
     alert('Could not remove scout: ' + r.error);
@@ -1181,7 +1245,9 @@ function buildTeamPanel(team) {
    WARRIOR PANEL — TABS
    ============================================================ */
 function buildWarriorPanel(team, w, wIdx) {
-  const tabs = w.is_dead
+  const isAscended = w.ascended_to_monster || false;
+  const isDead = w.is_dead || false;
+  const tabs = isDead
     ? ['Stats/Strats', 'Fights', 'Replacement']
     : ['Stats/Strats', 'Fight Options', 'Fights', 'Challenges', 'Replacement', 'Archives'];
   const tabMap = {
@@ -1336,8 +1402,9 @@ function buildStatsTab(team, w, wIdx) {
   ${S.league.flags.show_luck_factor && w.luck!=null ? `<span>Luck: <b>${w.luck}</b>/30</span>` : ''}
   ${S.league.flags.show_max_hp ? `<span>Max HP: <b>${w.max_hp||'?'}</b></span>` : ''}
   ${S.league.flags.show_favorite_weapon && w.favorite_weapon ? `<span>Favorite: <b>${esc(w.favorite_weapon)}</b></span>` : ''}
-  <span>Popularity: <b>${w.popularity||50}</b>/100</span>
+  <span>Popularity: <b>${w.popularity||0}</b>/100</span>
   <span>Turns active: <b>${w.turns_active||0}</b></span>
+  ${(w.monster_kills||0)>0 ? `<span style="color:#c84; font-weight:bold;">⚔ Monsters Slain: <b>${w.monster_kills}</b></span>` : ''}
   ${(w.streak||0)!==0 ? '<span>Streak: ' + streakLabel(w.streak||0) + '</span>' : ''}
 </div>
 <!-- Stats + Equipment + Trains -->
@@ -1400,6 +1467,7 @@ function buildStatsTab(team, w, wIdx) {
     </div>
   </div>
 </div>
+
 
 </div>`; // end stats tab
 }
@@ -1467,7 +1535,7 @@ function buildFightOptionsTab(w) {
       </tr>
       <tr>
         <td style="padding:3px 10px; color:#555;">Popularity</td>
-        <td style="padding:3px 8px; font-weight:bold;">${w.popularity||50}/100</td>
+        <td style="padding:3px 8px; font-weight:bold;">${w.popularity||0}/100</td>
         <td style="padding:3px 10px; color:#555;">Current Streak</td>
         <td style="padding:3px 8px;">${streakLabel(w.streak||0)}</td>
       </tr>
@@ -1514,11 +1582,11 @@ function buildFightsTab(w) {
   const getTypeOrder = (type) => typeOrder[type] !== undefined ? typeOrder[type] : 999;
   
   history.sort((a, b) => {
-    const orderA = getTypeOrder(a.fight_type);
-    const orderB = getTypeOrder(b.fight_type);
-    if (orderA !== orderB) return orderA - orderB;
-    // Secondary sort: newest first (same as reverse order above, but maintain within type)
-    return (b.turn || 0) - (a.turn || 0);
+    // Primary: newest turn first so recent fights are always visible at the top
+    const turnDiff = (b.turn || 0) - (a.turn || 0);
+    if (turnDiff !== 0) return turnDiff;
+    // Secondary: fight type priority within the same turn (champion before rivalry)
+    return getTypeOrder(a.fight_type) - getTypeOrder(b.fight_type);
   });
   
   if (!history.length) {
@@ -1603,8 +1671,15 @@ function buildChallengesTab(team, w) {
   const slotsUsed   = myPending.length;
   const slotsLeft   = 3 - slotsUsed;
 
-  // Blood challenges relevant to this warrior
-  const bloodList = (team.blood_challenges || []).filter(bc => bc[0] === w.name || bc[0] === null);
+  // Blood challenges available for this team
+  const activeBloodChallenges = (team.blood_challenges || []).filter(bc => 
+    bc.status === "active" && bc.turns_remaining > 0
+  );
+
+  // Blood challenges where this warrior is the selected challenger
+  const bloodList = (team.blood_challenges || []).filter(bc =>
+    bc.status === "active" && (bc.challenger_name === w.name || bc.challenger_name === null)
+  );
 
   // Collect eligible opponents from the server-provided target list (includes AI teams)
   if (S.challengeTargets === null) {
@@ -1650,8 +1725,8 @@ function buildChallengesTab(team, w) {
   bloodList.forEach(bc => {
     pendingRows += `
     <tr style="background:#ffe8e8;">
-      <td style="padding:4px 8px; font-weight:bold;">${esc(bc[1] || '?')}</td>
-      <td style="padding:4px 8px; color:#800; font-size:11px;">Blood Challenge — auto-queued</td>
+      <td style="padding:4px 8px; font-weight:bold;">${esc(bc.target_name || '?')}</td>
+      <td style="padding:4px 8px; color:#800; font-size:11px;">Blood Challenge for ${esc(bc.dead_warrior_name || '?')} — ${bc.turns_remaining || 0} turn${(bc.turns_remaining||0) === 1 ? '' : 's'} left</td>
       <td></td>
     </tr>`;
   });
@@ -1697,6 +1772,157 @@ function buildChallengesTab(team, w) {
     </table>
   </div>` : '';
 
+  // Build blood challenges section
+  let bloodChallengesSection = '';
+  if (activeBloodChallenges.length > 0) {
+    let bcRows = '';
+    activeBloodChallenges.forEach(bc => {
+      const targetName = bc.target_name || '?';
+      const deadName = bc.dead_warrior_name || '?';
+      const challenger = bc.challenger_name || '(unset)';
+      const turnsLeft = bc.turns_remaining || 0;
+      const statusStyle = bc.challenger_name ? 'background:#e8f5e9;' : 'background:#fff3e0;';
+      
+      bcRows += `
+      <tr style="${statusStyle} border-bottom:1px solid #eee;">
+        <td style="padding:4px 8px; font-weight:bold;">${esc(targetName)}</td>
+        <td style="padding:4px 8px; color:#555; font-size:11px;">${esc(deadName)} killed — ${turnsLeft} turn${turnsLeft === 1 ? '' : 's'} left</td>
+        <td style="padding:4px 8px;">
+          <select onchange="selectBloodChallengeChampion(${jsq(targetName)}, this.value)" 
+                  style="font-size:11px; width:140px;">
+            <option value="">(unset)</option>
+            ${(team.warriors || []).map(w => w && w.name ? 
+              `<option value="${esc(w.name)}" ${w.name === bc.challenger_name ? 'selected' : ''}>${esc(w.name)}</option>` 
+              : '').join('')}
+          </select>
+        </td>
+      </tr>`;
+    });
+    
+    bloodChallengesSection = `
+  <div class="group" style="margin:0 0 12px;">
+    <span class="group-label">Blood Challenges — ${activeBloodChallenges.length} Active</span>
+    <p style="font-size:11px; color:#555; margin:4px 0 8px;">
+      Select a warrior to respond to each blood challenge. The selected warrior will automatically fight the killer when matched.
+    </p>
+    <table style="border-collapse:collapse; width:100%; font-size:12px;">
+      <thead>
+        <tr style="border-bottom:2px solid #ccc;">
+          <th style="padding:4px 8px; text-align:left; font-weight:600; width:120px;">Killer</th>
+          <th style="padding:4px 8px; text-align:left; font-weight:600;">Info</th>
+          <th style="padding:4px 8px; text-align:left; font-weight:600;">Selected Challenger</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${bcRows}
+      </tbody>
+    </table>
+  </div>`;
+  }
+
+  // Build avoid managers section (team-level)
+  const avoidMgrs = team.avoid_managers || [];
+  const otherManagers = [];
+  if (S.challengeTargets) {
+    const seen = new Set();
+    for (const ow of S.challengeTargets) {
+      const mn = ow.manager_name;
+      if (mn && !seen.has(mn.toLowerCase()) && !avoidMgrs.some(am => am.toLowerCase() === mn.toLowerCase())) {
+        seen.add(mn.toLowerCase());
+        otherManagers.push(mn);
+      }
+    }
+    otherManagers.sort((a, b) => a.localeCompare(b));
+  }
+
+  let avoidMgrRows = avoidMgrs.length > 0
+    ? avoidMgrs.map(m => `
+      <div style="padding:4px 8px; margin-bottom:4px; background:#fff3e0; border:1px solid #ffb74d; border-radius:2px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <span>${esc(m)}</span>
+        <button onclick="removeAvoidManager(${jsq(m)})"
+                style="padding:1px 6px; color:#800; border-color:#f88 #800 #800 #f88; font-size:10px;">✕ Remove</button>
+      </div>`).join('')
+    : '<div style="padding:4px 8px; color:#999; font-style:italic; font-size:11px;">(none set)</div>';
+
+  let avoidMgrDropdown = '';
+  if (avoidMgrs.length < 2) {
+    if (otherManagers.length > 0) {
+      avoidMgrDropdown = `
+        <select id="avoid-mgr-sel" onchange="handleAddAvoidManager()" style="width:180px; font-size:11px;">
+          <option value="">(select a manager)</option>
+          ${otherManagers.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+        </select>`;
+    } else {
+      avoidMgrDropdown = '<div style="color:#999; font-style:italic; font-size:11px;">Loading managers...</div>';
+    }
+  } else {
+    avoidMgrDropdown = '<div style="color:#999; font-style:italic; font-size:11px;">Maximum (2) already set</div>';
+  }
+
+  const avoidManagersSection = `
+  <div class="group" style="margin:0 0 12px;">
+    <span class="group-label">Avoid Managers — ${avoidMgrs.length}/2 set</span>
+    <p style="font-size:11px; color:#555; margin:4px 0 8px;">
+      Avoid all challenges from warriors on a specific manager's team (25-30% success rate).
+    </p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px; color:#666; margin-bottom:4px; font-weight:bold;">Currently Avoiding</div>
+        ${avoidMgrRows}
+      </div>
+      <div>
+        <div style="font-size:11px; color:#666; margin-bottom:4px; font-weight:bold;">Add Manager to Avoid</div>
+        ${avoidMgrDropdown}
+      </div>
+    </div>
+  </div>`;
+
+  // Build avoid warriors section (per-warrior)
+  const avoidWarriors = w.avoid_warriors || [];
+  const avoidableWarriors = (S.challengeTargets || [])
+    .filter(ow => !avoidWarriors.some(aw => aw.toLowerCase() === ow.name.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const avoidWRows = avoidWarriors.length > 0
+    ? avoidWarriors.map(aw => `
+      <div style="padding:4px 8px; margin-bottom:4px; background:#fff3e0; border:1px solid #ffb74d; border-radius:2px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <span>${esc(aw)}</span>
+        <button onclick="removeAvoid(${jsq(w.name)}, ${jsq(aw)})"
+                style="padding:1px 6px; color:#800; border-color:#f88 #800 #800 #f88; font-size:10px;">✕ Remove</button>
+      </div>`).join('')
+    : '<div style="padding:4px 8px; color:#999; font-style:italic; font-size:11px;">(none set)</div>';
+
+  let avoidWDropdown = '';
+  if (avoidWarriors.length >= 2) {
+    avoidWDropdown = '<div style="color:#999; font-style:italic; font-size:11px;">Maximum (2) already set</div>';
+  } else if (avoidableWarriors.length > 0) {
+    avoidWDropdown = `
+      <select id="avoid-sel" onchange="handleAddAvoid(${jsq(w.name)})" style="width:220px; font-size:11px;">
+        <option value="">(select a warrior)</option>
+        ${avoidableWarriors.map(ow => `<option value="${esc(ow.name)}">${esc(ow.name)} — ${esc(ow.team_name||'')}</option>`).join('')}
+      </select>`;
+  } else {
+    avoidWDropdown = '<div style="color:#999; font-style:italic; font-size:11px;">Loading warriors...</div>';
+  }
+
+  const avoidWarriorsSection = `
+  <div class="group" style="margin:0 0 12px;">
+    <span class="group-label">Avoid Warriors — ${avoidWarriors.length}/2 set</span>
+    <p style="font-size:11px; color:#555; margin:4px 0 8px;">
+      Select specific warriors that ${esc(w.name)} will try to avoid being matched against.
+    </p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11px; color:#666; margin-bottom:4px; font-weight:bold;">Currently Avoiding</div>
+        ${avoidWRows}
+      </div>
+      <div>
+        <div style="font-size:11px; color:#666; margin-bottom:4px; font-weight:bold;">Add Warrior to Avoid</div>
+        ${avoidWDropdown}
+      </div>
+    </div>
+  </div>`;
+
   return `
 <div style="padding:12px;">
   <div class="group" style="margin:0 0 12px;">
@@ -1709,6 +1935,9 @@ function buildChallengesTab(team, w) {
       Challenges are not guaranteed — success depends on warrior presence.
     </p>
   </div>
+  ${bloodChallengesSection}
+  ${avoidManagersSection}
+  ${avoidWarriorsSection}
   ${pendingSection}
   <div class="group" style="margin:0;">
     <span class="group-label">Available to Challenge${opponents.length ? ` — ${opponents.length} warrior${opponents.length === 1 ? '' : 's'} in range` : ''}</span>
@@ -1756,6 +1985,134 @@ async function removeChallenge(warriorName, targetName) {
     render();
   } else {
     alert('Could not remove challenge: ' + r.error);
+  }
+}
+
+async function selectBloodChallengeChampion(targetName, challengerName) {
+  const {teamId} = S.sel;
+  if (teamId == null) return;
+  try {
+    const r = await API.post('/api/team/blood_challenge', {
+      team_id: teamId, target_name: targetName, challenger_name: challengerName,
+    });
+    if (r.success) {
+      const team = S.teams[teamId];
+      if (team) team.blood_challenges = r.blood_challenges;
+      refreshContent();
+    } else {
+      alert('Could not set blood challenge champion: ' + r.error);
+    }
+  } catch(e) {
+    console.warn('selectBloodChallengeChampion error:', e);
+    alert('Connection error');
+  }
+}
+
+function handleAddAvoidManager() {
+  const sel = el('avoid-mgr-sel');
+  if (!sel || !sel.value) return;
+  addAvoidManager(sel.value);
+}
+
+async function addAvoidManager(managerName) {
+  const {teamId} = S.sel;
+  if (teamId == null) return;
+  try {
+    const r = await API.post('/api/team/avoid_manager', {
+      team_id: teamId, manager_name: managerName, action: 'add',
+    });
+    if (r.success) {
+      const team = S.teams[teamId];
+      if (team) team.avoid_managers = r.avoid_managers;
+      render();
+    } else {
+      alert('Could not add manager to avoid list: ' + r.error);
+    }
+  } catch(e) {
+    console.warn('addAvoidManager error:', e);
+    alert('Connection error');
+  }
+}
+
+async function removeAvoidManager(managerName) {
+  const {teamId} = S.sel;
+  if (teamId == null) return;
+  try {
+    const r = await API.post('/api/team/avoid_manager', {
+      team_id: teamId, manager_name: managerName, action: 'remove',
+    });
+    if (r.success) {
+      const team = S.teams[teamId];
+      if (team) team.avoid_managers = r.avoid_managers;
+      render();
+    } else {
+      alert('Could not remove manager from avoid list: ' + r.error);
+    }
+  } catch(e) {
+    console.warn('removeAvoidManager error:', e);
+    alert('Connection error');
+  }
+}
+
+function handleAddAvoid(warriorName) {
+  const sel = el('avoid-sel');
+  if (!sel || !sel.value) return;
+  addAvoid(warriorName, sel.value);
+}
+
+async function addAvoid(warriorName, avoidWarriorName) {
+  const {teamId} = S.sel;
+  if (teamId == null) return;
+  try {
+    const r = await API.post('/api/warrior/avoid_warrior', {
+      team_id: teamId, warrior_name: warriorName, avoid_warrior_name: avoidWarriorName, action: 'add',
+    });
+    if (r.success) {
+      const team = S.teams[teamId];
+      if (team && team.warriors) {
+        // Find the warrior in the team
+        for (let i = 0; i < team.warriors.length; i++) {
+          if (team.warriors[i] && team.warriors[i].name === warriorName) {
+            team.warriors[i].avoid_warriors = r.avoid_warriors;
+            break;
+          }
+        }
+      }
+      refreshContent();
+    } else {
+      alert('Could not add to avoid list: ' + r.error);
+    }
+  } catch(e) {
+    console.warn('addAvoid error:', e);
+    alert('Connection error');
+  }
+}
+
+async function removeAvoid(warriorName, avoidWarriorName) {
+  const {teamId} = S.sel;
+  if (teamId == null) return;
+  try {
+    const r = await API.post('/api/warrior/avoid_warrior', {
+      team_id: teamId, warrior_name: warriorName, avoid_warrior_name: avoidWarriorName, action: 'remove',
+    });
+    if (r.success) {
+      const team = S.teams[teamId];
+      if (team && team.warriors) {
+        // Find the warrior in the team
+        for (let i = 0; i < team.warriors.length; i++) {
+          if (team.warriors[i] && team.warriors[i].name === warriorName) {
+            team.warriors[i].avoid_warriors = r.avoid_warriors;
+            break;
+          }
+        }
+      }
+      refreshContent();
+    } else {
+      alert('Could not remove from avoid list: ' + r.error);
+    }
+  } catch(e) {
+    console.warn('removeAvoid error:', e);
+    alert('Connection error');
   }
 }
 
@@ -1808,7 +2165,7 @@ function buildArchivesTab(team) {
 }
 function buildReplacementTab(w) {
   // Living warrior — show placeholder
-  if (!w.is_dead) {
+  if (!w.is_dead && !w.ascended_to_monster) {
     return `<div style="padding:12px; color:#555;">
       <b>Replacement Warrior</b><br><br>
       This tab activates when <b>${esc(w.name)}</b> falls in battle.<br>
@@ -1819,9 +2176,27 @@ function buildReplacementTab(w) {
   const teamId = S.sel.teamId;
   const wIdx   = S.sel.wIdx;
   const rs     = S.replacement;
+  const hasRs  = rs && rs.teamId === teamId && rs.wIdx === wIdx;
+
+  // Ascended warrior — show special message (only when no roll-up yet)
+  if (w.ascended_to_monster && !hasRs) {
+    return `<div style="padding:14px;">
+      <div style="font-weight:bold; color:#844; margin-bottom:10px; font-size:12px; background:#fef8f0; padding:8px; border-left:3px solid #844;">
+        👹 ${esc(w.name)} has ascended to Monsterdom!
+      </div>
+      <p style="color:#555; font-size:11px; margin-bottom:12px;">
+        <b>${esc(w.name)}</b> slew a monster and became one of The Monsters, joining The Monsters roster.
+        This warrior is now part of The Arena itself and can no longer fight for your team.
+      </p>
+      <p style="color:#555; font-size:11px; margin-bottom:12px;">
+        A replacement warrior slot is now available. Roll up a new recruit below.
+      </p>
+      <button onclick="initReplacement(${teamId}, ${wIdx})">Roll Up Replacement Warrior</button>
+    </div>`;
+  }
 
   // No roll-up yet — show the "roll up" button
-  if (!rs || rs.teamId !== teamId || rs.wIdx !== wIdx) {
+  if (!hasRs) {
     return `<div style="padding:14px;">
       <div style="font-weight:bold; color:#800; margin-bottom:10px; font-size:12px;">
         ✝ ${esc(w.name)} was slain by ${esc(w.killed_by||'unknown')}.
@@ -2601,7 +2976,9 @@ function buildTurnResults() {
                    : b.result==='LOSS' ? '#800' : '#555';
     const slainTag   = b.warrior_slain   ? ' <b style="color:#800; font-size:10px;">(SLAIN)</b>'    : '';
     const killedTag  = b.opponent_slain  ? ' <b style="color:#060; font-size:10px;">(KILLED)</b>'   : '';
-    const typeTag    = `<span style="color:#888; font-size:10px;">[${esc(b.fight_type||'')}]</span>`;
+    const ftLabel    = (b.fight_type && !['standard','rivalry','peasant','monster'].includes(b.fight_type))
+                       ? b.fight_type.replace(/_/g,' ') : '';
+    const typeTag    = ftLabel ? `<span style="color:#888; font-size:10px;">[${esc(ftLabel)}]</span>` : '';
     const trainLines = (b.training||[]).map(t => {
       if (t.includes('improved:') || t.includes('trained:'))
         return `<span style="color:#060">${esc(t)}</span>`;
@@ -2625,6 +3002,26 @@ function buildTurnResults() {
     </tr>`;
   });
 
+  // Celebration banner for any warrior who ascended to Monsterdom this turn
+  const ascensions = bouts.filter(b => b.ascension || (b.fight_type === 'monster' && b.opponent_slain));
+  let ascensionBanner = '';
+  if (ascensions.length) {
+    const names = ascensions.map(b => `<b>${esc(b.warrior_name)}</b> (slew ${esc(b.opponent_name)})`).join('<br>');
+    ascensionBanner = `
+    <div style="margin-bottom:12px; padding:12px 14px; background:linear-gradient(90deg,#fef3d0,#fff6e0,#fef3d0); border:2px solid #a57; border-left:6px solid #844; border-right:6px solid #844;">
+      <div style="font-size:14px; font-weight:bold; color:#844; margin-bottom:6px;">
+        👹 ASCENSION TO MONSTERDOM! 👹
+      </div>
+      <div style="font-size:12px; color:#422; line-height:1.5;">
+        ${names}<br>
+        <span style="color:#666; font-size:11px;">
+          Slew a monster and has been absorbed into The Monsters roster.
+          A replacement warrior slot is now available — visit the warrior's Replacement tab to roll up a recruit.
+        </span>
+      </div>
+    </div>`;
+  }
+
   return `
 <div style="height:100%; display:flex; flex-direction:column; overflow:hidden;">
   ${buildMenuBar()}
@@ -2633,6 +3030,7 @@ function buildTurnResults() {
   <div style="font-size:13px; font-weight:bold; margin-bottom:6px;">
     TURN ${tr.turn_number} RESULTS &mdash; ${esc(tr.team ? tr.team.team_name : '')}
   </div>
+  ${ascensionBanner}
   <div style="margin-bottom:10px; display:flex; gap:20px; font-size:12px;">
     <span style="color:#060; font-weight:bold;">Wins: ${wins}</span>
     <span style="color:#800; font-weight:bold;">Losses: ${losses}</span>
@@ -2935,6 +3333,12 @@ async function doRunTurn(teamId) {
       S.newsletters = null;     // invalidate newsletter cache
       S.newsletterText = null;  // force fresh load on next view
       S.turnResults = r;
+      // Turn advanced — invalidate scout cache so locks clear on next view
+      S.scout.loaded     = false;
+      S.scout.selections = [];
+      S.scout.slotsLeft  = 3;
+      S.scout.targets    = null;
+      S.scout.report     = null;
       // Keep the same team selected in tree
       S.sel = { type: 'team', teamId: teamId };
       S.view = 'turn_results';
@@ -2957,14 +3361,16 @@ async function doRunTurn(teamId) {
 async function openNewsletter() {
   S.sel = {type:'newsletter'};
   S.wTab = 'stats';
-  // Load newsletter list if not cached
-  if (!S.newsletters) {
-    const r = await API.get('/api/newsletters');
-    S.newsletters = r.turns || [];
-  }
-  // Default to latest
-  if (!S.newsletterTurn && S.newsletters.length) {
-    S.newsletterTurn = S.newsletters[S.newsletters.length - 1];
+  // Always re-fetch the list so newly produced turns appear
+  const prevList = S.newsletters || [];
+  const r = await API.get('/api/newsletters');
+  S.newsletters = r.turns || [];
+  const latest = S.newsletters.length ? S.newsletters[S.newsletters.length - 1] : null;
+  const prevLatest = prevList.length ? prevList[prevList.length - 1] : null;
+  // If a newer turn exists, or nothing is selected, jump to latest
+  if (latest && (!S.newsletterTurn || (prevLatest !== null && latest > prevLatest))) {
+    S.newsletterTurn = latest;
+    S.newsletterText = null;
   }
   if (S.newsletterTurn && !S.newsletterText) {
     await loadNewsletterTurn(S.newsletterTurn);
@@ -3358,6 +3764,66 @@ const _DL_STEPS = [
   'Finalising',
 ];
 
+function _showUploadProgress(steps, currentIdx, error) {
+  const old = document.getElementById('ul-progress-modal');
+  if (old) old.remove();
+
+  const allDone   = currentIdx >= steps.length && !error;
+  const hasFailed = !!error;
+
+  let rows = '';
+  steps.forEach((label, i) => {
+    let icon, color;
+    if (hasFailed && i === currentIdx) {
+      icon = '✗'; color = '#c00';
+    } else if (i < currentIdx || allDone) {
+      icon = '✓'; color = '#080';
+    } else if (i === currentIdx) {
+      icon = '⟳'; color = '#840';
+    } else {
+      icon = '☐'; color = '#aaa';
+    }
+    rows += `<tr>
+      <td style="padding:3px 8px; color:${color}; font-size:13px;">${icon}</td>
+      <td style="padding:3px 4px; font-size:12px; color:${i<=currentIdx||allDone?'#111':'#999'};">${label}</td>
+    </tr>`;
+  });
+
+  const footer = hasFailed
+    ? `<div style="color:#c00;font-size:11px;margin-bottom:8px;padding:0 12px;">${error}</div>`
+    : allDone
+    ? `<div style="color:#060;font-size:12px;font-weight:bold;margin-bottom:8px;">
+         <span style="font-size:16px;">✔</span> Completed Successfully
+       </div>`
+    : `<div style="color:#555;font-size:11px;margin-bottom:8px;">Please wait...</div>`;
+
+  const showOk = allDone || hasFailed;
+
+  const modal = document.createElement('div');
+  modal.id = 'ul-progress-modal';
+  modal.style.cssText = `position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.45);z-index:9999;display:flex;
+    align-items:center;justify-content:center;`;
+  modal.innerHTML = `
+<div style="background:#f4f1ea;border:2px solid #888;border-radius:4px;
+            min-width:260px;max-width:360px;box-shadow:4px 4px 12px rgba(0,0,0,0.4);
+            font-family:sans-serif;">
+  <div style="background:#6b4c2a;color:#f4f1ea;padding:6px 12px;font-weight:bold;font-size:13px;
+              border-radius:2px 2px 0 0;">
+    BLOODSPIRE — Uploading Teams
+  </div>
+  <div style="padding:12px 8px 4px;">
+    <table style="border-collapse:collapse;width:100%;">${rows}</table>
+  </div>
+  <div style="text-align:center;padding:8px 0 4px;">
+    ${footer}
+    ${showOk ? `<button onclick="document.getElementById('ul-progress-modal').remove()"
+                 style="min-width:80px;margin-top:4px;">OK</button>` : ''}
+  </div>
+</div>`;
+  document.body.appendChild(modal);
+}
+
 async function doLeagueDownloadAll() {
   const lg = S.league;
   if (!lg.url || !lg.managerId) { setMsg('Configure league settings first.', 'err'); return; }
@@ -3470,6 +3936,13 @@ async function doLeagueDownloadAll() {
 
     _showDownloadProgress(_DL_STEPS, _DL_STEPS.length, null);
 
+    // Turn downloaded — invalidate scout cache so locks clear on next view
+    S.scout.loaded     = false;
+    S.scout.selections = [];
+    S.scout.slotsLeft  = 3;
+    S.scout.targets    = null;
+    S.scout.report     = null;
+
     const names  = applied.map(a => a.team_name).join(', ');
     const warn   = missed.length ? `  (${missed.length} unmatched: ${missed.join(', ')})` : '';
     const nlNote = newsletterSaved ? '  Newsletter ready.' : '';
@@ -3564,6 +4037,11 @@ async function runAllTeams() {
   const total = (r.results||[]).reduce((a,x)=>a+(x.bouts||[]).length,0);
   setMsg(`Turn ${r.turn_number} complete — ${wins}W/${total-wins}L across ${ids.length} team(s).`, 'ok');
   S.sel = {type: null};
+  S.scout.loaded     = false;
+  S.scout.selections = [];
+  S.scout.slotsLeft  = 3;
+  S.scout.targets    = null;
+  S.scout.report     = null;
   render();
 }
 
@@ -3635,17 +4113,48 @@ async function uploadAllTeams() {
   lg.password = pw;
 
   setMsg(`Uploading ${ids.length} team(s) to league server...`, 'ok'); render();
-  const r = await API.post('/api/league/upload_all', {
-    manager_id       : S.account.id,
-    team_ids         : ids,
-    league_url       : lg.url,
-    league_manager_id: lg.managerId,
-    password         : pw,
-  });
-  if (!r.success) { setMsg('Upload error: ' + r.error, 'err'); render(); return; }
 
-  const uploaded = r.uploaded || [];
-  const errors   = r.errors   || [];
+  // Build dynamic step list — one entry per team, based on the local team name
+  const steps = ids.map(tid => {
+    const t = S.teams?.[tid];
+    const nm = (t && t.team_name) ? t.team_name : `Team ${tid}`;
+    return `Uploading ${nm}`;
+  });
+  _showUploadProgress(steps, 0, null);
+  const tick = (i) => _showUploadProgress(steps, i, null);
+
+  const uploaded = [];
+  const errors   = [];
+
+  for (let i = 0; i < ids.length; i++) {
+    tick(i);
+    const tid = ids[i];
+    let r;
+    try {
+      r = await API.post('/api/league/upload_one', {
+        team_id          : tid,
+        league_url       : lg.url,
+        league_manager_id: lg.managerId,
+        password         : pw,
+      });
+    } catch(e) {
+      r = { success: false, team_id: tid, error: e.message };
+    }
+    if (r.success) {
+      uploaded.push({ team_id: tid, team_name: r.team_name || `Team ${tid}` });
+    } else {
+      errors.push({ team_id: tid, team_name: r.team_name || `Team ${tid}`,
+                    error: r.error || 'unknown error' });
+    }
+    await new Promise(res => setTimeout(res, 30));
+  }
+
+  // Close progress modal — the detailed results modal below supersedes it
+  _showUploadProgress(steps, steps.length, null);
+  setTimeout(() => {
+    const m = document.getElementById('ul-progress-modal');
+    if (m) m.remove();
+  }, 400);
 
   // Show results modal
   const old = document.getElementById('upload-results-modal');

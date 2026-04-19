@@ -124,6 +124,15 @@ def get_account(manager_id: int) -> Optional[dict]:
     return None
 
 
+def get_manager_for_team(team_id: int) -> Optional[int]:
+    """Return the manager_id that owns team_id, or None."""
+    data = _load()
+    for acc in data["accounts"]:
+        if team_id in acc.get("team_ids", []):
+            return acc["id"]
+    return None
+
+
 def add_team(manager_id: int, team_id: int) -> tuple:
     """
     Associate a team_id with a manager account.

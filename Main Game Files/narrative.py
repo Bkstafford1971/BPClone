@@ -1,5 +1,5 @@
 ﻿# =============================================================================
-# narrative.py — BLOODSPIRE Narrative Text Engine
+# narrative.py, BLOODSPIRE Narrative Text Engine
 # =============================================================================
 # Generates all fight text: the side-by-side header, blow-by-blow lines,
 # perm injury announcements, surrender/mercy text, crowd flavor, and the
@@ -12,6 +12,7 @@
 import random
 from typing import Optional
 from warrior import Warrior, compare_stats
+from weapons import get_weapon
 
 LINE_WIDTH = 76   # Total width of fight output
 
@@ -39,6 +40,102 @@ def popularity_desc(score: int) -> str:
         if lo <= score <= hi:
             return desc
     return "KNOWN TO THE CROWD"
+
+
+def _backup_weapon_description(weapon_name: str, gender: str) -> str:
+    """
+    Generate a thematic, location-specific description of a backup weapon.
+    Returns a string (without period) describing where/how it's carried.
+    """
+    pronoun = "his" if gender == "Male" else "her"
+    weapon_lower = weapon_name.lower().replace(" ", "_").replace("&", "and")
+    
+    try:
+        weapon = get_weapon(weapon_name)
+    except ValueError:
+        # Fallback for unknown weapons
+        return f"has a spare {weapon_name.upper()} strapped to {pronoun} side"
+    
+    wpn_display = weapon.display.upper()
+    is_light = weapon.weight < 2.5
+    is_small = weapon.weight < 2.0
+    is_heavy = weapon.weight >= 5.0
+    is_two_hand = weapon.two_hand
+    is_shield = weapon.is_shield
+    is_throwable = weapon.throwable
+    is_polearm = weapon.category == "Polearm/Spear"
+    
+    # Shield-specific descriptions
+    if is_shield:
+        shield_desc = [
+            f"has a {wpn_display} buckled to {pronoun} arm",
+            f"carries a {wpn_display} on {pronoun} shoulder",
+            f"has a {wpn_display} strapped across {pronoun} back",
+        ]
+        return random.choice(shield_desc)
+    
+    # Small daggers/knives - thrust into waistband
+    if is_small and weapon_lower in ("dagger", "knife", "stiletto"):
+        small_desc = [
+            f"has a {wpn_display} thrust into {pronoun} waistband",
+            f"carries a {wpn_display} tucked into {pronoun} belt",
+            f"has a {wpn_display} sheathed at {pronoun} hip",
+        ]
+        return random.choice(small_desc)
+    
+    # Polearms and spears - carried upright or across back
+    if is_polearm:
+        polearm_desc = [
+            f"has a {wpn_display} strapped to {pronoun} back",
+            f"carries a {wpn_display} planted at {pronoun} side",
+            f"wears a {wpn_display} across {pronoun} back",
+        ]
+        return random.choice(polearm_desc)
+    
+    # Light one-handed weapons - various options
+    if is_light and not is_two_hand:
+        light_desc = [
+            f"has a {wpn_display} slung across {pronoun} back",
+            f"carries a {wpn_display} strapped to {pronoun} hip",
+            f"has a {wpn_display} sheathed at {pronoun} side",
+            f"wears a {wpn_display} across {pronoun} back",
+        ]
+        return random.choice(light_desc)
+    
+    # Two-handed weapons - strapped/slung across back
+    if is_two_hand:
+        heavy_desc = [
+            f"has a {wpn_display} strapped to {pronoun} back",
+            f"carries a {wpn_display} slung across {pronoun} back",
+            f"wears a {wpn_display} lashed to {pronoun} back",
+        ]
+        return random.choice(heavy_desc)
+    
+    # Heavy one-handed weapons - shoulder or back
+    if is_heavy:
+        heavy_1h_desc = [
+            f"has a {wpn_display} resting on {pronoun} shoulder",
+            f"carries a {wpn_display} strapped to {pronoun} back",
+            f"wears a {wpn_display} across {pronoun} back",
+        ]
+        return random.choice(heavy_1h_desc)
+    
+    # Other throwable weapons (axes, etc) - quiver, bundle, or bandolier
+    if is_throwable and weapon_lower not in ("dagger", "knife", "stiletto"):
+        throw_desc = [
+            f"has a {wpn_display} bundled and strapped to {pronoun} back",
+            f"carries a {wpn_display} across {pronoun} shoulder",
+            f"has a {wpn_display} at {pronoun} side",
+        ]
+        return random.choice(throw_desc)
+    
+    # Default for medium weapons
+    default_desc = [
+        f"has a {wpn_display} strapped to {pronoun} side",
+        f"carries a {wpn_display} sheathed at {pronoun} hip",
+        f"wears a {wpn_display} across {pronoun} back",
+    ]
+    return random.choice(default_desc)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +174,7 @@ def _warrior_report_block(w: Warrior) -> list:
 
     main = w.primary_weapon.upper() if w.primary_weapon else "OPEN HAND"
     off  = w.secondary_weapon.upper() if w.secondary_weapon else None
-    bak  = w.backup_weapon.upper() if w.backup_weapon else None
+    bak  = w.backup_weapon if w.backup_weapon else None
 
     if off and off.upper() != "OPEN HAND":
         lines.append(f"{w.name.upper()} fights using a {main} with an off-hand {off}.")
@@ -85,7 +182,8 @@ def _warrior_report_block(w: Warrior) -> list:
         lines.append(f"{w.name.upper()} fights using a {main}.")
 
     if bak and bak.upper() != "OPEN HAND":
-        lines.append(f"{w.name.upper()} has a spare {bak} strapped to {pronoun} side.")
+        backup_desc = _backup_weapon_description(bak, w.gender)
+        lines.append(f"{w.name.upper()} {backup_desc}.")
 
     return lines
 
@@ -116,6 +214,7 @@ def build_fight_header(
     manager_b_name: str,
     pos_a: int = 1,
     pos_b: int = 1,
+    challenger_name: str = None,
 ) -> str:
     """
     Generate the fight header in report/narrative style.
@@ -124,6 +223,9 @@ def build_fight_header(
       - Warrior A (player) prose block
       - Warrior B (opponent) prose block
       - Warrior A strategy table only (opponent strategies are hidden)
+    
+    If challenger_name is provided:
+      - Line will show "Challenges" or "is Challenged by" based on who initiated
     """
     SEP = "=" * LINE_WIDTH
 
@@ -132,7 +234,19 @@ def build_fight_header(
     # Matchup title
     left  = f"{warrior_a.name.upper()} ({warrior_a.record_str})"
     right = f"{warrior_b.name.upper()} ({warrior_b.record_str})"
-    lines.append(f"{left}   vs   {right}")
+    
+    # Determine middle text based on challenge type
+    if challenger_name:
+        if challenger_name == warrior_a.name:
+            middle_text = "Challenges"
+        elif challenger_name == warrior_b.name:
+            middle_text = "is Challenged by"
+        else:
+            middle_text = "vs"  # fallback if challenger doesn't match either warrior
+    else:
+        middle_text = "vs"
+    
+    lines.append(f"{left}   {middle_text}   {right}")
     lines.append(f"{team_a_name.upper()} ({manager_a_name.upper()})"
                  + "   vs   " +
                  f"{team_b_name.upper()} ({manager_b_name.upper()})")
@@ -172,7 +286,7 @@ FIGHT_OPENERS = [
     "The crowd jeers as the combatants approach each other",
     "An eerie silence settles over the BLOODSPIRE",
     "The torches flicker as a cold wind sweeps through the arena",
-    "The Blood Master raises his fist — the fight begins!",
+    "The Blood Master raises his fist, the fight begins!",
 ]
 
 
@@ -270,6 +384,44 @@ STYLE_INTENT_POOLS: dict[str, list[str]] = {
     ],
 }
 
+# AWKWARD STYLE INTENT LINES
+# Used when a weapon and fighting style are incompatible.
+# These replace the normal style intent lines for that attack.
+AWKWARD_STYLE_INTENT_POOLS: dict[str, list[str]] = {
+    "Bash": [
+        "{name} awkwardly attempts to bash with {his} {weapon}",
+        "{name} struggles to use {his} {weapon} as a bludgeon",
+        "{name} clumsily tries to bash with {his} dainty {weapon}",
+        "{name} futilely attempts to smash with {his} {weapon}",
+    ],
+    "Slash": [
+        "{name} awkwardly attempts to slash with {his} {weapon}",
+        "{name} fumbles trying to slash with {his} {weapon}",
+        "{name} awkwardly draws {his} {weapon} for a clumsy slash",
+        "{name} tries unsuccessfully to slash with {his} stubby {weapon}",
+    ],
+    "Cleave": [
+        "{name} struggles to cleave with {his} {weapon}",
+        "{name} awkwardly attempts a clumsy cleaving motion",
+        "{name} tries unsuccessfully to split through with {his} {weapon}",
+    ],
+    "Wall of Steel": [
+        "{name} awkwardly flails {his} {weapon} in rapid-fire attempts",
+        "{name} fumbles through a poorly-executed flurry with {his} {weapon}",
+        "{name} clumsily hammers away with {his} {weapon}",
+    ],
+    "Total Kill": [
+        "{name} rages forward clumsily with {his} {weapon}",
+        "{name} charges in a clumsy fury with {his} {weapon}",
+        "{name} desperately thrashes about with {his} {weapon}",
+    ],
+    "Lunge": [
+        "{name} attempts an awkward, ineffective lunge with {his} {weapon}",
+        "{name} stumbles forward with {his} {weapon}",
+        "{name} fumbles a pathetic lunge attempt",
+    ],
+}
+
 # Adjectives used in strike intent lines (matching the guide "stable", "mighty", etc.)
 WARRIOR_ADJ_POOL = [
     "formidable", "powerful", "mighty", "relentless", "fierce",
@@ -307,6 +459,34 @@ def style_intent_line(
     return line
 
 
+def awkward_style_intent_line(
+    warrior_name : str,
+    foe_name     : str,
+    style        : str,
+    weapon_name  : str,
+    gender       : str,
+) -> Optional[str]:
+    """
+    Return an awkward style intent line for incompatible weapon/style combos.
+    Always returns a line (no skip chance, unlike normal intent lines).
+    """
+    pool = AWKWARD_STYLE_INTENT_POOLS.get(style, None)
+    if pool is None:
+        # Fallback to normal line if no awkward pool exists for this style
+        return style_intent_line(warrior_name, foe_name, style, weapon_name, gender)
+    
+    template = random.choice(pool)
+    pronoun  = "his" if gender == "Male" else "her"
+
+    line = template.format(
+        name    = warrior_name.upper(),
+        foe     = foe_name.upper(),
+        weapon  = weapon_name.lower(),
+        his     = pronoun,
+    )
+    return line
+
+
 # ---------------------------------------------------------------------------
 # ATTACK LINES
 # Format: "{attacker} tries to {verb} {defender}'s {location}"
@@ -324,7 +504,7 @@ AIM_POINT_LABELS = {
     "None"          : ["body", "midsection", "torso"],   # generic when no aim point
 }
 
-# Attack verbs by weapon category — third-person singular, complete phrases
+# Attack verbs by weapon category, third-person singular, complete phrases
 ATTACK_VERBS: dict[str, list[str]] = {
     "Sword/Knife"  : ["slashes at", "cuts at", "hacks at", "slices at",
                       "drives a blow toward", "thrusts at"],
@@ -345,7 +525,7 @@ LIZARDFOLK_ATTACK_VERBS: dict[str, list[str]] = {
     "tail"  : ["sweeps at with tail", "lashes at with tail", "swings tail at", "brings tail around toward"],
 }
 
-# Extra style-flavored attack verbs — third-person singular
+# Extra style-flavored attack verbs, third-person singular
 STYLE_ATTACK_PREFIX: dict[str, list[str]] = {
     "Total Kill"       : ["tries to demolish", "savagely attacks", "hacks away at",
                           "makes an explosive assault on"],
@@ -389,7 +569,7 @@ def attack_line(
             f"{attacker_name.upper()} {verb} {defender_name.upper()}'s {location}!"
         )
 
-    # Style-flavored variant — always ends with weapon reference
+    # Style-flavored variant, always ends with weapon reference
     if style in STYLE_ATTACK_PREFIX and random.random() < 0.5:
         verb = random.choice(STYLE_ATTACK_PREFIX[style])
         return (
@@ -397,7 +577,7 @@ def attack_line(
             f"{location} with {pronoun} {weapon_name.lower()}"
         )
     else:
-        # Category verb variant — weapon mentioned at the end
+        # Category verb variant, weapon mentioned at the end
         cat_verbs = ATTACK_VERBS.get(weapon_category, ATTACK_VERBS["Oddball"])
         verb = random.choice(cat_verbs)
         return (
@@ -772,7 +952,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With practiced savagery {name} works the knife into vulnerable flesh!",
         "The knife finds its mark as {name} exploits every opening!",
         "{name} drives the knife upward with lethal intent!",
-        "A blur of steel — {name} strikes fast and hard with the knife!",
+        "A blur of steel, {name} strikes fast and hard with the knife!",
         "{name} twists the knife viciously after driving it home!",
     ],
     "Dagger": [
@@ -807,7 +987,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} flicks the epee in a lightning-quick strike!",
         "With elegant control {name} drives the epee home!",
         "The epee dances on the edge of visibility as {name} attacks!",
-        "A master's touch — {name} makes the epee strike with deadly focus!",
+        "A master's touch, {name} makes the epee strike with deadly focus!",
         "{name} uses the epee to exploit a momentary weakness with perfect form!",
         "The slender epee finds its mark as {name} strikes with surgical grace!",
     ],
@@ -837,13 +1017,13 @@ SIGNATURE_LINES: dict[str, list[str]] = {
     ],
     "Broad Sword": [
         "{name} swings the broadsword with solid, reliable force!",
-        "{name} delivers a heavy practical cut — no frills, just devastating results!",
+        "{name} delivers a heavy practical cut, no frills, just devastating results!",
         "{name} carries the broadsword's message with straightforward power!",
         "Reliable and strong, {name}'s broadsword does exactly what is asked of it!",
         "{name}'s broadsword hacks forward with the confidence of a well-made tool!",
         "With practiced swings {name} makes the broadsword bite deep!",
         "The broadsword strikes with honest, crushing weight!",
-        "A no-nonsense blow — {name} brings the broadsword down hard!",
+        "A no-nonsense blow, {name} brings the broadsword down hard!",
         "{name} uses the broadsword to powerful effect in close quarters!",
         "{name} drives the broadsword home with brutal efficiency!",
     ],
@@ -877,11 +1057,11 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} flashes the hatchet forward in a quick, brutal chop!",
         "The hatchet bites deep as {name} strikes with savage speed!",
         "{name} hacks with the hatchet in a flurry of deadly strikes!",
-        "Short, sharp, and mean — {name} makes the hatchet find its target!",
+        "Short, sharp, and mean, {name} makes the hatchet find its target!",
         "{name} throws the hatchet with deadly accuracy at close range!",
         "The hatchet moves with surprising speed in {name}'s hand!",
         "{name} delivers a vicious chop with the hatchet!",
-        "A woodsman's tool turned lethal — {name} strikes true!",
+        "A woodsman's tool turned lethal, {name} strikes true!",
         "{name} uses the hatchet to split bone and armor alike!",
         "The hatchet flashes as {name} presses the attack!",
     ],
@@ -889,7 +1069,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} spins the fransisca through the air with deadly accuracy!",
         "The fransisca whistles as it flies toward its target!",
         "{name} hurls the fransisca with practiced precision!",
-        "A dwarf-forged promise of pain — {name} throws the fransisca true!",
+        "A dwarf-forged promise of pain, {name} throws the fransisca true!",
         "{name} delivers a spinning throw with the fransisca!",
         "The fransisca cuts a deadly path end over end!",
         "{name} makes the fransisca seek flesh and bone!",
@@ -929,7 +1109,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} drives the small pick home with cold, calculated force!",
         "The small pick strikes with armor-piercing intent!",
         "{name} probes for a killing blow with the small pick!",
-        "A needle of steel — {name} makes the small pick find its mark!",
+        "A needle of steel, {name} makes the small pick find its mark!",
         "{name} delivers a precise, vicious strike with the small pick!",
         "The small pick darts forward seeking vulnerable joints!",
     ],
@@ -941,7 +1121,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The military pick strikes with the cold certainty of a battlefield veteran!",
         "{name} exploits a gap and drives the military pick deep!",
         "The pick punches through defenses as {name} attacks!",
-        "A weapon made for war — {name} makes the military pick sing!",
+        "A weapon made for war, {name} makes the military pick sing!",
         "{name} delivers a devastating piercing blow with the military pick!",
         "The military pick bites deep into heavy armor!",
     ],
@@ -949,7 +1129,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} brings the pick axe down with mining fury meant to break stone and bone!",
         "The pick axe swings with devastating force as {name} attacks!",
         "{name} crashes the pick axe downward, looking to split anything in its path!",
-        "A brutal tool turned weapon — {name} wields the pick axe with lethal purpose!",
+        "A brutal tool turned weapon, {name} wields the pick axe with lethal purpose!",
         "The pick axe comes down with the mountain's anger behind it!",
         "{name} delivers a two-handed strike with the pick axe!",
         "The heavy pick axe demands respect through violence!",
@@ -966,7 +1146,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With practiced swings {name} makes the hammer pulp armor and flesh!",
         "The hammer strikes with blunt, uncompromising force!",
         "{name} brings the hammer down with crushing weight!",
-        "A straightforward blow — {name} makes the hammer connect hard!",
+        "A straightforward blow, {name} makes the hammer connect hard!",
         "The hammer seeks to break what stands before it!",
         "{name} uses the hammer to devastating effect in close combat!",
         "The hammer crashes down with honest, brutal power!",
@@ -975,7 +1155,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} swings the mace in a heavy, punishing arc!",
         "Flanged and brutal, {name}'s mace seeks to crush anything it touches!",
         "The mace falls with the weight of authority behind every blow!",
-        "A weapon that speaks in broken bones — {name} wields the mace well!",
+        "A weapon that speaks in broken bones, {name} wields the mace well!",
         "{name} delivers a crushing strike with the mace!",
         "The mace crashes forward, designed to end arguments permanently!",
         "{name} makes the mace connect with punishing force!",
@@ -992,7 +1172,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The morningstar promises agony with every rotation!",
         "{name} delivers a devastating blow with the morningstar!",
         "The spiked morningstar sings for flesh as {name} strikes!",
-        "A cruel and bright weapon — {name} wields the morningstar with grace!",
+        "A cruel and bright weapon, {name} wields the morningstar with grace!",
         "{name} unleashes the morningstar in a whirlwind of spikes!",
     ],
     "War Hammer": [
@@ -1005,13 +1185,13 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} delivers a crushing blow with the war hammer!",
         "The war hammer means to end the fight decisively!",
         "{name} brings the war hammer crashing down with tremendous power!",
-        "A weapon built for breaking armor — {name} wields it masterfully!",
+        "A weapon built for breaking armor, {name} wields it masterfully!",
     ],
     "Maul": [
         "{name} hefts the maul and smashes it down with terrifying strength!",
         "The massive maul descends like doom itself!",
         "{name} brings the maul crashing down with unstoppable force!",
-        "The maul cares nothing for finesse — {name} wields pure brute force!",
+        "The maul cares nothing for finesse, {name} wields pure brute force!",
         "The maul swings like a falling tree, crushing everything in its path!",
         "{name} delivers a devastating two-handed smash with the maul!",
         "The maul moves with terrifying momentum as {name} attacks!",
@@ -1023,8 +1203,8 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} swings the club with simple, brutal honesty!",
         "The club seeks to break what it hits as {name} strikes!",
         "{name} brings the club down with raw, unrefined violence!",
-        "A crude but effective weapon — {name} makes the club connect hard!",
-        "The club moves like the first weapon humanity ever made — simple and final!",
+        "A crude but effective weapon, {name} makes the club connect hard!",
+        "The club moves like the first weapon humanity ever made, simple and final!",
         "{name} delivers a straightforward, crushing blow with the club!",
         "With honest intent {name} makes the club do its work!",
         "The club crashes forward, promising broken bones!",
@@ -1041,7 +1221,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The short spear finds its mark with ease in {name}'s hands!",
         "{name} delivers a powerful, balanced thrust with the short spear!",
         "The short spear moves with the confidence of a favored weapon!",
-        "A quick, potent strike — {name} makes the short spear bite deep!",
+        "A quick, potent strike, {name} makes the short spear bite deep!",
         "{name} exploits the short spear's speed and reach!",
         "The short spear lunges like a predator's fang!",
     ],
@@ -1049,7 +1229,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} braces and drives the boar spear home with both hands!",
         "The boar spear impales the target with savage force as {name} attacks!",
         "{name} lunges forward, boar spear thrusting with lethal intent!",
-        "The boar spear means to impale and hold — {name} strikes true!",
+        "The boar spear means to impale and hold, {name} strikes true!",
         "{name} finds the perfect angle for maximum damage with the boar spear!",
         "The boar spear strikes like a predator's fang, deep and final!",
         "{name} delivers a hunting-precision thrust with the boar spear!",
@@ -1066,7 +1246,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} delivers a disciplined, powerful thrust with the long spear!",
         "The long spear strikes from a distance lesser weapons cannot match!",
         "{name} makes the long spear find its mark with precision!",
-        "A long, dangerous thrust — {name} exploits the spear's reach!",
+        "A long, dangerous thrust, {name} exploits the spear's reach!",
         "The long spear moves with superior range and control!",
     ],
     "Pole Axe": [
@@ -1077,7 +1257,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The pole axe moves like an extension of {name}'s rage!",
         "{name} delivers a versatile, brutal strike with the pole axe!",
         "The pole axe cleaves through the air with terrifying authority!",
-        "A complex weapon — {name} wields the pole axe masterfully!",
+        "A complex weapon, {name} wields the pole axe masterfully!",
         "{name} makes the pole axe find flesh with devastating effect!",
         "The pole axe swings in a wide arc of death!",
     ],
@@ -1085,7 +1265,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} swings the halberd in a wide, sweeping arc of death!",
         "The halberd descends with axe, spike, and hook all at once!",
         "{name} brings the halberd down with devastating versatility!",
-        "A weapon of war and execution — {name} wields the halberd with authority!",
+        "A weapon of war and execution, {name} wields the halberd with authority!",
         "With practiced mastery {name} finds the perfect angle with the halberd!",
         "The halberd strikes with the weight of a battlefield veteran's experience!",
         "{name} unleashes the halberd's full potential in a single blow!",
@@ -1099,12 +1279,12 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} whirls the flail in a deadly, unpredictable arc!",
         "The flail lashes out like a striking serpent as {name} attacks!",
         "{name} swings the flail with expert, chaotic precision!",
-        "The flail defies easy defense — {name} makes it find its mark!",
+        "The flail defies easy defense, {name} makes it find its mark!",
         "With expert timing {name} sends the flail past guard and shield!",
         "The flail moves with a mind of its own, hungry for contact!",
         "{name} delivers a vicious, wrapping strike with the flail!",
         "The flail lashes forward seeking any opening!",
-        "A chaotic and vicious weapon — {name} wields it masterfully!",
+        "A chaotic and vicious weapon, {name} wields it masterfully!",
         "{name} makes the flail dance in a deadly pattern!",
     ],
     "Bladed Flail": [
@@ -1116,7 +1296,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The bladed flail moves like a storm of razor edges!",
         "{name} unleashes the bladed flail in a whirlwind of pain!",
         "The cruel edges of the bladed flail promise terrible wounds!",
-        "A weapon of pain and blood — {name} wields it with deadly grace!",
+        "A weapon of pain and blood, {name} wields it with deadly grace!",
         "{name} makes the bladed flail lash forward with terrifying effect!",
     ],
     "War Flail": [
@@ -1126,7 +1306,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The war flail comes down like a falling building!",
         "With raw power {name} makes the war flail a siege engine!",
         "The war flail moves with terrifying momentum as {name} attacks!",
-        "A brutal and heavy weapon — {name} wields it masterfully!",
+        "A brutal and heavy weapon, {name} wields it masterfully!",
         "The war flail promises broken bones and shattered shields!",
         "{name} unleashes the war flail with earth-shaking force!",
         "The war flail strikes with devastating crushing intent!",
@@ -1138,7 +1318,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With expert control {name} turns the air itself into a weapon!",
         "The battle flail moves like a living thing hungry for carnage!",
         "{name} delivers a monstrous strike with the battle flail!",
-        "A storm of pain — {name} wields the battle flail with precision!",
+        "A storm of pain, {name} wields the battle flail with precision!",
         "The battle flail swings in a chaotic, deadly pattern!",
         "{name} makes the battle flail crash down with overwhelming force!",
         "The battle flail creates chaos and destruction as {name} attacks!",
@@ -1152,7 +1332,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With practiced mastery {name} probes and strikes in perfect rhythm!",
         "The quarterstaff moves like an extension of {name}'s will!",
         "{name} delivers a disciplined strike with the quarterstaff!",
-        "A weapon of control and discipline — {name} wields it beautifully!",
+        "A weapon of control and discipline, {name} wields it beautifully!",
         "The quarterstaff finds gaps in the defense with ease!",
         "{name} uses the quarterstaff to devastating effect in close combat!",
         "The quarterstaff flows through a deadly combination!",
@@ -1166,7 +1346,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} delivers a powerful sweeping strike with the great staff!",
         "The larger staff crashes down with impressive force!",
         "{name} makes the great staff connect with heavy authority!",
-        "A more imposing weapon — {name} wields the great staff masterfully!",
+        "A more imposing weapon, {name} wields the great staff masterfully!",
         "The great staff strikes with deliberate, crushing power!",
     ],
 
@@ -1178,7 +1358,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With practiced ease {name} makes the buckler find the perfect angle!",
         "The buckler moves like a second skin, protecting and striking at once!",
         "{name} delivers a compact, powerful blow with the buckler!",
-        "A nimble shield — {name} turns the buckler into an offensive weapon!",
+        "A nimble shield, {name} turns the buckler into an offensive weapon!",
         "The buckler darts to meet the enemy with surprising force!",
         "{name} uses the buckler to create an opening and strike!",
         "The buckler snaps forward in a quick, aggressive bash!",
@@ -1190,7 +1370,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With dwarven practicality {name} wields the target shield aggressively!",
         "The target shield moves with steady, reliable power!",
         "{name} delivers a confident bash with the target shield!",
-        "A well-balanced shield — {name} turns it into a weapon!",
+        "A well-balanced shield, {name} turns it into a weapon!",
         "The target shield snaps forward with crushing presence!",
         "{name} uses the target shield to dictate the pace of the fight!",
         "The target shield strikes with solid, dependable force!",
@@ -1202,7 +1382,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With half-orc strength {name} turns the tower shield into an unstoppable force!",
         "The tower shield dares the enemy to strike as {name} attacks!",
         "{name} slams the tower shield forward with earth-shaking power!",
-        "A massive barrier of steel — {name} wields it as a weapon!",
+        "A massive barrier of steel, {name} wields it as a weapon!",
         "The tower shield moves with the weight of certainty!",
         "{name} delivers a crushing bash with the tower shield!",
         "The tower shield becomes an iron fortress in {name}'s hands!",
@@ -1215,7 +1395,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "With martial precision {name} makes the cestus find the perfect striking surface!",
         "The cestus moves like an iron gauntlet given deadly purpose!",
         "{name} delivers a brutal close-range strike with the cestus!",
-        "A bare fist given steel teeth — {name} wields the cestus with fury!",
+        "A bare fist given steel teeth, {name} wields the cestus with fury!",
         "{name} unleashes a devastating series of cestus punches!",
         "The cestus strikes with the fury of a reinforced fist!",
         "{name} makes the cestus connect with crushing power!",
@@ -1229,7 +1409,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The trident moves like a predator's claw designed to impale!",
         "{name} delivers a powerful, multi-point thrust with the trident!",
         "The trident lunges with lethal intent in {name}'s hands!",
-        "A weapon of the arena and the sea — {name} wields the trident masterfully!",
+        "A weapon of the arena and the sea, {name} wields the trident masterfully!",
         "{name} makes the trident find vital flesh with ease!",
         "The trident thrusts forward with dangerous, three-pronged reach!",
     ],
@@ -1241,7 +1421,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The net flies forward, its weighted edges hungry for limbs!",
         "{name} delivers a frustrating, entangling strike with the net!",
         "The net moves like a living snare looking to bind its prey!",
-        "A weapon of control — {name} wields the net with precision!",
+        "A weapon of control, {name} wields the net with precision!",
         "{name} casts the net to create chaos and openings!",
         "The net wraps around the target as {name} presses the advantage!",
     ],
@@ -1249,7 +1429,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "{name} sweeps the scythe in a wide, deadly arc promising harvest of flesh!",
         "The scythe reaps without mercy as {name} attacks!",
         "{name} makes the scythe move with graceful, terrifying efficiency!",
-        "A farmer's tool turned instrument of death — {name} wields the scythe beautifully!",
+        "A farmer's tool turned instrument of death, {name} wields the scythe beautifully!",
         "The scythe cuts through the air like fate itself!",
         "{name} delivers a vicious, sweeping strike with the scythe!",
         "With practiced sweeps {name} opens terrible wounds with the scythe!",
@@ -1266,7 +1446,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The great pick strikes like a siege engine as {name} attacks!",
         "{name} delivers a mighty overhead strike with the great pick!",
         "The great pick seeks to punch through anything in its path!",
-        "A weapon of pure penetration — {name} makes it unstoppable!",
+        "A weapon of pure penetration, {name} makes it unstoppable!",
         "The great pick crashes down with mountain-shattering force!",
     ],
     "Javelin": [
@@ -1274,10 +1454,10 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The javelin cuts the air with deadly speed as {name} throws!",
         "{name} hurls the javelin with the intent to impale and end the threat!",
         "With practiced form {name} makes the javelin seek a vital point!",
-        "The javelin strikes like a bolt from the sky — sudden and final!",
+        "The javelin strikes like a bolt from the sky, sudden and final!",
         "{name} delivers a powerful thrown strike with the javelin!",
         "The javelin flies true in {name}'s expert hands!",
-        "A thrown spear seeking its mark — {name} makes it lethal!",
+        "A thrown spear seeking its mark, {name} makes it lethal!",
         "{name} exploits the javelin's speed and accuracy!",
         "The javelin launches with deadly intent and perfect form!",
     ],
@@ -1289,7 +1469,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The ball and chain moves like a falling anchor promising ruin!",
         "{name} delivers a brutal, unpredictable strike with the ball and chain!",
         "The heavy chain whips forward with crushing intent!",
-        "A weapon that can finish a fight in moments — {name} wields it dangerously!",
+        "A weapon that can finish a fight in moments, {name} wields it dangerously!",
         "The ball and chain crashes down with terrifying momentum!",
         "{name} unleashes the ball and chain with overwhelming force!",
     ],
@@ -1301,7 +1481,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The bola moves like a living snare looking to wrap and bind!",
         "{name} delivers an entangling strike with expert timing!",
         "The bola whips forward seeking to cause a fall!",
-        "A weapon of control and frustration — {name} wields the bola masterfully!",
+        "A weapon of control and frustration, {name} wields the bola masterfully!",
         "{name} makes the bola wrap around the target's legs!",
         "The bola flies with deadly accuracy in {name}'s hands!",
     ],
@@ -1313,7 +1493,7 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The barbed whip moves like a serpent with steel teeth!",
         "{name} delivers a vicious, lashing strike with the heavy barbed whip!",
         "The whip wraps and cuts in the same motion!",
-        "A weapon of pain and control — {name} wields the barbed whip with precision!",
+        "A weapon of pain and control, {name} wields the barbed whip with precision!",
         "{name} makes the heavy barbed whip crack with lethal effect!",
         "The barbed whip lashes forward seeking vulnerable limbs!",
     ],
@@ -1325,19 +1505,19 @@ SIGNATURE_LINES: dict[str, list[str]] = {
         "The swordbreaker moves like a predator of other weapons!",
         "{name} delivers a specialized, disruptive strike with the swordbreaker!",
         "The swordbreaker snaps forward seeking to trap and break!",
-        "A specialized weapon — {name} wields the swordbreaker with deadly intent!",
+        "A specialized weapon, {name} wields the swordbreaker with deadly intent!",
         "{name} makes the swordbreaker bite into an incoming blade!",
         "The swordbreaker waits patiently then strikes with perfect timing!",
     ],
     "Open Hand": [
         "{name} strikes with open hand in a blur of martial precision!",
         "{name} unleashes a devastating series of unarmed strikes!",
-        "Empty handed but deadly — {name} flows through a lethal combination!",
+        "Empty handed but deadly, {name} flows through a lethal combination!",
         "With disciplined focus {name} finds the perfect striking surface!",
         "{name} delivers a masterful unarmed blow with perfect technique!",
         "The open hand moves with fluid, controlled power!",
         "{name} strikes like a martial artist's technique given lethal purpose!",
-        "A blur of motion — {name} makes open hand devastating!",
+        "A blur of motion, {name} makes open hand devastating!",
         "{name} flows through a deadly unarmed sequence!",
         "With empty hands {name} proves skill can overcome steel!",
     ],
@@ -1366,7 +1546,7 @@ MISS_LINES = [
     "{attacker} swings and misses badly",
     "{attacker}'s attack goes wide",
     "{attacker} whiffs completely",
-    "{attacker}'s aim is off — the blow finds nothing",
+    "{attacker}'s aim is off, the blow finds nothing",
 ]
 
 
@@ -1482,7 +1662,7 @@ _LOW_HP_TIER1 = [   # 30–50% HP remaining
 
 _LOW_HP_TIER2 = [   # 15–30% HP remaining
     "{warrior} is in serious trouble!",
-    "{warrior} is covered in blood — and not all of it is the opponent's!",
+    "{warrior} is covered in blood, and not all of it is the opponent's!",
     "The crowd senses {warrior} is running out of options!",
     "{warrior} is surviving on determination alone at this point!",
     "{warrior} is desperately wounded and still fighting!",
@@ -1492,7 +1672,7 @@ _LOW_HP_TIER2 = [   # 15–30% HP remaining
 _LOW_HP_TIER3 = [   # below 15% HP remaining
     "{warrior} would make a corpse envious!",
     "{warrior} is drenched in blood!",
-    "{warrior} is barely standing — sheer will is all that remains!",
+    "{warrior} is barely standing, sheer will is all that remains!",
     "The end is near for {warrior}!",
     "{warrior} staggers but somehow refuses to fall!",
     "{warrior} is one solid hit away from the Dark Arena!",
@@ -1536,6 +1716,112 @@ COUNTERSTRIKE_LINES = [
 
 def counterstrike_line(attacker_name: str, foe_name: str) -> str:
     return random.choice(COUNTERSTRIKE_LINES).format(
+        attacker=attacker_name.upper(), foe=foe_name.upper()
+    )
+
+
+# ---------------------------------------------------------------------------
+# DECOY FEINT LINES
+# ---------------------------------------------------------------------------
+# Fires when a Decoy-style attacker successfully baits the defender with
+# a feint, drawing their guard off the real line of the strike.
+
+DECOY_FEINT_SUCCESS_LINES = [
+    "{attacker} fakes high and strikes low, drawing {foe}'s guard astray!",
+    "{attacker}'s misdirection pulls {foe}'s attention the wrong way!",
+    "{attacker} feigns an attack to one flank, baiting {foe} to commit!",
+    "{attacker}'s ruse opens a seam in {foe}'s defense!",
+    "{attacker} sells the feint — {foe} lunges to block a blow that isn't coming!",
+    "{attacker} dips a shoulder and {foe} bites on the bluff!",
+]
+
+DECOY_FEINT_READ_LINES = [
+    "{foe} reads the feint and holds position, unshaken!",
+    "{foe} isn't fooled — the ruse falls flat!",
+    "{foe} sees through {attacker}'s misdirection!",
+]
+
+
+def decoy_feint_line(attacker_name: str, foe_name: str) -> str:
+    return random.choice(DECOY_FEINT_SUCCESS_LINES).format(
+        attacker=attacker_name.upper(), foe=foe_name.upper()
+    )
+
+
+def decoy_feint_read_line(attacker_name: str, foe_name: str) -> str:
+    return random.choice(DECOY_FEINT_READ_LINES).format(
+        attacker=attacker_name.upper(), foe=foe_name.upper()
+    )
+
+
+# ---------------------------------------------------------------------------
+# CALCULATED ATTACK LINES
+# ---------------------------------------------------------------------------
+# Fires when a Calculated Attack strike lands a precision hit — the attacker
+# threads the blow through a seam in the defender's guard or armor. Lines
+# are keyed by target body location so the narrative calls out the weak
+# point being exploited.
+
+CALCULATED_PRECISION_LINES = {
+    "head": [
+        "{attacker} spots the gap beside {foe}'s helm and drives the {weapon} home!",
+        "{attacker} threads the {weapon} past {foe}'s guard, straight for the temple!",
+        "With cold precision, {attacker} finds the seam at {foe}'s visor!",
+        "{attacker}'s {weapon} slips past {foe}'s helm into the jawline!",
+    ],
+    "chest": [
+        "{attacker} slips the {weapon} between plates, finding {foe}'s rib line!",
+        "{attacker} spots the seam at {foe}'s breastplate and strikes!",
+        "{attacker}'s {weapon} threads the gap in {foe}'s cuirass!",
+        "{attacker} drives the {weapon} through the armpit gap of {foe}'s armor!",
+    ],
+    "gut": [
+        "{attacker} drives the {weapon} up under {foe}'s ribs!",
+        "{attacker} finds the soft seam at {foe}'s belt line!",
+        "{attacker}'s {weapon} threads the gap beneath {foe}'s cuirass!",
+        "{attacker} picks the join at {foe}'s waist and strikes clean!",
+    ],
+    "arms": [
+        "{attacker} picks the gap at {foe}'s shoulder joint!",
+        "{attacker}'s {weapon} finds the inside of {foe}'s elbow!",
+        "{attacker} slips the strike past {foe}'s vambrace!",
+        "{attacker}'s measured thrust lands in the gap at {foe}'s bicep!",
+    ],
+    "legs": [
+        "{attacker} drives the {weapon} behind {foe}'s knee!",
+        "{attacker} finds the gap above {foe}'s greave!",
+        "{attacker}'s strike threads the seam at {foe}'s thigh!",
+        "{attacker} picks the joint behind {foe}'s knee-cop!",
+    ],
+}
+
+CALCULATED_PROBE_LINES = [
+    "{attacker} probes methodically for an opening, but {foe}'s guard holds!",
+    "{attacker} studies {foe}'s defense, waiting for a seam that never comes!",
+    "{attacker} measures a strike and thinks better of it — {foe} is too disciplined!",
+    "{attacker}'s calculating eye finds no gap in {foe}'s guard this pass!",
+    "{attacker} circles, searching for a weakness, but {foe} stays tight!",
+]
+
+
+def calculated_precision_line(
+    attacker_name: str, foe_name: str, weapon_name: str, aim_point: str
+) -> str:
+    """
+    Narrative line for a landed Calculated Attack precision hit.
+    Falls back to the chest pool if the aim point isn't keyed.
+    """
+    key  = (aim_point or "chest").lower()
+    pool = CALCULATED_PRECISION_LINES.get(key, CALCULATED_PRECISION_LINES["chest"])
+    return random.choice(pool).format(
+        attacker=attacker_name.upper(),
+        foe=foe_name.upper(),
+        weapon=weapon_name.lower(),
+    )
+
+
+def calculated_probe_line(attacker_name: str, foe_name: str) -> str:
+    return random.choice(CALCULATED_PROBE_LINES).format(
         attacker=attacker_name.upper(), foe=foe_name.upper()
     )
 
@@ -1694,15 +1980,15 @@ APPEAL_LINES = [
 
 MERCY_GRANTED = [
     "The ref saves the pitiable {warrior}!",
-    "The Blood Master shows mercy — {warrior} lives to fight another day!",
+    "The Blood Master shows mercy, {warrior} lives to fight another day!",
     "{warrior} is spared by the grace of the Blood Master!",
     "The crowd screams for blood, but the ref steps in!",
-    "Mercy is granted — the fight is over!",
+    "Mercy is granted, the fight is over!",
 ]
 
 MERCY_DENIED = [
     "The Blood Master shows no mercy today!",
-    "The crowd screams for blood — mercy is denied!",
+    "The crowd screams for blood, mercy is denied!",
     "{warrior} must fight on, or die trying!",
     "No quarter is given!",
 ]
@@ -1758,10 +2044,10 @@ CROWD_LINES = [
     "The crowd surges forward against the barriers!",
     "Whistles and jeers rain down from the stands!",
     "A dog runs loose in the upper tier!",
-    "The pit bell rings early — it must be a mistake",
+    "The pit bell rings early, it must be a mistake",
     "Three drunks in the cheap seats start a brawl",
     "The announcer's voice cracks with excitement",
-    "A nobleman covers his eyes — then peeks through his fingers",
+    "A nobleman covers his eyes, then peeks through his fingers",
     "Children in the stands look away, then look back",
     "The smell of blood whips the crowd into a frenzy",
     "Half the crowd rises to their feet in anticipation!",
@@ -1778,11 +2064,11 @@ RACE_TAUNTS = {
     "Halfling" : [
         "A guard has to move to see around the Halfling",
         "The crowd strains to see the small warrior",
-        "Someone yells, 'Watch out — there's a rat loose in the pit!'",
+        "Someone yells, 'Watch out, there's a rat loose in the pit!'",
     ],
     "Dwarf"    : [
-        "A drunk yells, 'Which one is the Dwarf?' — looking at the right one",
-        "Someone throws coins at the Dwarf — a tradition, apparently",
+        "A drunk yells, 'Which one is the Dwarf?', looking at the right one",
+        "Someone throws coins at the Dwarf, a tradition, apparently",
     ],
     "Elf"      : [
         "The Elf fans in the crowd begin an unsettling melodic chant",
@@ -1810,7 +2096,7 @@ _ADVAN_EVEN = [
 
 _ADVAN_EVEN_CONT = [   # used when tier unchanged from last minute
     "The fight remains stubbornly even, with neither warrior conceding ground.",
-    "Nothing has changed — both combatants continue on level footing.",
+    "Nothing has changed, both combatants continue on level footing.",
     "The balance holds; neither fighter has found the breakthrough they need.",
 ]
 
@@ -1848,7 +2134,7 @@ _ADVAN_CLEAR = [
 
 _ADVAN_CLEAR_CONT = [
     "{winner} remains in control, pressing their advantage.",
-    "The situation is unchanged — {winner} continues to dictate the fight.",
+    "The situation is unchanged, {winner} continues to dictate the fight.",
     "{winner} holds firm command of the contest.",
 ]
 
@@ -1866,7 +2152,7 @@ _ADVAN_DOMINATING = [
 ]
 
 _ADVAN_DOMINATING_CONT = [
-    "{winner} shows no sign of relenting — the onslaught continues.",
+    "{winner} shows no sign of relenting, the onslaught continues.",
     "{loser} remains unable to slow {winner}'s dominance.",
     "{winner} stays firmly in control with no answer from {loser}.",
 ]
@@ -1882,17 +2168,17 @@ _ADVAN_BRINK = [
 ]
 
 _ADVAN_BRINK_EXHAUSTION = [
-    "{loser} is running on empty — their body is beginning to betray them.",
+    "{loser} is running on empty, their body is beginning to betray them.",
     "The effort has taken a severe toll on {loser}; they can barely keep pace.",
     "{loser} is visibly fading, their endurance all but spent.",
     "Exhaustion is closing in on {loser}, and {winner} senses the opening.",
-    "{loser}'s legs are heavy, their arms slower — they cannot keep this up much longer.",
+    "{loser}'s legs are heavy, their arms slower, they cannot keep this up much longer.",
 ]
 
 _ADVAN_SWING_TO = [
     "The fight has taken a surprising turn, with {winner} now pressing the advantage.",
     "After earlier struggles, {winner} has clawed their way back into control.",
-    "A shift in momentum — {winner} has suddenly taken charge.",
+    "A shift in momentum, {winner} has suddenly taken charge.",
     "The tide turns: {winner} seizes the upper hand after a close exchange.",
 ]
 
@@ -1920,7 +2206,7 @@ def minute_status_line(
     if swung:
         pool = _ADVAN_SWING_TO
     elif tier == prev_tier:
-        # Unchanged — use softer continuation lines
+        # Unchanged, use softer continuation lines
         cont_map = {
             "even":            _ADVAN_EVEN_CONT,
             "slight":          _ADVAN_SLIGHT_CONT,
@@ -1968,7 +2254,7 @@ def crowd_line(warrior_a_race: str = "", warrior_b_race: str = "") -> str:
 
 ANXIOUS_LINES = [
     "{warrior} circles {foe}, draining the will to fight",
-    "{warrior} waits patiently — {foe}'s energy bleeds away",
+    "{warrior} waits patiently, {foe}'s energy bleeds away",
     "{warrior} keeps pressure on {foe} without committing",
 ]
 
@@ -1985,7 +2271,7 @@ INTIMIDATE_LINES = [
     "{warrior}'s relentless assault is beginning to rattle {foe}!",
     "{foe} flinches under the ferocity of {warrior}'s onslaught!",
     "The sheer savagery of {warrior}'s assault wears on {foe}'s nerves!",
-    "{warrior} presses forward with terrifying aggression — {foe} backs away!",
+    "{warrior} presses forward with terrifying aggression, {foe} backs away!",
     "The crowd roars as {warrior}'s ferocity visibly shakes {foe}!",
     "{foe} struggles to keep composure under {warrior}'s relentless pressure!",
     "{warrior}'s wild fury is taking a psychological toll on {foe}!",
@@ -2014,7 +2300,7 @@ def training_summary(warrior_name: str, results: list[str], is_opponent: bool = 
       none:       "<n> has trained in nothing"
       observed 4th train: appended as separate line
 
-    is_opponent: When True, hide the specific skill/stat names — show "Skill" or
+    is_opponent: When True, hide the specific skill/stat names, show "Skill" or
     "Stat" instead.  The one exception is the observed/learned bonus, which always
     names the actual skill (that is the whole point of the intelligence report).
     """
@@ -2041,7 +2327,7 @@ def training_summary(warrior_name: str, results: list[str], is_opponent: bool = 
         lines.append(f"{warrior_name.upper()} has trained in nothing")
 
     if observed:
-        # Always reveal the actual skill — this is the scouting intelligence payoff
+        # Always reveal the actual skill, this is the scouting intelligence payoff
         for obs_skill in observed:
             lines.append(
                 f"{warrior_name.upper()} observed and learned a {obs_skill} skill"

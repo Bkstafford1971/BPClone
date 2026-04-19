@@ -156,6 +156,55 @@ def _next_fid(cfg):
     return cfg["fight_counter"]
 
 
+def _make_mirror_narrative(
+    narrative        : str,
+    training_results : dict,
+    a_name           : str,
+    b_name           : str,
+) -> str:
+    """
+    Return a version of the fight narrative from warrior_b's manager's perspective:
+      - warrior_b's training shows the actual skills/stats learned
+      - warrior_a's training shows "Skill" or "Stat" (generic)
+
+    The narrative is identical up to the training section at the end.  We
+    reconstruct that section with the `is_opponent` flags swapped, then
+    replace it via a suffix match so the fight body is never touched.
+    """
+    from narrative import training_summary as _ts
+
+    a_res = training_results.get("warrior_a", [])
+    b_res = training_results.get("warrior_b", [])
+
+    # Compute what the FORWARD training block looks like (warrior_a perspective)
+    fwd_parts = []
+    if a_res:
+        fwd_parts.append(_ts(a_name, a_res, is_opponent=False))
+    if b_res:
+        fwd_parts.append(_ts(b_name, b_res, is_opponent=True))
+
+    # Compute the MIRROR training block (warrior_b perspective)
+    mir_parts = []
+    if b_res:
+        mir_parts.append(_ts(b_name, b_res, is_opponent=False))
+    if a_res:
+        mir_parts.append(_ts(a_name, a_res, is_opponent=True))
+
+    if not fwd_parts and not mir_parts:
+        return narrative  # nothing to swap
+
+    # The training block is appended as: "\n" (blank-line join) + "\n".join(parts)
+    # which in the joined narrative looks like "\n\n<line1>\n<line2>..."
+    fwd_block = "\n\n" + "\n".join(fwd_parts)
+    mir_block = "\n\n" + "\n".join(mir_parts)
+
+    if narrative.endswith(fwd_block):
+        return narrative[: -len(fwd_block)] + mir_block
+
+    # Fallback: couldn't find the expected suffix — return unchanged
+    return narrative
+
+
 def _store_scout_narrative(warrior_name: str, narrative: str, turn_num: int) -> None:
     """
     Persist the fight narrative for a scouted warrior so the client can
@@ -233,22 +282,14 @@ def _run_turn(request_password, rerun_turn=None):
     set_show_luck_factor(cfg.get("show_luck_factor", False))
     set_show_max_hp(cfg.get("show_max_hp", False))
 
-    class _Rival:
-        def __init__(self, mid, mname, team):
-            self.manager_id   = mid
-            self.manager_name = mname
-            self.team_name    = team.team_name
-            self.team         = team
-            self.tier         = 3
-
-    rival_map = {}
+    team_map    = {}   # upload key -> Team object
+    real_mid_map = {}  # upload key -> real manager_id (for same-manager exclusion)
     for mid, upload in uploads.items():
         try:
             team = Team.from_dict(upload["team"])
             team.manager_name = upload["manager_name"]
-            rival_map[mid] = _Rival(mid, upload["manager_name"], team)
-            # Store real manager_id on the rival object for cross-team exclusion
-            rival_map[mid].real_manager_id = upload.get("manager_id", mid)
+            team_map[mid] = team
+            real_mid_map[mid] = upload.get("manager_id", mid)
         except Exception as e:
             print(f"  WARN: could not load team for {upload.get('manager_name','?')}: {e}")
 
@@ -285,6 +326,20 @@ def _run_turn(request_password, rerun_turn=None):
     _fight_cards    = {}   # manager_id -> (pre_team, List[ScheduledFight])
     _pvp_by_warrior = {}   # warrior_name -> pvp_data dict
 
+    # Shared across EVERY build_fight_card call this turn (pre-pass + main loop,
+    # AI and non-AI).  Each warrior can be scheduled at most once per turn, and
+    # since team size is exactly 5, this also caps every team at 5 fights/turn —
+    # a hard rule with no exceptions.
+    _global_used    = set()
+
+    # Belt-and-suspenders: per-turn fight count per TEAM NAME.  Incremented each
+    # time a bout is accepted into the final fight stream.  Monsters/Peasants are
+    # excluded.  Any bout that would push either team past 5 is DROPPED outright
+    # before it reaches run_fight — this is the last-word enforcement of the
+    # 5-fights-per-team cap, no exceptions.
+    _team_fight_count = {}
+    _FODDER_TEAMS     = {"The Monsters", "The Peasants"}
+
     try:
         # warrior_name -> manager_id for all non-AI player warriors
         player_warrior_to_mid = {}
@@ -306,11 +361,12 @@ def _run_turn(request_password, rerun_turn=None):
                 continue
             try:
                 _this_real = _upl.get("manager_id", _mid)
-                _r_list = [
-                    r for mid2, r in rival_map.items()
-                    if mid2 != _mid and getattr(r, "real_manager_id", mid2) != _this_real
+                _opp_list = [
+                    t for mid2, t in team_map.items()
+                    if mid2 != _mid and real_mid_map.get(mid2, mid2) != _this_real
                 ]
-                _fc = build_fight_card(_pt, _r_list, champion_state=champ_state)
+                _fc = build_fight_card(_pt, _opp_list, champion_state=champ_state,
+                                       global_used=_global_used)
                 _fight_cards[_mid] = (_pt, _fc)
             except Exception as _fce:
                 print(f"  PRE-PASS WARN: build_fight_card failed for {_upl.get('manager_name','?')}: {_fce}")
@@ -384,6 +440,7 @@ def _run_turn(request_password, rerun_turn=None):
                         manager_a_name = _mname,
                         manager_b_name = _bout.opponent_manager,
                         is_monster_fight = False,
+                        challenger_name = getattr(_bout, 'challenger_name', None),
                     )
                     # Scout flavor text injection
                     try:
@@ -504,11 +561,12 @@ def _run_turn(request_password, rerun_turn=None):
         try:
             if is_ai_manager:
                 # AI teams only fight other AI teams
-                rivals = [
-                    r for mid, r in rival_map.items()
+                opp_list = [
+                    t for mid, t in team_map.items()
                     if mid != manager_id and mid.startswith("ai_")
                 ]
-                card = build_fight_card(player_team, rivals, champion_state=champ_state)
+                card = build_fight_card(player_team, opp_list, champion_state=champ_state,
+                                        global_used=_global_used)
             else:
                 # Non-AI: remap pre-built card so player_warrior objects point into
                 # the fresh player_team (ensures all in-place updates land on the
@@ -530,16 +588,57 @@ def _run_turn(request_password, rerun_turn=None):
                     ))
                 if not card:
                     # Fallback: build fresh card
-                    rivals = [
-                        r for mid, r in rival_map.items()
+                    opp_list = [
+                        t for mid, t in team_map.items()
                         if mid != manager_id
-                        and getattr(r, "real_manager_id", mid) != this_real_mid
+                        and real_mid_map.get(mid, mid) != this_real_mid
                     ]
-                    card = build_fight_card(player_team, rivals, champion_state=champ_state)
+                    card = build_fight_card(player_team, opp_list, champion_state=champ_state,
+                                            global_used=_global_used)
         except Exception as _card_err:
             import traceback; traceback.print_exc()
             print(f"  ERROR building fight card for {mname}: {_card_err} — skipping manager")
             continue
+
+        # HARD CAP ENFORCEMENT: drop any bout that would push either team past
+        # 5 fights this turn.  Monsters/Peasants are unlimited fodder.  This is
+        # the last-word guard — even if upstream matchmaking leaks, no team can
+        # slip past 5 fights in the final fight stream.
+        #
+        # NOTE: P-vs-P bouts appear in BOTH managers' cards (each side sees the
+        # other as opponent) but are a SINGLE physical fight.  We only count
+        # them on the canonical side and skip counting on the mirror so the cap
+        # reflects real fights, not double-counted perspectives.
+        _capped_card = []
+        for _bout in card:
+            _pw_team = getattr(_bout.player_team, "team_name", "?")
+            _ow_team = getattr(_bout.opponent_team, "team_name", "?")
+            _pw_name = _bout.player_warrior.name
+            _ow_name = _bout.opponent.name
+            _pvp_rec = _pvp_by_warrior.get(_pw_name)
+            _is_pvp_mirror = (_pvp_rec is not None
+                              and _pvp_rec.get("canonical_pw") != _pw_name)
+            if _is_pvp_mirror:
+                # Mirror view of a P-vs-P already counted on the canonical side.
+                # Keep the bout (the result gets injected downstream) but do not
+                # increment team counts again.
+                _capped_card.append(_bout)
+                continue
+            _pw_count = _team_fight_count.get(_pw_team, 0)
+            _ow_count = _team_fight_count.get(_ow_team, 0)
+            _pw_would_cap = (_pw_team not in _FODDER_TEAMS and _pw_count >= 5)
+            _ow_would_cap = (_ow_team not in _FODDER_TEAMS and _ow_count >= 5)
+            if _pw_would_cap or _ow_would_cap:
+                _who = _pw_team if _pw_would_cap else _ow_team
+                print(f"  5-FIGHT CAP: dropping {_pw_name} vs {_ow_name} "
+                      f"— {_who} already at 5 fights")
+                continue
+            if _pw_team not in _FODDER_TEAMS:
+                _team_fight_count[_pw_team] = _pw_count + 1
+            if _ow_team not in _FODDER_TEAMS:
+                _team_fight_count[_ow_team] = _ow_count + 1
+            _capped_card.append(_bout)
+        card = _capped_card
 
         fight_logs, bouts = {}, []
         for bout in card:
@@ -586,6 +685,7 @@ def _run_turn(request_password, rerun_turn=None):
                 pw.constitution   = trained_d.get("constitution",   pw.constitution)
                 pw.intelligence   = trained_d.get("intelligence",   pw.intelligence)
                 pw.presence       = trained_d.get("presence",       pw.presence)
+                pw.injuries.from_dict(trained_d.get("injuries", {}))
                 pw.recalculate_derived()
 
                 pw_won = result.winner is not None and result.winner.name == pw.name
@@ -600,7 +700,19 @@ def _run_turn(request_password, rerun_turn=None):
                     )) else _pvp["fight_type"]
                 )
 
-                fight_logs[str(fid)] = result.narrative
+                # Store the correct perspective for each manager.
+                # canonical_pw is warrior_a — their manager gets the forward narrative
+                # (own training shown specifically, opponent shown as "Skill").
+                # The opposing manager (canonical_ow) needs the mirror narrative.
+                if _is_canonical_pw:
+                    fight_logs[str(fid)] = result.narrative
+                else:
+                    fight_logs[str(fid)] = _make_mirror_narrative(
+                        result.narrative,
+                        result.training_results,
+                        _pvp["canonical_pw"],
+                        _pvp["canonical_ow"],
+                    )
 
                 pw.update_popularity(won=pw_won)
                 pw.update_recognition(
@@ -624,12 +736,17 @@ def _run_turn(request_password, rerun_turn=None):
                 })
                 if slain:
                     player_team.kill_warrior(pw, killed_by=opp_name, killer_fights=opp_tf)
+                opp_trained_d = _pvp["ow_trained_dict"] if _is_canonical_pw else _pvp["pw_trained_dict"]
                 bouts.append({
                     "warrior_name": pw.name, "opponent_name": opp_name,
                     "opponent_race": opp_race, "opponent_team": opp_team,
                     "opponent_manager": opp_manager, "fight_type": fight_type_to_record,
                     "result": pwr.upper(), "minutes": result.minutes_elapsed, "fight_id": fid,
                     "warrior_slain": slain, "opponent_slain": killed,
+                    "ascension": False,  # P-vs-P never involves monsters
+                    "opponent_wins":   opp_trained_d.get("wins",   0),
+                    "opponent_losses": opp_trained_d.get("losses", 0),
+                    "opponent_kills":  opp_trained_d.get("kills",  0),
                     "training": result.training_results.get(training_key, []),
                 })
                 continue  # skip the normal run_fight path below
@@ -641,6 +758,7 @@ def _run_turn(request_password, rerun_turn=None):
                 manager_a_name = mname,
                 manager_b_name = bout.opponent_manager,
                 is_monster_fight=(bout.opponent_team.team_name == "The Monsters"),
+                challenger_name = getattr(bout, 'challenger_name', None),
             )
             # Inject scout-attendance flavor text if any manager is watching either warrior
             try:
@@ -719,12 +837,29 @@ def _run_turn(request_password, rerun_turn=None):
             if slain:
                 player_team.kill_warrior(pw, killed_by=ow.name, killer_fights=ow.total_fights)
 
+            # Monster ascension: if the player warrior slew a monster, they
+            # are absorbed into The Monsters roster (replacing the fallen
+            # opponent) and their slot on the player team opens for a
+            # replacement, just as if they had died.
+            ascended = False
+            if killed and bout.fight_type == "monster":
+                pw.monster_kills = getattr(pw, "monster_kills", 0) + 1
+                pw.ascended_to_monster = True
+                from matchmaking import _absorb_into_monsters
+                _absorb_into_monsters(pw, player_team, ow, bout.opponent_team)
+                ascended = True
+                print(f"  !!! {pw.name} has SLAIN a monster and joins The Monsters! !!!")
+
             bouts.append({
                 "warrior_name": pw.name, "opponent_name": ow.name,
                 "opponent_race": ow.race.name, "opponent_team": bout.opponent_team.team_name,
                 "opponent_manager": bout.opponent_manager, "fight_type": fight_type_to_record,
                 "result": pwr.upper(), "minutes": result.minutes_elapsed, "fight_id": fid,
                 "warrior_slain": slain, "opponent_slain": killed,
+                "ascension": ascended,
+                "opponent_wins":   ow.wins,
+                "opponent_losses": ow.losses,
+                "opponent_kills":  ow.kills,
                 "training": result.training_results.get("warrior_a", []),
             })
 
@@ -830,6 +965,42 @@ def _run_turn(request_password, rerun_turn=None):
         _turn_progress = {"running": False, "done": len(uploads), "total": len(uploads),
                           "message": f"Turn {turn_num} complete — {len(all_results)} managers."}
 
+        # Auto-carry: snapshot each qualifying team's post-turn state as an
+        # upload for the NEXT turn, so managers don't have to re-upload unless
+        # a warrior died.  A team qualifies only if it still has 5 active
+        # warriors (none is_dead, no empty slots).  A team that lost a warrior
+        # this turn is skipped — the manager must build a replacement and
+        # upload manually before that team can fight again.  Manual uploads
+        # are never overwritten; auto-carries from a prior run of this same
+        # turn are (so reruns refresh cleanly).
+        _next_turn = cfg["current_turn"]
+        _auto_ts   = time.strftime("%Y-%m-%d %H:%M:%S")
+        for _key, _res in all_results.items():
+            if _key.startswith("ai_"):
+                continue
+            _team_dict = _res.get("team") or {}
+            _warriors  = _team_dict.get("warriors") or []
+            if len(_warriors) != 5:
+                continue
+            if any((w is None) or w.get("is_dead") for w in _warriors):
+                continue
+            _real_mid = _key.split("_team")[0]
+            _tid      = _res.get("team_id") or _team_dict.get("team_id", "")
+            _fname    = (f"upload_{_real_mid}_team{_tid}.json" if _tid
+                         else f"upload_{_real_mid}.json")
+            _target   = os.path.join(_turn_dir(_next_turn), _fname)
+            _existing = _load_json(_target, None)
+            if _existing and not _existing.get("auto_uploaded"):
+                continue
+            _save_upload(_next_turn, _real_mid, {
+                "manager_id"   : _real_mid,
+                "manager_name" : _res.get("manager_name", ""),
+                "team_id"      : _tid,
+                "team"         : _team_dict,
+                "uploaded_at"  : f"{_auto_ts} (auto-carry)",
+                "auto_uploaded": True,
+            })
+
     # Generate arena newsletter for this turn
     newsletter_text = ""
     try:
@@ -933,13 +1104,29 @@ def _run_turn(request_password, rerun_turn=None):
             except Exception:
                 pass
 
+        # VALIDATION: Check for fight frequency violations
+        from matchmaking import validate_warrior_fight_frequency, validate_team_fight_count
+        warrior_violations = validate_warrior_fight_frequency(fake_card)
+        team_violations = validate_team_fight_count(fake_card, max_fights=5)
+        
+        if warrior_violations:
+            print(f"  WARNING: Found {len(warrior_violations)} warrior(s) fighting more than once per turn:")
+            for v in warrior_violations:
+                print(f"    - {v['warrior']} ({v['team']}): {v['fight_count']} fights (expected max 1)")
+        
+        if team_violations:
+            print(f"  WARNING: Found {len(team_violations)} team(s) with more than 5 fights:")
+            for v in team_violations:
+                print(f"    - {v['team']}: {v['fight_count']} fights (expected max {v['max_allowed']})")
+
         champ_state = load_champion_state()
 
-        # Detect if the reigning champion was beaten or didn't fight this turn
+        # Detect if the reigning champion was beaten this turn.
+        # The champion retains the title unless they actually lose a fight —
+        # not fighting, or fighting a peasant, never costs them the title.
         _champ_beaten_by   = None
         _champ_beaten_team = None
         _cur_champ = champ_state.get("name", "")
-        _champ_fought = False
         if _cur_champ:
             for _bout in fake_card:
                 _pw_won  = _bout.result.winner.name == _bout.player_warrior.name
@@ -947,34 +1134,29 @@ def _run_turn(request_password, rerun_turn=None):
                 _loser   = _bout.opponent       if _pw_won else _bout.player_warrior
                 _w_team  = (_bout.player_team.team_name if _pw_won
                             else _bout.opponent_team.team_name)
-                # Track whether the champion fought at all
-                if _bout.player_warrior.name == _cur_champ or _bout.opponent.name == _cur_champ:
-                    _champ_fought = True
-                # Detect defeat
                 if _loser.name == _cur_champ:
                     _champ_beaten_by   = _winner.name
                     _champ_beaten_team = _w_team
                     break
-            # Champion forfeits title if they didn't fight this turn
-            if _cur_champ and not _champ_fought and not _champ_beaten_by:
-                print(f"  [champion] {_cur_champ} did not fight this turn — title vacated.")
-                champ_state = {}
 
-        champ_state = _update_champion(nl_teams, champ_state, deaths_nl,
-                                       champion_beaten_by=_champ_beaten_by,
-                                       champion_beaten_team=_champ_beaten_team)
+        prev_champion_name = champ_state.get("name", "")
+        champ_state, is_new_champion = _update_champion(nl_teams, champ_state, deaths_nl,
+                                                         champion_beaten_by=_champ_beaten_by,
+                                                         champion_beaten_team=_champ_beaten_team,
+                                                         prev_champion_name=prev_champion_name)
         save_champion_state(champ_state)
 
         voice = load_newsletter_voice()
         date_str = _dt.date.today().strftime("%m/%d/%Y")
         newsletter_text = generate_newsletter(
-            turn_num       = turn_num,
-            card           = fake_card,
-            teams          = nl_teams,
-            deaths         = deaths_nl,
-            champion_state = champ_state,
-            voice          = voice,
-            processed_date = date_str,
+            turn_num           = turn_num,
+            card               = fake_card,
+            teams              = nl_teams,
+            deaths             = deaths_nl,
+            champion_state     = champ_state,
+            voice              = voice,
+            processed_date     = date_str,
+            is_new_champion    = is_new_champion,
         )
         # Save newsletter to league turn directory
         nl_path = os.path.join(_turn_dir(turn_num), "newsletter.txt")
@@ -1039,19 +1221,33 @@ def _admin_page():
     sc = {"open":"#080","processing":"#840","results_ready":"#00a"}
 
     # Upload status rows — show AI teams separately
-    # Count uploads per manager (keys are now "mid_teamXXX" or "mid")
-    mgr_upload_counts = {}
+    # Count uploads per manager (keys are now "mid_teamXXX" or "mid"),
+    # split by manual vs auto-carry so the host can see which teams still
+    # need manager action (i.e., had a death and weren't auto-carried).
+    mgr_manual_counts = {}
+    mgr_auto_counts   = {}
     mgr_upload_times  = {}
     for key, udata in uploads.items():
         uid = udata.get("manager_id", key.split("_team")[0])
-        mgr_upload_counts[uid] = mgr_upload_counts.get(uid, 0) + 1
-        mgr_upload_times[uid]  = udata.get("uploaded_at","?")
+        if udata.get("auto_uploaded"):
+            mgr_auto_counts[uid] = mgr_auto_counts.get(uid, 0) + 1
+        else:
+            mgr_manual_counts[uid] = mgr_manual_counts.get(uid, 0) + 1
+        mgr_upload_times[uid] = udata.get("uploaded_at","?")
+    mgr_upload_counts = {m: mgr_manual_counts.get(m,0) + mgr_auto_counts.get(m,0)
+                         for m in set(mgr_manual_counts) | set(mgr_auto_counts)}
 
     urows = ""
     for mid, mgr in managers.items():
-        count = mgr_upload_counts.get(mid, 0)
-        if count:
-            badge = f"<b style='color:#060'>✓ {count} team(s) uploaded — {mgr_upload_times.get(mid,'')}</b>"
+        manual = mgr_manual_counts.get(mid, 0)
+        auto   = mgr_auto_counts.get(mid, 0)
+        total  = manual + auto
+        if total:
+            parts = []
+            if manual: parts.append(f"{manual} manual")
+            if auto:   parts.append(f"{auto} auto-carry")
+            badge = (f"<b style='color:#060'>✓ {total} team(s) uploaded "
+                     f"({', '.join(parts)}) — {mgr_upload_times.get(mid,'')}</b>")
         else:
             badge = "<span style='color:#800'>✗ not uploaded</span>"
         urows += f"<tr><td>{mgr['manager_name']}</td><td>{badge}</td></tr>"
@@ -1508,15 +1704,22 @@ class LeagueHandler(http.server.BaseHTTPRequestHandler):
             if mid and pw:
                 if mid not in mgrs or not _check_mgr_pw(mgrs[mid], pw):
                     self.send_json({"success":False,"error":"Not authorised."},401); return
-            # Search all result files for this turn for the given fight_id
+            # Search result files for this turn.
+            # Priority: check the requesting manager's own file(s) first so that
+            # each manager sees their perspective of the training section.
+            # Fall back to any result file if the fight_id isn't in the manager's own.
             td = _turn_dir(turn_n)
             narrative = None
             if os.path.exists(td):
-                for fname in os.listdir(td):
-                    if not fname.startswith("result_") or not fname.endswith(".json"):
-                        continue
+                all_files = [f for f in os.listdir(td)
+                             if f.startswith("result_") and f.endswith(".json")]
+                # Own files first (one manager may have multiple teams)
+                own_files  = [f for f in all_files if mid and f.startswith(f"result_{mid}")]
+                other_files = [f for f in all_files if f not in own_files]
+                for fname in own_files + other_files:
                     r = _load_json(os.path.join(td, fname), None)
-                    if not r: continue
+                    if not r:
+                        continue
                     logs = r.get("fight_logs", {})
                     if str(fid) in logs:
                         narrative = logs[str(fid)]

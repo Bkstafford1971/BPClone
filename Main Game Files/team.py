@@ -41,8 +41,19 @@ class Team:
         self.fallen_warriors: List[dict] = []
         # Each entry: {"warrior_name": str, "killed_by": str, "killer_fights": int}
 
-        # Blood challenges outstanding: list of (challenger_name, target_name)
-        self.blood_challenges: List[tuple] = []
+        # Blood challenges outstanding: list of dict with blood challenge info
+        # Each entry: {
+        #   "dead_warrior_name": str,  (the warrior who was killed)
+        #   "target_name": str,  (the killer's name)
+        #   "challenger_name": Optional[str],  (selected warrior to carry challenge, None = any can carry)
+        #   "turns_remaining": int,  (3, 2, 1, then expires)
+        #   "status": str,  ("active" or "avenged")
+        # }
+        self.blood_challenges: List[dict] = []
+
+        # Avoidance system: manager-level avoidances (max 2 slots)
+        # Contains manager names to avoid challenges from any warrior on that manager's team (25-30% success)
+        self.avoid_managers: List[str] = []
 
         # Pending challenges: {warrior_name: [challenge_target, ...]}
         self.challenges: Dict[str, List[str]] = {}
@@ -158,7 +169,13 @@ class Team:
         })
 
         if killer_fights >= 5:
-            self.blood_challenges.append((None, killed_by))
+            self.blood_challenges.append({
+                "dead_warrior_name": warrior.name,
+                "target_name": killed_by,
+                "challenger_name": None,  # Manager can select later
+                "turns_remaining": 3,
+                "status": "active",
+            })
             print(
                 f"  *** BLOOD CHALLENGE available against '{killed_by}' "
                 f"for the death of {warrior.name}! ***"
@@ -274,6 +291,86 @@ class Team:
         self.challenges.clear()
 
     # =========================================================================
+    # BLOOD CHALLENGE MANAGEMENT
+    # =========================================================================
+
+    def get_active_blood_challenges(self) -> list:
+        """
+        Return list of blood challenges that are still active.
+        Active = status is 'active' AND turns_remaining > 0.
+        """
+        return [bc for bc in self.blood_challenges 
+                if bc.get("status") == "active" and bc.get("turns_remaining", 0) > 0]
+
+    def set_blood_challenge_challenger(self, target_name: str, warrior_name: str) -> bool:
+        """
+        Select a specific warrior to carry out a blood challenge.
+        target_name: the killer's name (identifies which blood challenge)
+        warrior_name: the warrior from this team selected to carry out the challenge
+        Returns True if successful, False otherwise.
+        """
+        for bc in self.blood_challenges:
+            if bc.get("target_name") == target_name and bc.get("status") == "active":
+                # Verify the warrior exists on this team
+                if not self.warrior_by_name(warrior_name):
+                    return False
+                bc["challenger_name"] = warrior_name
+                return True
+        return False
+
+    def mark_blood_challenge_avenged(self, target_name: str, dead_warrior_name: str) -> bool:
+        """
+        Mark a blood challenge as avenged when the opponent is defeated.
+        target_name: the killer's name
+        dead_warrior_name: the original victim's name
+        Returns True if found and marked, False otherwise.
+        """
+        for bc in self.blood_challenges:
+            if (bc.get("target_name") == target_name and 
+                bc.get("dead_warrior_name") == dead_warrior_name and
+                bc.get("status") == "active"):
+                bc["status"] = "avenged"
+                return True
+        return False
+
+    def decrement_blood_challenge_turns(self):
+        """
+        Decrement turns_remaining for all active blood challenges.
+        Called at end of each turn to expire challenges that hit 0 turns.
+        """
+        for bc in self.blood_challenges:
+            if bc.get("status") == "active" and bc.get("turns_remaining", 0) > 0:
+                bc["turns_remaining"] -= 1
+
+    # =========================================================================
+    # MANAGER AVOIDANCE MANAGEMENT
+    # =========================================================================
+
+    def add_avoid_manager(self, manager_name: str) -> bool:
+        """
+        Add a manager to this team's avoid list (max 2).
+        Returns True if added, False if list is full or manager already in list.
+        """
+        if len(self.avoid_managers) >= 2:
+            return False
+        if manager_name.lower() in [m.lower() for m in self.avoid_managers]:
+            return False
+        self.avoid_managers.append(manager_name)
+        return True
+
+    def remove_avoid_manager(self, manager_name: str) -> bool:
+        """Remove a manager from this team's avoid list. Returns True if found and removed."""
+        for i, m in enumerate(self.avoid_managers):
+            if m.lower() == manager_name.lower():
+                self.avoid_managers.pop(i)
+                return True
+        return False
+
+    def is_avoiding_manager(self, challenger_manager: str) -> bool:
+        """Check if this team is avoiding a specific manager (by name)."""
+        return any(m.lower() == challenger_manager.lower() for m in self.avoid_managers)
+
+    # =========================================================================
     # DISPLAY
     # =========================================================================
 
@@ -321,7 +418,8 @@ class Team:
             "team_id"             : self.team_id,
             "warriors"            : [w.to_dict() if w else None for w in self.warriors],
             "fallen_warriors"     : self.fallen_warriors,
-            "blood_challenges"    : [list(bc) for bc in self.blood_challenges],
+            "blood_challenges"    : self.blood_challenges,
+            "avoid_managers"      : self.avoid_managers,
             "challenges"          : self.challenges,
             "archived_warriors"   : self.archived_warriors,
             "pending_replacements": {str(k): v for k, v in self.pending_replacements.items()},
@@ -341,7 +439,25 @@ class Team:
             for w in raw_warriors
         ]
         team.fallen_warriors     = data.get("fallen_warriors", [])
-        team.blood_challenges    = [tuple(bc) for bc in data.get("blood_challenges", [])]
+        
+        # Handle blood_challenges — migrate from old tuple format to new dict format
+        raw_bcs = data.get("blood_challenges", [])
+        team.blood_challenges = []
+        for bc in raw_bcs:
+            if isinstance(bc, dict):
+                # Already in new format
+                team.blood_challenges.append(bc)
+            else:
+                # Old tuple format (challenger_name, target_name) — convert to new format
+                team.blood_challenges.append({
+                    "dead_warrior_name": "Unknown",
+                    "target_name": bc[1] if len(bc) > 1 else "",
+                    "challenger_name": bc[0] if len(bc) > 0 else None,
+                    "turns_remaining": 3,
+                    "status": "active",
+                })
+        
+        team.avoid_managers      = data.get("avoid_managers", [])
         team.challenges          = data.get("challenges", {})
         team.archived_warriors   = data.get("archived_warriors", [])
         team.pending_replacements= {int(k): v for k, v in data.get("pending_replacements", {}).items()}
@@ -571,7 +687,17 @@ def create_monster_team() -> Team:
     Fights against monsters are always to the death — no mercy.
     Player wins approximately 0.5% of the time.
     If a player warrior defeats a monster, they join The Monsters.
+
+    If saves/monster_team.json exists (i.e. a player warrior has previously
+    been absorbed), load the persisted roster. Otherwise build from the
+    hardcoded MONSTER_ROSTER. Delete the file to reset to the default roster.
     """
+    # Late import to avoid save.py <-> team.py circular dependency at module load
+    from save import load_monster_team
+    persisted = load_monster_team()
+    if persisted is not None:
+        return persisted
+
     team = Team(
         team_name    = "The Monsters",
         manager_name = "The Arena",

@@ -1,5 +1,5 @@
 ﻿# =============================================================================
-# combat.py — BLOODSPIRE Combat Engine v2
+# combat.py, BLOODSPIRE Combat Engine v2
 # =============================================================================
 # CORE MECHANICS:
 #   All rolls: d100 (1-100).
@@ -100,6 +100,10 @@ SLASH_WEAPONS = {
     "scimitar", "scythe", "swordbreaker"
 }
 
+OPEN_HAND_WEAPONS = {
+    "open_hand"
+}
+
 
 def _is_cleave_weapon(weapon_key: str) -> bool:
     """Check if weapon qualifies for Cleave skill bonuses."""
@@ -116,6 +120,57 @@ def _is_slash_weapon(weapon_key: str) -> bool:
     return weapon_key in SLASH_WEAPONS
 
 
+def _is_open_hand_weapon(weapon_key: str) -> bool:
+    """Check if weapon qualifies for Open Hand skill bonuses."""
+    return weapon_key in OPEN_HAND_WEAPONS
+
+
+def _check_weapon_style_compatibility(weapon_name: str, style: str) -> tuple[bool, float]:
+    """
+    Check if a weapon and fighting style are compatible.
+    Returns (is_compatible, penalty_factor).
+    
+    penalty_factor ranges from 1.0 (no penalty) to 0.6 (severe mismatch).
+    This is used to reduce both damage and attack accuracy for awkward combos.
+    """
+    try:
+        weapon = get_weapon(weapon_name)
+    except ValueError:
+        # Unknown weapon, assume compatible
+        return True, 1.0
+    
+    # Check if the style is in the weapon's weak_styles list
+    if style in weapon.weak_styles:
+        # Severe incompatibility (e.g., Bash with Stiletto)
+        return False, 0.60
+    
+    # Check broader incompatibilities based on weapon category and style
+    # These are thematic mismatches that aren't explicitly in weak_styles
+    
+    # Light weapons (weight < 2.5) with Bash/Total Kill
+    if weapon.weight < 2.5 and style in ("Bash", "Total Kill"):
+        return False, 0.70
+    
+    # Heavier weapons (weight >= 4.0) with Lunge/Calculated Attack
+    if weapon.weight >= 4.0 and style in ("Lunge", "Calculated Attack"):
+        return False, 0.70
+    
+    # Small weapons with Total Kill
+    if weapon.weight < 2.0 and style == "Total Kill":
+        return False, 0.65
+    
+    # Two-handed weapons with Wall of Steel (too slow for rapid flurry)
+    if weapon.two_hand and style == "Wall of Steel":
+        return False, 0.75
+    
+    # Throwable-only checks (Net)
+    if weapon.can_disarm and not weapon.throwable and style == "Opportunity Throw":
+        return False, 0.80
+    
+    # All checks passed
+    return True, 1.0
+
+
 # ---------------------------------------------------------------------------
 # FIGHT RESULT
 # ---------------------------------------------------------------------------
@@ -129,7 +184,7 @@ class FightResult:
     minutes_elapsed : int
     narrative       : str
     training_results: dict  = field(default_factory=dict)
-    # Per-fighter combat metrics — used by update_recognition v2
+    # Per-fighter combat metrics, used by update_recognition v2
     winner_hp_pct    : float = 1.0   # winner's HP fraction at fight end
     loser_hp_pct     : float = 0.0   # loser's HP fraction at fight end
     winner_knockdowns: int   = 0     # knockdowns delivered by winner
@@ -308,7 +363,11 @@ def _defense_roll(
             except ValueError:
                 pass
 
-    if strategy.defense_point != "None" and strategy.defense_point == aim_point:
+    # Decoy baits the defender into committing to the guarded spot, so the
+    # defense_point bonus is cancelled when the attacker is using Decoy.
+    if (strategy.defense_point != "None"
+            and strategy.defense_point == aim_point
+            and atk_style != "Decoy"):
         total += 15
 
     try:
@@ -332,20 +391,114 @@ def _defense_roll(
 
 
 # ---------------------------------------------------------------------------
+# DECOY FEINT
+# ---------------------------------------------------------------------------
+# Defender-penalty when a Decoy feint lands on the defender this action.
+DECOY_FEINT_PENALTY = 20
+
+
+def _attempt_feint(attacker: Warrior, defender: Warrior, def_style: str) -> bool:
+    """
+    Decoy pre-attack misdirection roll.
+
+    Chance = 25 + feint_skill*5 + DEX_bonus + luck//3, capped at 85%.
+    Counterstrike defenders have a strong chance to read the feint and
+    negate it entirely (their whole style is waiting for the tell).
+    """
+    if def_style == "Counterstrike":
+        read_chance = 55 + defender.skills.get("parry", 0) * 3
+        if random.randint(1, 100) <= read_chance:
+            return False
+
+    feint_skill = attacker.skills.get("feint", 0)
+    dex_bonus   = max(0, (attacker.dexterity - 10) // 2)
+    chance      = 25 + feint_skill * 5 + dex_bonus + attacker.luck // 3
+    chance      = min(85, chance)
+    return random.randint(1, 100) <= chance
+
+
+# ---------------------------------------------------------------------------
+# CALCULATED ATTACK PRECISION
+# ---------------------------------------------------------------------------
+# When a Calculated Attack strike lands a precision roll, the attacker
+# threads the blow through a seam in the defender's guard or armor.
+CA_PRECISION_DAMAGE_BONUS = 3      # flat damage bonus on precision hits
+CA_PRECISION_ARMOR_BYPASS = 0.60   # fraction of armor DV ignored on precision hits
+CA_PROBE_EMIT_CHANCE      = 25     # % chance to flavor a failed CA probe on a miss
+
+
+def _attempt_precision_strike(
+    attacker : Warrior,
+    defender : Warrior,
+    weapon   : "Weapon",
+    def_style: str,
+) -> bool:
+    """
+    Pre-attack precision roll for Calculated Attack.
+
+    Big/clunky weapons cannot finesse a seam. The style still delivers its
+    baseline +2 damage modifier on every hit, but no precision bonus fires.
+
+    Chance = 20 + weapon_skill*3 + DEX_bonus + luck/3
+             - max(def_parry, def_dodge)*4
+             - weight-class penalty
+             - small buffer for actively defensive styles
+    Clamped to [0, 75].
+    """
+    # Weight gate: very heavy weapons cannot precision-strike at all
+    if weapon.weight >= 6.0:
+        return False
+    if "Calculated Attack" in (weapon.weak_styles or []):
+        return False
+
+    wpn_skill = attacker.skills.get(weapon.skill_key, 0)
+    dex_bonus = max(0, (attacker.dexterity - 10) // 2)
+    chance    = 20 + wpn_skill * 3 + dex_bonus + attacker.luck // 3
+
+    # Heavier weapons erode precision chance. Calibrated so the "precise"
+    # weapon tier (< 3.5 wt — stilettos, daggers, short swords, epees) takes
+    # no penalty, mid-weight weapons take a small bite, and anything near
+    # great-weapon weight is penalized severely.
+    if weapon.weight >= 4.5:
+        chance -= 25
+    elif weapon.weight >= 3.5:
+        chance -= 10
+
+    # Defender's best of parry/dodge is the primary counter
+    best_def_skill = max(
+        defender.skills.get("parry", 0),
+        defender.skills.get("dodge", 0),
+    )
+    chance -= best_def_skill * 4
+
+    # Actively defensive styles get a small additional buffer — they aren't
+    # guaranteed to shut down the probe, but they're harder to finesse
+    if def_style in ("Parry", "Defend", "Wall of Steel", "Counterstrike"):
+        chance -= 5
+
+    chance = max(0, min(75, chance))
+    return random.randint(1, 100) <= chance
+
+
+# ---------------------------------------------------------------------------
 # DAMAGE (HYBRID)
 # ---------------------------------------------------------------------------
 
 def _calc_damage_hybrid(
-    attacker    : Warrior,
-    atk_strategy: Strategy,
-    weapon_name : str,
-    defender    : Warrior,
-    margin      : int,
+    attacker        : Warrior,
+    atk_strategy    : Strategy,
+    weapon_name     : str,
+    defender        : Warrior,
+    margin          : int,
+    precision_bypass: float = 0.0,
+    style_compat_penalty: float = 1.0,
 ) -> Tuple[int, str]:
     """
     Ceiling = stats + weapon + race + skill + luck + specialized skill bonuses.
     Fraction = min(1.0, margin / 80.0)
     Net = max(1, ceiling * fraction - armor)
+    
+    style_compat_penalty: multiplier for weapon/style incompatibility (1.0 = no penalty)
     """
     try:
         weapon = get_weapon(weapon_name)
@@ -375,6 +528,9 @@ def _calc_damage_hybrid(
         is_heavy = weapon.weight >= 4.0 or (weapon.two_hand and two_handed)
         if is_heavy and not (r_mod.spear_exception and weapon.category == "Polearm/Spear"):
             base *= 0.8  # -2 damage penalty equiv (20% reduction)
+    
+    # Apply weapon/style incompatibility penalty
+    base *= style_compat_penalty
     
     # --- NEW SKILL BONUSES ---
     wpn_key_std = weapon_name.lower().replace(" ", "_").replace("&", "and")
@@ -420,6 +576,24 @@ def _calc_damage_hybrid(
     if strike_level > 0:
         base += strike_level * 0.8  # +0.8 damage per level (less than specialized skills)
     
+    # Open Hand / Martial Combat skill bonus
+    # Martial artists get substantial damage bonuses from Open Hand skill, enhanced by Brawl
+    if _is_open_hand_weapon(wpn_key_std):
+        open_hand_level = attacker.skills.get("open_hand", 0)
+        if open_hand_level > 0:
+            # Base bonus: +2.0 per level (same as Cleave/Bash for consistency)
+            base += open_hand_level * 2.0
+            # Master level (9) gets +20% damage multiplier for consistent fighting
+            if open_hand_level == 9:
+                base *= 1.20
+            # Brawl skill provides an additional bonus (+0.5 per level, capped at how much it exists)
+            brawl_level = attacker.skills.get("brawl", 0)
+            if brawl_level > 0:
+                base += brawl_level * 0.5  # +0.5 damage per brawl level
+                # Master level Brawl (9) gives additional +10% multiplier for bone-deep power
+                if brawl_level == 9:
+                    base *= 1.10
+    
     ceiling = max(3, int(base))
 
     fraction = max(0.10, min(1.00, margin / 55.0))
@@ -434,6 +608,11 @@ def _calc_damage_hybrid(
     defense  = get_effective_defense_for_race(armor_nm, helm_nm, defender.race.name)
     if weapon.armor_piercing and is_ap_vulnerable(armor_nm):
         defense = max(0, defense // 2)
+
+    # Calculated Attack precision hits thread a seam in the armor, bypassing
+    # a fraction of the defender's defense value for this strike only.
+    if precision_bypass > 0.0:
+        defense = max(0, int(defense * (1.0 - precision_bypass)))
 
     return max(1, raw - defense), weapon.category
 
@@ -551,6 +730,7 @@ def _check_knockdown(warrior: Warrior, state: _CState, damage: int, cat: str) ->
     return random.randint(1, 100) <= max(1, chance)
 
 
+# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # DEATH CHECK
 # ---------------------------------------------------------------------------
@@ -675,15 +855,15 @@ def _calc_apm(warrior: Warrior, strategy: Strategy, state: _CState) -> int:
 
 _REF_STONE_EVENTS = [
     ("The Ref hurls a large rock at {n}",
-     "The rock connects with {n}'s temple — {n} staggers, eyes glazed."),
+     "The rock connects with {n}'s temple, {n} staggers, eyes glazed."),
     ("The Ref scoops up a fist-sized stone and flings it at {n}",
      "It cracks hard against {n}'s ribs. {n} doubles over with a grunt."),
     ("The Ref hurls a jagged chunk of stone at {n}",
-     "It opens a gash above {n}'s eye — {n} blinks through the blood, vision blurring."),
+     "It opens a gash above {n}'s eye, {n} blinks through the blood, vision blurring."),
     ("The Ref seizes a heavy stone and hurls it at {n}",
      "The stone thuds into {n}'s chest. {n} gasps, the air driven from their lungs."),
     ("The Ref flings a sharp-edged rock at {n}",
-     "It catches {n} across the shoulder — {n} winces and nearly drops their guard."),
+     "It catches {n} across the shoulder, {n} winces and nearly drops their guard."),
     ("The Ref grabs a handful of gravel and hurls it straight at {n}'s face",
      "{n} recoils, blinded for a moment, eyes streaming."),
     ("The Ref hurls a stone at the back of {n}'s head",
@@ -696,19 +876,19 @@ _REF_WEAPON_EVENTS = [
     ("The Ref snatches up a length of chain and lashes it hard across {n}'s back",
      "{n} arches in agony, a ragged cry escaping them."),
     ("The Ref grabs a discarded wooden staff and drives it into {n}'s ribs",
-     "The crack of wood on bone rings out — {n} bends double, wheezing."),
+     "The crack of wood on bone rings out, {n} bends double, wheezing."),
     ("The Ref seizes a blunted club and crashes it across {n}'s shoulders",
      "{n} staggers forward, knees buckling under the blow."),
     ("The Ref picks up a short iron rod and swings it hard into {n}'s thigh",
      "{n} stumbles badly, leg trembling, nearly losing their footing."),
     ("The Ref grabs a training sword and slaps the flat of it hard across {n}'s back",
-     "The smack echoes across the pit — {n} flinches and lurches forward."),
+     "The smack echoes across the pit, {n} flinches and lurches forward."),
 ]
 
 _REF_FOLLOWUP_EVENTS = [
     ("Still unsatisfied, the Ref hurls another stone at {n}",
      "It clips {n} across the ear. {n} is visibly shaken."),
-    ("The Ref shouts at {n} to fight — then flings a second stone",
+    ("The Ref shouts at {n} to fight, then flings a second stone",
      "The stone drives into {n}'s ribs. The crowd jeers."),
     ("The Ref storms forward and drives the butt of a spear into {n}'s back",
      "{n} pitches forward with a cry, barely keeping their feet."),
@@ -736,6 +916,7 @@ class CombatEngine:
         pos_a           : int  = 1,
         pos_b           : int  = 1,
         is_monster_fight: bool = False,
+        challenger_name : str  = None,
     ):
         self.warrior_a        = warrior_a
         self.warrior_b        = warrior_b
@@ -746,6 +927,7 @@ class CombatEngine:
         self.pos_a            = pos_a
         self.pos_b            = pos_b
         self.is_monster_fight = is_monster_fight
+        self.challenger_name  = challenger_name
 
         self.state_a = _CState(warrior=warrior_a, current_hp=warrior_a.max_hp, endurance=100.0)
         self.state_b = _CState(warrior=warrior_b, current_hp=warrior_b.max_hp, endurance=100.0)
@@ -774,6 +956,7 @@ class CombatEngine:
             self.team_a_name, self.team_b_name,
             self.manager_a_name, self.manager_b_name,
             self.pos_a, self.pos_b,
+            challenger_name=self.challenger_name,
         ))
         self._lines.append("")
 
@@ -790,7 +973,7 @@ class CombatEngine:
             result  = self._run_minute(minute)
             if result:
                 break
-            # 30-minute limit: judge awards decision — but NOT in monster fights,
+            # 30-minute limit: judge awards decision, but NOT in monster fights,
             # which must always end in death (no time limit, no mercy).
             if minute >= 30 and not self.is_monster_fight:
                 pct_a   = self.state_a.current_hp / max(1, self.warrior_a.max_hp)
@@ -798,18 +981,18 @@ class CombatEngine:
                 win_w   = self.warrior_a if pct_a >= pct_b else self.warrior_b
                 los_w   = self.warrior_b if pct_a >= pct_b else self.warrior_a
                 self._emit("")
-                self._emit(f"The Blood Master calls time — {win_w.name.upper()} wins on judges' decision!")
+                self._emit(f"The Blood Master calls time, {win_w.name.upper()} wins on judges' decision!")
                 result = self._make_result(win_w, los_w, False, minute)
                 break
             # Safety valve for monster fights: after 60 minutes the monster
-            # finishes it — a player warrior cannot outlast a monster forever.
+            # finishes it, a player warrior cannot outlast a monster forever.
             if minute >= 60 and self.is_monster_fight:
                 # Monster wins; player warrior dies from exhaustion
                 dw = self.state_a.warrior  # player is always warrior_a
                 kw = self.state_b.warrior
-                dw.injuries.add("chest", 9)
+                dw.is_dead = True
                 self._emit("")
-                self._emit(f"{dw.name.upper()} collapses from sheer exhaustion — the monster is relentless!")
+                self._emit(f"{dw.name.upper()} collapses from sheer exhaustion, the monster is relentless!")
                 self._emit(N.death_line(dw.name, dw.gender))
                 self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
                 result = self._make_result(kw, dw, True, minute)
@@ -821,7 +1004,7 @@ class CombatEngine:
             (self.warrior_a, self.warrior_b, False, "warrior_a"),
             (self.warrior_b, self.warrior_a, True,  "warrior_b"),
         ]:
-            # Dead warriors do not train — they're carried out on a shield
+            # Dead warriors do not train, they're carried out on a shield
             if result.loser_died and result.loser is w:
                 training[pos_key] = []
                 continue
@@ -1066,7 +1249,15 @@ class CombatEngine:
         att = as_.warrior;  dfr = ds_.warrior
         wpn = att.primary_weapon;  aim = ax.aim_point
 
-        intent = N.style_intent_line(att.name, dfr.name, ax.style, wpn, att.gender)
+        # Check weapon/style compatibility
+        is_compatible, penalty_factor = _check_weapon_style_compatibility(wpn, ax.style)
+        
+        # Use appropriate intent line (normal or awkward)
+        if is_compatible:
+            intent = N.style_intent_line(att.name, dfr.name, ax.style, wpn, att.gender)
+        else:
+            intent = N.awkward_style_intent_line(att.name, dfr.name, ax.style, wpn, att.gender)
+        
         if intent:
             self._emit(intent)
 
@@ -1075,26 +1266,56 @@ class CombatEngine:
 
         self._emit(N.attack_line(att.name, dfr.name, wpn, cat, ax.style, aim, att.gender, attacker_race=att.race.name))
 
-        # Defense reaction line — defender's posture before the result is known
+        # Defense reaction line, defender's posture before the result is known
         if random.random() < 0.55:
             props_dx = get_style_props(dx.style)
             _uses_parry = props_dx.parry_bonus >= props_dx.dodge_bonus
             self._emit(N.defense_intent_line(dfr.name, dfr.gender, _uses_parry))
 
-        # Favorite weapon flavor — fires on first attack with this weapon, win or lose
+        # Favorite weapon flavor, fires on first attack with this weapon, win or lose
         fav_flavor = _get_favorite_weapon_flavor(att, wpn, as_)
         if fav_flavor:
             self._emit(fav_flavor)
 
         atk_r = _attack_roll(att, ax, as_)
         atk_r += get_style_advantage(ax.style, dx.style) * 6
+        
+        # Apply weapon/style incompatibility penalty to attack roll
+        if not is_compatible:
+            atk_r = int(atk_r - (1.0 - penalty_factor) * 25)  # -25 points * penalty severity
+
+        # --- DECOY FEINT (pre-attack misdirection) ---
+        # A successful feint pulls the defender's guard off the real strike,
+        # imposing a flat penalty on their defense roll for this action.
+        decoy_feint_landed = False
+        if ax.style == "Decoy":
+            if _attempt_feint(att, dfr, dx.style):
+                decoy_feint_landed = True
+                self._emit(N.decoy_feint_line(att.name, dfr.name))
+            elif dx.style == "Counterstrike":
+                self._emit(N.decoy_feint_read_line(att.name, dfr.name))
+
+        # --- CALCULATED ATTACK PRECISION (pre-attack weak-point targeting) ---
+        # On success, the attacker threads the strike through a seam in the
+        # defender's armor — partial armor bypass and a small damage bonus
+        # apply. Big clunky weapons cannot precision-strike at all.
+        ca_precision_landed = False
+        if ax.style == "Calculated Attack":
+            ca_precision_landed = _attempt_precision_strike(att, dfr, weapon, dx.style)
 
         props_d = get_style_props(dx.style)
         use_p   = props_d.parry_bonus >= props_d.dodge_bonus
         def_r   = _defense_roll(dfr, dx, ds_, att, aim, ax.style, is_parry=use_p)
+        if decoy_feint_landed:
+            def_r = max(1, def_r - DECOY_FEINT_PENALTY)
         margin  = atk_r - def_r
 
         if margin <= 0:
+            # Calculated Attack probe flavor — occasional line when a CA
+            # probe fails to find a gap in the defender's guard.
+            if (ax.style == "Calculated Attack" and not ca_precision_landed
+                    and random.randint(1, 100) <= CA_PROBE_EMIT_CHANCE):
+                self._emit(N.calculated_probe_line(att.name, dfr.name))
             if margin == 0:
                 self._emit(N.miss_line(att.name, wpn))
             elif margin <= -30:
@@ -1177,21 +1398,30 @@ class CombatEngine:
         # Fires when weapon skill >= 5 and 25% chance rolls true.
         # Replaces the normal hit_line with a weapon-specific signature line.
         # Damage is floored at medium (12% of max HP) when the signature fires.
+        # CA precision hits take priority over signature hits for this strike.
         wpn_key_sig  = wpn.lower().replace(" ", "_").replace("&", "and")
         wpn_skill_lvl = att.skills.get(wpn_key_sig, 0)
         sig = None
-        if wpn_skill_lvl >= 5 and random.random() < 0.25:
+        if wpn_skill_lvl >= 5 and random.random() < 0.25 and not ca_precision_landed:
             sig = N.signature_line(att.name, wpn)
 
-        if sig:
+        if ca_precision_landed:
+            self._emit(N.calculated_precision_line(att.name, dfr.name, wpn, aim))
+        elif sig:
             self._emit(sig)
         else:
             for ln in N.hit_line(att.name, dfr.name, wpn, cat, aim, precision, attacker_race=att.race.name):
                 self._emit(ln)
 
-        dmg, wcats = _calc_damage_hybrid(att, ax, wpn, dfr, margin)
+        dmg, wcats = _calc_damage_hybrid(
+            att, ax, wpn, dfr, margin,
+            precision_bypass=(CA_PRECISION_ARMOR_BYPASS if ca_precision_landed else 0.0),
+            style_compat_penalty=penalty_factor,
+        )
         if sig:
             dmg = max(dmg, int(dfr.max_hp * 0.12))  # floor at minimum medium damage
+        if ca_precision_landed:
+            dmg += CA_PRECISION_DAMAGE_BONUS
         self._emit(N.damage_line(dmg, dfr.max_hp, cat))
 
         prev_hp        = ds_.current_hp
@@ -1205,10 +1435,10 @@ class CombatEngine:
                 # 5% chance per slash level to cause bleeding
                 bleed_chance = slash_level * 5
                 if random.randint(1, 100) <= bleed_chance:
-                    # Add bleeding wound to accumulator (silent — hidden from player)
+                    # Add bleeding wound to accumulator (silent, hidden from player)
                     ds_.bleeding_wounds += 1
 
-        # --- Apply Bleeding Damage each round (silent — hidden from player) ---
+        # --- Apply Bleeding Damage each round (silent, hidden from player) ---
         if ds_.bleeding_wounds > 0 and random.randint(1, 100) <= 40:
             bleed_dmg = _apply_bleeding_damage(ds_)
             if bleed_dmg > 0:
@@ -1275,11 +1505,15 @@ class CombatEngine:
 
     def _counterstrike(self, as_: _CState, ds_: _CState, ax: Strategy, dx: Strategy, minute: int) -> Optional[FightResult]:
         att = as_.warrior;  dfr = ds_.warrior;  wpn = att.primary_weapon
+        
+        # Check weapon/style compatibility for counterstrike
+        is_compatible, penalty_factor = _check_weapon_style_compatibility(wpn, ax.style)
+        
         try:    cat = get_weapon(wpn).category
         except: cat = "Oddball"
         for ln in N.hit_line(att.name, dfr.name, wpn, cat, ax.aim_point, "precise", attacker_race=att.race.name):
             self._emit(ln)
-        dmg, _ = _calc_damage_hybrid(att, ax, wpn, dfr, 40)
+        dmg, _ = _calc_damage_hybrid(att, ax, wpn, dfr, 40, style_compat_penalty=penalty_factor)
         self._emit(N.damage_line(dmg, dfr.max_hp, cat))
         prev       = ds_.current_hp
         ds_.current_hp -= dmg
@@ -1300,13 +1534,13 @@ class CombatEngine:
     def _handle_zero_hp(self, dying: _CState, killer: _CState, prev: int, dmg: int, minute: int) -> Optional[FightResult]:
         dw = dying.warrior;  kw = killer.warrior
         if self.is_monster_fight:
-            dw.injuries.add("chest", 9)
-            self._emit(f"{dw.name.upper()} collapses — the monster shows no mercy!")
+            dw.is_dead = True
+            self._emit(f"{dw.name.upper()} collapses, the monster shows no mercy!")
             self._emit(N.death_line(dw.name, dw.gender))
             self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
             return self._make_result(kw, dw, True, minute)
         if _death_check(prev, dmg):
-            dw.injuries.add("chest", 9)
+            dw.is_dead = True
             self._emit(N.death_line(dw.name, dw.gender))
             self._emit(""); self._emit(N.victory_line(kw.name, dw.name))
             return self._make_result(kw, dw, True, minute)
@@ -1347,9 +1581,12 @@ class CombatEngine:
         Apply training. If w is alive and has INT >= 15, there is a chance
         they pick up a 4th bonus skill observed from the opponent's combat style.
         """
+        w.reset_training_session()  # Reset message tracking for this training turn
         res = []
         for sk in w.trains[:3]:
-            res.append(w.train_skill(sk))
+            msg = w.train_skill(sk)
+            if msg:  # Only add non-empty messages
+                res.append(msg)
 
         # INT 4th train: learn a skill from opponent
         # Chance = max(3, (intelligence - 14) * 4%), triggered when INT >= 15
@@ -1369,13 +1606,14 @@ class CombatEngine:
                 # Always include weapon skill and basic skills as observables
                 opp_wpn = (opponent.primary_weapon or "Short Sword").lower().replace(" ","_").replace("&","and")
                 candidate_skills += [opp_wpn, "dodge", "parry", "initiative", "feint"]
-                # Pick one, avoiding skills already at max
+                # Pick one and attempt training (will show "already mastered" if at max)
                 random.shuffle(candidate_skills)
                 for sk in candidate_skills:
                     sk_key = sk.lower().replace(" ","_")
-                    if sk_key in w.skills and w.skills[sk_key] < 9:
+                    if sk_key in w.skills:
                         bonus_result = w.train_skill(sk_key)
-                        if "trained:" in bonus_result:
+                        # Show success, or mastery message. Skip empty strings (shown_max_messages duplicate)
+                        if bonus_result:
                             res.append(f"[OBSERVED] {bonus_result}")
                         break
 
@@ -1403,7 +1641,7 @@ class CombatEngine:
     def _throw_stones(self, minute: int):
         """
         From minute 7 onward the referee intervenes to pressure whichever warrior
-        is doing the least to end the fight — not necessarily the one losing.
+        is doing the least to end the fight, not necessarily the one losing.
 
         Activity score per warrior (higher = more aggressive / more likely to end it):
           + attacks made last minute  (primary driver)
@@ -1414,7 +1652,7 @@ class CombatEngine:
         The warrior with the LOWER activity score gets targeted.
         Tiebreak: the one with higher HP% (the one with less urgency to fight).
 
-        - Damage: (minute - 6) * 2, but the Ref never kills — floor at 1 HP.
+        - Damage: (minute - 6) * 2, but the Ref never kills, floor at 1 HP.
         - Follow-up throw if the target attacked ≤1 times last minute (~55% chance).
         """
         if self.is_monster_fight:
@@ -1452,7 +1690,7 @@ class CombatEngine:
         dmg = (minute - 6) * 2
         n = target_state.warrior.name.upper()
 
-        # Primary intervention — 20% chance the Ref grabs a weapon instead of a stone
+        # Primary intervention, 20% chance the Ref grabs a weapon instead of a stone
         if random.random() < 0.20:
             action, effect = random.choice(_REF_WEAPON_EVENTS)
         else:
@@ -1490,17 +1728,19 @@ def run_fight(
     manager_a_name  : str  = "Manager A",
     manager_b_name  : str  = "Manager B",
     is_monster_fight: bool = False,
+    challenger_name : str  = None,
 ) -> FightResult:
     engine = CombatEngine(
         warrior_a, warrior_b,
         team_a_name, team_b_name,
         manager_a_name, manager_b_name,
         is_monster_fight=is_monster_fight,
+        challenger_name=challenger_name,
     )
     result = engine.resolve_fight()
     if result.winner and result.loser:
         # Only update records for player-team warriors.
-        # Monsters: always show 0-0-0.  Peasants: same — they are arena fodder.
+        # Monsters: always show 0-0-0.  Peasants: same, they are arena fodder.
         npc_races = {"Monster", "Peasant"}
         if result.winner.race.name not in npc_races:
             result.winner.record_result("win", killed_opponent=result.loser_died)

@@ -453,6 +453,7 @@ class Warrior:
         self.wins        = 0
         self.losses      = 0
         self.kills       = 0   # How many opponents this warrior has slain
+        self.monster_kills = 0 # How many monsters this warrior has slain
         self.total_fights= 0   # Retirement unlocks at MAX_FIGHTS (100)
 
         # --- Equipment ---
@@ -507,7 +508,7 @@ class Warrior:
         self.luck: int = 0   # Set by factory functions after creation
 
         # --- Popularity (0-100 flavor stat) ---
-        self.popularity: int = 50
+        self.popularity: int = 0
 
         # --- Recognition (0+ rating, determines class ranking tier) ---
         self.recognition: int = 0
@@ -522,8 +523,12 @@ class Warrior:
         self.want_monster_fight: bool = False   # opt-in for Monster bout this turn
         self.want_retire:        bool = False   # request retirement (requires 100+ fights)
 
+        # --- Avoidance System (max 2 slots each) ---
+        self.avoid_warriors: List[str] = []
+
         # --- Death state ---
         self.is_dead: bool = False   # True once slain; slot awaits player replacement
+        self.ascended_to_monster: bool = False  # True if warrior was absorbed into The Monsters
         self.killed_by: str = ""     # Name of the warrior/monster that slew this one
 
         # --- Favorite Weapon (hidden at creation, revealed only in combat) ---
@@ -534,6 +539,11 @@ class Warrior:
         self.height_in, self.weight_lbs = self._calc_measurements()
         # Extra pounds gained through attribute training (STR/CON gains)
         self.training_weight_bonus: int = 0
+
+        # --- Training Session Message Tracking ---
+        # Tracks which "already maxed" messages have been shown this training turn
+        # to avoid repeating them if the warrior trains the same skill multiple times
+        self.shown_max_messages: set = set()
 
     # =========================================================================
     # DERIVED STAT CALCULATIONS
@@ -741,8 +751,33 @@ class Warrior:
 
     @property
     def is_alive(self) -> bool:
-        """False if permanently killed (any injury at level 9)."""
-        return not self.injuries.is_fatal()
+        """False if permanently killed (is_dead flag or a level-9 injury)."""
+        return not self.is_dead and not self.injuries.is_fatal()
+
+    # =========================================================================
+    # AVOIDANCE SYSTEM
+    # =========================================================================
+
+    def add_avoid_warrior(self, warrior_name: str) -> bool:
+        """Add a warrior to this warrior's avoid list (max 2). Returns True if added."""
+        if len(self.avoid_warriors) >= 2:
+            return False
+        if warrior_name.lower() in [w.lower() for w in self.avoid_warriors]:
+            return False
+        self.avoid_warriors.append(warrior_name)
+        return True
+
+    def remove_avoid_warrior(self, warrior_name: str) -> bool:
+        """Remove a warrior from this warrior's avoid list. Returns True if found and removed."""
+        for i, w in enumerate(self.avoid_warriors):
+            if w.lower() == warrior_name.lower():
+                self.avoid_warriors.pop(i)
+                return True
+        return False
+
+    def is_avoiding_warrior(self, challenger_name: str) -> bool:
+        """Check if this warrior is avoiding a specific challenger (by name)."""
+        return any(w.lower() == challenger_name.lower() for w in self.avoid_warriors)
 
     # =========================================================================
     # SKILL SYSTEM
@@ -755,6 +790,14 @@ class Warrior:
     def skill_name(self, skill: str) -> str:
         """Return display name (e.g. 'Expert Skill') for a skill."""
         return SKILL_LEVEL_NAMES.get(self.skill_level(skill), "Unknown")
+
+    def reset_training_session(self) -> None:
+        """
+        Reset training session tracking.
+        Call this at the start of each training turn to clear the log of
+        which max-level messages have already been shown this turn.
+        """
+        self.shown_max_messages = set()
 
     def train_skill(self, skill: str) -> str:
         """
@@ -802,7 +845,25 @@ class Warrior:
 
             current_val = self.get_attr(key)
             if current_val >= STAT_MAX:
-                return f"{skill.capitalize()} is already at maximum ({STAT_MAX})."
+                # Only show max-level message once per training turn
+                if key in self.shown_max_messages:
+                    return ""  # Already shown this message this turn
+                
+                self.shown_max_messages.add(key)
+                
+                # Attribute-specific max-level messages
+                if key == "strength":
+                    return f"{self.name} is as strong as they will ever be."
+                elif key == "dexterity":
+                    return f"{self.name} is as nimble and agile as humanly possible."
+                elif key == "constitution":
+                    return f"{self.name} is as tough and durable as anyone can get."
+                elif key == "intelligence":
+                    return f"{self.name} is as intelligent as they can possibly be."
+                elif key == "presence":
+                    return f"{self.name} has achieved maximum influence and presence."
+                else:
+                    return f"{key.capitalize()} is already at maximum ({STAT_MAX})."
 
             gains = self.attribute_gains.get(key, 0)
             stat  = self.constitution
@@ -858,7 +919,13 @@ class Warrior:
         elif key in ALL_SKILLS:
             current_level = self.skills.get(key, 0)
             if current_level >= 9:
-                return f"{skill.replace('_',' ').title()} is already at Master Skill (9)."
+                # Only show max-level message once per training turn
+                if key in self.shown_max_messages:
+                    return ""  # Already shown this message this turn
+                
+                self.shown_max_messages.add(key)
+                skill_name = skill.replace('_', ' ').title()
+                return f"{self.name} is already mastered in {skill_name}."
 
             gains = current_level          # skill level == number of increases so far
             stat  = self.intelligence
@@ -909,11 +976,18 @@ class Warrior:
         opponent_total_fights: int = 0,
     ) -> None:
         """
-        Update recognition rating after a fight (formula v2).
+        Update recognition rating after a fight (formula v3).
 
-        Total = Base + Underdog Bonus + Dominance Bonus + Flashy Loss Bonus
-                     + Popularity Bonus + Luck Bonus
-        Clamped 1–15 per fight.  Lifetime total capped at 99.
+        Win path:
+            Total = Base + Underdog Bonus + Dominance Bonus
+                         + Popularity Bonus + Luck Bonus
+            Points clamped 1–15 per fight.  Lifetime total capped at 99.
+
+        Loss path:
+            Total = Base Loss – Underdog Opponent Penalty – Dominated Penalty
+                         + Bravery Credit + Popularity Bonus + Luck Bonus
+            Points clamped -10–3 per fight.
+            Lifetime total floored at total_fights (wins + losses).
 
         self_* / opp_* args should reflect THIS warrior's perspective
         (i.e. pass self's hp_pct, self's knockdowns, etc.).
@@ -925,35 +999,41 @@ class Warrior:
         self_exp = max(1, self.total_fights - 1)
         opp_exp  = max(1, opponent_total_fights - 1)
 
+        duration_pct = minutes_elapsed / max(1, max_minutes)
+
         # ------------------------------------------------------------------
         # 1. Base Points
         # ------------------------------------------------------------------
         if won:
             base = 5 if killed_opponent else 3
         else:
-            base = 1
+            base = -3  # losses now cost recognition
 
         # ------------------------------------------------------------------
-        # 2. Underdog Bonus (only when opponent has more experience)
+        # 2. Underdog Bonus (win) / Underdog Opponent Penalty (loss)
         # ------------------------------------------------------------------
         underdog_bonus = 0
-        if opp_exp > self_exp:
-            pct_more = (opp_exp - self_exp) / self_exp * 100
-            if won:
+        if won:
+            # Beat a more experienced opponent — bonus
+            if opp_exp > self_exp:
+                pct_more = (opp_exp - self_exp) / self_exp * 100
                 if pct_more >= 25:   underdog_bonus = 3
                 elif pct_more >= 15: underdog_bonus = 2
                 else:                underdog_bonus = 1
-            else:
-                if pct_more >= 25:   underdog_bonus = 2
-                elif pct_more >= 15: underdog_bonus = 1
-                else:                underdog_bonus = 0
+        else:
+            # Lost to a LESS experienced opponent — crowd turns on you
+            if self_exp > opp_exp:
+                pct_less = (self_exp - opp_exp) / self_exp * 100
+                if pct_less >= 50:   underdog_bonus = -4  # massive upset
+                elif pct_less >= 25: underdog_bonus = -3
+                elif pct_less >= 15: underdog_bonus = -2
+                else:                underdog_bonus = -1
 
         # ------------------------------------------------------------------
-        # 3. Dominance Bonus (wins/kills only)
+        # 3. Dominance Bonus (wins) / Dominated Penalty (losses)
         # ------------------------------------------------------------------
         dominance_bonus = 0
         if won:
-            duration_pct    = minutes_elapsed / max(1, max_minutes)
             dominance_score = (self_hp_pct * 50                      # 0–50: health remaining
                                + (1.0 - duration_pct) * 30           # 0–30: shorter = more dominant
                                + min(20, self_knockdowns * 10))       # 0–20: knockdowns dealt
@@ -961,19 +1041,28 @@ class Warrior:
             if dominance_score >= 75:   dominance_bonus = 3
             elif dominance_score >= 50: dominance_bonus = 2
             elif dominance_score >= 25: dominance_bonus = 1
+        else:
+            # How thoroughly did the opponent manhandle us?
+            dominated_score = (opp_hp_pct * 50                       # 0–50: opponent's health left
+                               + (1.0 - duration_pct) * 30           # 0–30: shorter = more one-sided
+                               + min(20, opp_knockdowns * 10))        # 0–20: knockdowns we absorbed
+            dominated_score = min(100.0, dominated_score)
+            if dominated_score >= 75:   dominance_bonus = -3  # totally manhandled
+            elif dominated_score >= 50: dominance_bonus = -2
+            elif dominated_score >= 25: dominance_bonus = -1
 
         # ------------------------------------------------------------------
-        # 4. Flashy Loss Bonus (losses only — rewarded for going down fighting)
+        # 4. Bravery Credit (losses only — partial mitigation for going down
+        #    swinging; formerly "Flashy Loss Bonus")
         # ------------------------------------------------------------------
-        flashy_loss_bonus = 0
+        bravery_credit = 0
         if not won:
-            duration_pct = minutes_elapsed / max(1, max_minutes)
-            if self_near_kills >= 2:    flashy_loss_bonus += 2
-            elif self_near_kills == 1:  flashy_loss_bonus += 1
-            if duration_pct >= 0.80:    flashy_loss_bonus += 1   # went the distance
+            if self_near_kills >= 2:    bravery_credit += 2
+            elif self_near_kills == 1:  bravery_credit += 1
+            if duration_pct >= 0.80:    bravery_credit += 1   # went the distance
 
         # ------------------------------------------------------------------
-        # 5. Popularity Bonus (all outcomes — crowd recognises fan favourites)
+        # 5. Popularity Bonus (all outcomes — crowd remembers fan favourites)
         # ------------------------------------------------------------------
         popularity_bonus = max(0, (self.popularity - 30) // 20)
         # pop 50 → +1, pop 70 → +2, pop 90 → +3
@@ -991,9 +1080,15 @@ class Warrior:
         # ------------------------------------------------------------------
         # Final tally
         # ------------------------------------------------------------------
-        points = base + underdog_bonus + dominance_bonus + flashy_loss_bonus + popularity_bonus + luck_bonus
-        points = max(1, min(15, points))
-        self.recognition = min(99, self.recognition + points)
+        points = base + underdog_bonus + dominance_bonus + bravery_credit + popularity_bonus + luck_bonus
+        if won:
+            points = max(1, min(15, points))
+        else:
+            points = max(-10, min(3, points))
+
+        # Floor: recognition can never drop below total_fights (wins + losses)
+        floor = self.total_fights
+        self.recognition = max(floor, min(99, self.recognition + points))
 
     # =========================================================================
     # POPULARITY
@@ -1143,6 +1238,7 @@ class Warrior:
             "wins":            self.wins,
             "losses":          self.losses,
             "kills":           self.kills,
+            "monster_kills":   self.monster_kills,
             "total_fights":    self.total_fights,
             "armor":           self.armor,
             "helm":            self.helm,
@@ -1162,7 +1258,9 @@ class Warrior:
             "turns_active":    self.turns_active,
             "want_monster_fight": self.want_monster_fight,
             "want_retire":     self.want_retire,
+            "avoid_warriors":  self.avoid_warriors,
             "is_dead":         self.is_dead,
+            "ascended_to_monster": self.ascended_to_monster,
             "training_weight_bonus": self.training_weight_bonus,
             "killed_by":       self.killed_by,
             "initial_stats":   self.initial_stats,
@@ -1187,6 +1285,7 @@ class Warrior:
         w.wins         = data.get("wins",         0)
         w.losses       = data.get("losses",       0)
         w.kills        = data.get("kills",  data.get("draws", 0))  # migrate old saves
+        w.monster_kills = data.get("monster_kills", 0)
         w.total_fights = data.get("total_fights", 0)
 
         w.armor            = data.get("armor")
@@ -1199,15 +1298,18 @@ class Warrior:
         w.blood_cry    = data.get("blood_cry",  "")
         w.luck         = data.get("luck", random.randint(1, 30))  # retroactively assign if missing
         w.attribute_gains = data.get("attribute_gains", {"strength":0,"dexterity":0,"constitution":0,"intelligence":0,"presence":0})
-        w.popularity   = data.get("popularity", 50)
+        w.popularity   = data.get("popularity", 0)
         w.recognition  = data.get("recognition", 0)
         w.streak            = data.get("streak", 0)
         w.turns_active      = data.get("turns_active", 0)
         w.want_monster_fight= data.get("want_monster_fight", False)
         w.want_retire       = data.get("want_retire", False)
+        w.avoid_warriors    = data.get("avoid_warriors", [])
         w.is_dead           = data.get("is_dead", False)
+        w.ascended_to_monster = data.get("ascended_to_monster", False)
         w.training_weight_bonus = data.get("training_weight_bonus", 0)
         w.killed_by         = data.get("killed_by", "")
+        w.ascended_to_monster = data.get("ascended_to_monster", False)
         w.initial_stats  = data.get("initial_stats")
         # Backfill for warriors saved before initial_stats was tracked.
         # Using current values as the baseline means past gains won't show the

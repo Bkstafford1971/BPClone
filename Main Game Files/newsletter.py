@@ -42,17 +42,33 @@ def _warrior_tier(w, is_champion: bool) -> str:
 
 
 def _update_champion(teams, champion_state: dict, deaths_this_turn: list,
-                     champion_beaten_by: str = None, champion_beaten_team: str = None) -> dict:
+                     champion_beaten_by: str = None, champion_beaten_team: str = None,
+                     prev_champion_name: str = None) -> tuple:
+    """
+    Update the champion state based on battle outcomes and warrior recognition.
+    
+    Returns:
+        (champion_state_dict, is_new_champion) where is_new_champion is True if the
+        current champion name differs from prev_champion_name.
+    """
     dead_names = {d["name"] for d in deaths_this_turn}
+    prev_champ = prev_champion_name or champion_state.get("name", "")
+    
     # A warrior who beat the current champion claims the title immediately.
     if champion_beaten_by:
-        return {"name": champion_beaten_by, "team_name": champion_beaten_team or "Unknown",
-                "source": "beat_champion"}
+        new_state = {"name": champion_beaten_by, "team_name": champion_beaten_team or "Unknown",
+                     "source": "beat_champion"}
+        is_new = (champion_beaten_by != prev_champ)
+        return new_state, is_new
+    
     current_champ = champion_state.get("name", "")
     if current_champ and current_champ in dead_names:
         current_champ = ""
     if current_champ:
-        return champion_state
+        # Champion still alive and not beaten — check if incumbent or first time
+        is_new = (current_champ != prev_champ)
+        return champion_state, is_new
+    
     # No champion — find the warrior with the highest recognition score.
     all_warriors = []
     for team in teams:
@@ -69,7 +85,8 @@ def _update_champion(teams, champion_state: dict, deaths_this_turn: list,
             if getattr(wobj,"is_dead",False): continue
             if wobj.name in dead_names: continue
             all_warriors.append((wobj, tname))
-    if not all_warriors: return {}
+    if not all_warriors: return {}, False
+    
     # Sort by recognition (primary) then win percentage (tiebreak).
     all_warriors.sort(key=lambda x: (-getattr(x[0],"recognition",0),
                                       -(x[0].wins/max(1,x[0].total_fights)),
@@ -84,7 +101,9 @@ def _update_champion(teams, champion_state: dict, deaths_this_turn: list,
             # Final tiebreak: alphabetical by name then team — deterministic, never a tie
             still.sort(key=lambda x: (x[0].name, x[1]))
     champ_w, champ_t = all_warriors[0]
-    return {"name": champ_w.name, "team_name": champ_t, "source": "recognition"}
+    new_state = {"name": champ_w.name, "team_name": champ_t, "source": "recognition"}
+    is_new = (champ_w.name != prev_champ)
+    return new_state, is_new
 
 
 def _get_warriors(w):
@@ -250,17 +269,11 @@ def _dead_section(deaths: list, turn_num: int) -> str:
 def _fights_section(card) -> str:
     sep="="*75
     lines=["\nLAST TURN'S FIGHTS",sep]
-    # Monster fights first, then champion title fights, then rivalry/challenge, then peasant
-    _order = {"monster":0,"champion":1,"blood_challenge":2,"challenge":2,"rivalry":3,"peasant":4}
+    # Organize by fight type: monster, blood_challenge, challenge, rivalry, peasant
+    _order = {"monster":0, "blood_challenge":1, "challenge":2, "rivalry":3, "peasant":4}
     sorted_card = sorted(card, key=lambda b: _order.get(getattr(b,"fight_type","rivalry"), 3))
 
     # Deduplicate: collapse A-vs-B and B-vs-A to one line.
-    # The fake_card in league mode contains every fight from every team's
-    # perspective, so the same matchup can appear twice (once with A as
-    # player_warrior, once with B as player_warrior).  seen_pairs handles
-    # that.  We deliberately do NOT filter by individual warrior because
-    # that caused legitimate fights to be dropped when a warrior appeared
-    # as pw in their own team's card AND as ow in an AI team's card.
     seen_pairs = set()
     for bout in sorted_card:
         pw=bout.player_warrior; ow=bout.opponent; r=bout.result
@@ -272,16 +285,95 @@ def _fights_section(card) -> str:
         pw_won=r.winner and r.winner.name==pw.name
         winner=pw if pw_won else ow; loser=ow if pw_won else pw
         mins=r.minutes_elapsed
-        ftype = "Champions Title" if bout.fight_type == "champion" else bout.fight_type.replace("_"," ")
-        style=_fight_style_word(mins)
-        if r.loser_died:
-            line=(f"{winner.name} slew {loser.name} in a {mins} minute {style} {ftype} fight."
-                  if pw_won else
-                  f"{loser.name} was slain by {winner.name} in a {mins} minute {style} {ftype} fight.")
+        if bout.fight_type == "champion":
+            ftype = "Champions Title"
+        elif bout.fight_type in ("standard", "rivalry", "peasant", "monster"):
+            ftype = ""
         else:
-            verb=random.choice(["bested","defeated","outlasted","overcame","vanquished"])
-            line=f"{winner.name} {verb} {loser.name} in a {mins} minute {style} {ftype} fight."
+            ftype = bout.fight_type.replace("_"," ")
+        style=_fight_style_word(mins)
+        
+        # Determine action verb based on challenge type
+        if bout.fight_type in ["challenge", "blood_challenge"]:
+            # For challenge fights, always list challenger first
+            challenger = bout.challenger_name
+            if challenger == winner.name:
+                # Challenger won
+                if r.loser_died:
+                    line = f"{winner.name} savagely slew {loser.name} in a {mins} minute {style} Challenge fight."
+                else:
+                    verb = random.choice(["bested","defeated","outlasted","overcame","vanquished"])
+                    line = f"{winner.name} {verb} {loser.name} in a {mins} minute {style} Challenge fight."
+            else:
+                # Challenger lost
+                if r.loser_died:
+                    line = f"{winner.name} savagely slew {loser.name} in a {mins} minute {style} Challenge fight."
+                else:
+                    verb = random.choice(["bested","defeated","outlasted","overcame","vanquished"])
+                    line = f"{winner.name} {verb} {loser.name} in a {mins} minute {style} Challenge fight."
+        else:
+            # Regular fight
+            ftype_str = f" {ftype}" if ftype else ""
+            if r.loser_died:
+                line=(f"{winner.name} slew {loser.name} in a {mins} minute {style}{ftype_str} fight."
+                      if pw_won else
+                      f"{loser.name} was slain by {winner.name} in a {mins} minute {style}{ftype_str} fight.")
+            else:
+                verb=random.choice(["bested","defeated","outlasted","overcame","vanquished"])
+                line=f"{winner.name} {verb} {loser.name} in a {mins} minute {style}{ftype_str} fight."
         lines.append(line)
+    return "\n".join(lines)
+
+
+def _monster_kills_section(card) -> str:
+    """Generate a special section for warriors who slew monsters and ascended."""
+    monster_slayers = []
+    
+    for bout in card:
+        if not bout.result:
+            continue
+        # Check if this was a monster fight where the player warrior won and killed
+        if (bout.fight_type == "monster" and 
+            bout.result.loser_died and 
+            bout.result.winner and 
+            bout.result.winner.name == bout.player_warrior.name):
+            monster_slayers.append({
+                "warrior": bout.player_warrior.name,
+                "team": bout.player_team.team_name,
+                "monster": bout.opponent.name,
+                "minutes": bout.result.minutes_elapsed,
+            })
+    
+    if not monster_slayers:
+        return ""
+    
+    lines = ["\n" + "="*75, "TRANSFORMATION: ASCENSION TO MONSTERDOM"]
+    lines.append("="*75)
+    
+    slayer_messages = [
+        "has transcended mortality and become one of The Monsters themselves!",
+        "has proven their worth and earned a place among the supernatural denizens of the Arena!",
+        "has shed their humanity and ascended to a new form of existence as a Monster!",
+        "has defeated their ultimate opponent and claimed a new life among the creatures of darkness!",
+        "has undergone a miraculous transformation, joining the ranks of The Monsters eternal!",
+    ]
+    
+    for slayer in monster_slayers:
+        if slayer["minutes"] == 1:
+            time_str = "in a swift 1-minute clash"
+        elif slayer["minutes"] <= 3:
+            time_str = f"in just {slayer['minutes']} minutes"
+        elif slayer["minutes"] >= 8:
+            time_str = f"in a grueling {slayer['minutes']}-minute battle"
+        else:
+            time_str = f"in a {slayer['minutes']}-minute encounter"
+        
+        message = random.choice(slayer_messages)
+        line = (f">>> {slayer['warrior']} (Team: {slayer['team']}) {message}\n"
+                f"    Slew the monster {slayer['monster']} {time_str}.\n"
+                f"    A replacement warrior slot is now available on {slayer['team']}.")
+        lines.append(line)
+    
     return "\n".join(lines)
 
 
@@ -436,6 +528,14 @@ _BLK_CHAMP_NEW = [
     "The crowds were amazed this turn, as {champion} of {champ_team} dethroned the reigning Champion in a fight that will be talked about for turns to come.  A new name atop the throne.",
     "{champion} of {champ_team} has done what countless rivals only dreamed — claimed the Championship in direct combat.  The arena has a new ruler, and the pretenders must recalculate.",
     "Stop the histories and note the date: {champion} of {champ_team} is the new Champion of {arena}.  The old order ends.  The new one has precisely one member.",
+]
+
+_BLK_CHAMP_INCUMBENT = [
+    "{champion} of {champ_team} defended the throne this turn by simple absence of defeat.  Holding the title invites endless scrutiny, yet few step forward to challenge it.",
+    "Still undefeated, {champion} of {champ_team} remains the Champion.  Another turn passes, and the pretenders are no closer to dislodging the title.",
+    "The arena is defined by presence, and {champion} of {champ_team} continues to provide it.  The Championship throne remains occupied, another turn's triumph for the incumbent.",
+    "While others plotted advancement, {champion} of {champ_team} simply endured.  The Championship waits for challengers bold enough to contest it.",
+    "{champion} of {champ_team} holds the throne without fanfare.  In {arena}, consistency on the title is worth more than any grand gesture.",
 ]
 
 _BLK_CHAMP_VACANT = [
@@ -623,7 +723,7 @@ def _pick_block(pool: list, used: set, ctx: dict) -> str:
     return template.format(**ctx)
 
 
-def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) -> str:
+def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict, is_new_champion: bool = False) -> str:
     """
     Generate a flowing spy-report style narrative for Arena Happenings.
     Pool blocks are used as sentence-level building pieces woven together
@@ -676,6 +776,13 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
                 if not pw_won: w += 1; k += (1 if bout.result.loser_died else 0)
                 else: l += 1
         team_records[tname] = {"w": w, "l": l, "k": k}
+
+    # AUDIT: Validate team records don't exceed 5 fights per team per turn
+    # (each team can have at most 5 active warriors, each fights once max)
+    for tname, rec in team_records.items():
+        total_fights = rec["w"] + rec["l"]
+        if total_fights > 5:
+            print(f"  WARNING: {tname} has {total_fights} total fights ({rec['w']}-{rec['l']}) — exceeds max 5 for a turn")
 
     sorted_teams = sorted(team_records.items(), key=lambda x: (-x[1]["w"], x[1]["l"]))
     best_name,  best_rec  = sorted_teams[0]  if sorted_teams else (None, None)
@@ -784,10 +891,14 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
     p1.append(_pick_block(_BLK_INTRO, used, ctx))
 
     # Champion — new champ is the biggest news; lead with it right after intro
-    if champ and champ_src == "beat_champion":
+    if champ and is_new_champion:
         ctx["champion"]   = champ.upper()
         ctx["champ_team"] = champ_t.upper()
         p1.append(_pick_block(_BLK_CHAMP_NEW, used, ctx))
+    elif champ and not is_new_champion:
+        ctx["champion"]   = champ.upper()
+        ctx["champ_team"] = champ_t.upper()
+        p1.append(_pick_block(_BLK_CHAMP_INCUMBENT, used, ctx))
     elif not champ:
         p1.append(_pick_block(_BLK_CHAMP_VACANT, used, ctx))
 
@@ -982,11 +1093,17 @@ def _block_commentary(card, teams, deaths, turn_num: int, champion_state: dict) 
 # ---------------------------------------------------------------------------
 
 def generate_newsletter(turn_num, card, teams, deaths, champion_state,
-                        voice="snide", processed_date=None) -> str:
+                        voice="snide", processed_date=None, is_new_champion=False) -> str:
     sections = [_header(turn_num, processed_date)]
     sections.append(_team_standings(teams, turn_num))
-    sections.append("\n\n" + _block_commentary(card, teams, deaths, turn_num, champion_state))
+    sections.append("\n\n" + _block_commentary(card, teams, deaths, turn_num, champion_state, is_new_champion))
     sections.append("\n\n" + _warrior_tiers(teams, champion_state))
+    
+    # Add monster kills section if there are any
+    monster_kills = _monster_kills_section(card)
+    if monster_kills:
+        sections.append("\n\n" + monster_kills)
+    
     sections.append("\n\n" + _fights_section(card))
     dead = _dead_section(deaths, turn_num)
     if dead: sections.append("\n\n" + dead)
