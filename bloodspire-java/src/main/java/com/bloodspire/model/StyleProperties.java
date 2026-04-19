@@ -37,4 +37,8 @@ public class StyleProperties {
     public boolean isAnxiouslyAwaits() { return anxiouslyAwaits; }
     public boolean isTotalKillMode() { return totalKillMode; }
     public String getNotes() { return notes; }
+    
+    // Package-private setters for builder pattern
+    void setParryBonus(int parryBonus) { this.parryBonus = parryBonus; }
+    void setDodgeBonus(int dodgeBonus) { this.dodgeBonus = dodgeBonus; }
 }
