@@ -35,6 +35,10 @@ public class Strategy {
     public String getAimPoint() { return aimPoint; }
     public String getDefensePoint() { return defensePoint; }
     
+    // Aliases for combat engine compatibility
+    public String getWeapon() { return "Short Sword"; } // Default weapon
+    public String getOffhandWeapon() { return "None"; } // Default offhand
+    
     // Setters
     public void setTrigger(String trigger) { this.trigger = trigger; }
     public void setStyle(String style) { this.style = style; }

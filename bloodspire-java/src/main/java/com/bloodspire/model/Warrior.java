@@ -495,6 +495,12 @@ public class Warrior {
     public int getMaxHp() { return maxHp; }
     public int getCurrentHp() { return currentHp; }
     public void setCurrentHp(int currentHp) { this.currentHp = currentHp; }
+    
+    // Aliases for combat engine compatibility
+    public int getHealth() { return currentHp; }
+    public int getStamina() { return currentEndurance; }
+    public void setStamina(int stamina) { this.currentEndurance = stamina; }
+    
     public int getCurrentEndurance() { return currentEndurance; }
     public void setCurrentEndurance(int currentEndurance) { this.currentEndurance = currentEndurance; }
     
@@ -518,6 +524,14 @@ public class Warrior {
     public List<WarriorStrategy> getStrategies() { return strategies; }
     public void setStrategies(List<WarriorStrategy> strategies) { this.strategies = strategies; }
     
+    // Helper method to get primary fighting style from first strategy
+    public String getPrimaryStyle() { 
+        if (strategies != null && !strategies.isEmpty()) {
+            return strategies.get(0).getStyle();
+        }
+        return "Strike"; // default
+    }
+
     public List<String> getTrains() { return trains; }
     public void setTrains(List<String> trains) { this.trains = trains; }
     public Map<String, Integer> getSkills() { return skills; }
