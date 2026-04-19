@@ -453,4 +453,160 @@ public class Team {
     public Map<Integer, Map<String, Object>> getPendingReplacements() { return pendingReplacements; }
     public List<Map<String, Object>> getTurnHistory() { return turnHistory; }
     public Map<String, List<String>> getChallenges() { return challenges; }
+    
+    // =========================================================================
+    // SERIALIZATION
+    // =========================================================================
+    
+    @SuppressWarnings("unchecked")
+    public static Team fromMap(Map<String, Object> data) {
+        String teamName = (String) data.get("team_name");
+        String managerName = (String) data.get("manager_name");
+        int teamId = (int) data.getOrDefault("team_id", 0);
+        
+        Team team = new Team(teamName, managerName, teamId);
+        
+        // Restore warriors
+        List<Object> warriorsData = (List<Object>) data.get("warriors");
+        if (warriorsData != null) {
+            team.warriors.clear();
+            for (Object wData : warriorsData) {
+                if (wData instanceof Map) {
+                    Warrior w = Warrior.fromMap((Map<String, Object>) wData);
+                    team.warriors.add(w);
+                } else {
+                    team.warriors.add(null);
+                }
+            }
+        }
+        
+        // Restore fallen warriors
+        List<Object> fallenData = (List<Object>) data.get("fallen_warriors");
+        if (fallenData != null) {
+            team.fallenWarriors.clear();
+            for (Object f : fallenData) {
+                if (f instanceof Map) {
+                    team.fallenWarriors.add((Map<String, Object>) f);
+                }
+            }
+        }
+        
+        // Restore blood challenges
+        List<Object> bloodData = (List<Object>) data.get("blood_challenges");
+        if (bloodData != null) {
+            team.bloodChallenges.clear();
+            for (Object b : bloodData) {
+                if (b instanceof Map) {
+                    team.bloodChallenges.add((Map<String, Object>) b);
+                }
+            }
+        }
+        
+        // Restore avoid managers
+        List<Object> avoidData = (List<Object>) data.get("avoid_managers");
+        if (avoidData != null) {
+            team.avoidManagers.clear();
+            for (Object a : avoidData) {
+                if (a instanceof String) {
+                    team.avoidManagers.add((String) a);
+                }
+            }
+        }
+        
+        // Restore challenges
+        Map<String, Object> challengesData = (Map<String, Object>) data.get("challenges");
+        if (challengesData != null) {
+            team.challenges.clear();
+            for (Map.Entry<String, Object> entry : challengesData.entrySet()) {
+                List<Object> targets = (List<Object>) entry.getValue();
+                List<String> targetList = new ArrayList<>();
+                for (Object t : targets) {
+                    if (t instanceof String) {
+                        targetList.add((String) t);
+                    }
+                }
+                team.challenges.put(entry.getKey(), targetList);
+            }
+        }
+        
+        // Restore archived warriors
+        List<Object> archivedData = (List<Object>) data.get("archived_warriors");
+        if (archivedData != null) {
+            team.archivedWarriors.clear();
+            for (Object a : archivedData) {
+                if (a instanceof Map) {
+                    team.archivedWarriors.add((Map<String, Object>) a);
+                }
+            }
+        }
+        
+        // Restore pending replacements
+        Map<String, Object> pendingData = (Map<String, Object>) data.get("pending_replacements");
+        if (pendingData != null) {
+            team.pendingReplacements.clear();
+            for (Map.Entry<String, Object> entry : pendingData.entrySet()) {
+                try {
+                    int slot = Integer.parseInt(entry.getKey());
+                    team.pendingReplacements.put(slot, (Map<String, Object>) entry.getValue());
+                } catch (NumberFormatException e) {
+                    // Skip invalid keys
+                }
+            }
+        }
+        
+        // Restore turn history
+        List<Object> turnData = (List<Object>) data.get("turn_history");
+        if (turnData != null) {
+            team.turnHistory.clear();
+            for (Object t : turnData) {
+                if (t instanceof Map) {
+                    team.turnHistory.add((Map<String, Object>) t);
+                }
+            }
+        }
+        
+        return team;
+    }
+    
+    public Map<String, Object> toMap() {
+        Map<String, Object> data = new HashMap<>();
+        data.put("team_name", teamName);
+        data.put("manager_name", managerName);
+        data.put("team_id", teamId);
+        
+        // Serialize warriors (handle nulls)
+        List<Object> warriorsData = new ArrayList<>();
+        for (Warrior w : warriors) {
+            if (w != null) {
+                warriorsData.add(w.toMap());
+            } else {
+                warriorsData.add(null);
+            }
+        }
+        data.put("warriors", warriorsData);
+        
+        data.put("fallen_warriors", new ArrayList<>(fallenWarriors));
+        data.put("blood_challenges", new ArrayList<>(bloodChallenges));
+        data.put("avoid_managers", new ArrayList<>(avoidManagers));
+        
+        // Serialize challenges
+        Map<String, Object> challengesData = new HashMap<>();
+        for (Map.Entry<String, List<String>> entry : challenges.entrySet()) {
+            challengesData.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        data.put("challenges", challengesData);
+        
+        data.put("archived_warriors", new ArrayList<>(archivedWarriors));
+        
+        // Serialize pending replacements
+        Map<String, Object> pendingData = new HashMap<>();
+        for (Map.Entry<Integer, Map<String, Object>> entry : pendingReplacements.entrySet()) {
+            pendingData.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        data.put("pending_replacements", pendingData);
+        
+        data.put("turn_history", new ArrayList<>(turnHistory));
+        
+        return data;
+    }
 }
