@@ -156,11 +156,11 @@ public class Warrior {
     // EQUIPMENT
     // =========================================================================
     
-    private String armor;
-    private String helm;
-    private String primaryWeapon;
-    private String secondaryWeapon;
-    private String backupWeapon;
+    private ArmorPiece armor;
+    private ArmorPiece helm;
+    private Weapon primaryWeapon;
+    private Weapon secondaryWeapon;
+    private Weapon backupWeapon;
     
     // =========================================================================
     // STRATEGIES
@@ -251,11 +251,11 @@ public class Warrior {
         this.monsterKills = 0;
         this.totalFights = 0;
         
-        // Equipment
+        // Equipment - start with no armor/helm, Open Hand weapons
         this.armor = null;
         this.helm = null;
-        this.primaryWeapon = "Open Hand";
-        this.secondaryWeapon = "Open Hand";
+        this.primaryWeapon = Weapons.getWeapon("open_hand");
+        this.secondaryWeapon = Weapons.getWeapon("open_hand");
         this.backupWeapon = null;
         
         // Strategies - start with default "Always" strategy
@@ -504,16 +504,16 @@ public class Warrior {
     public int getMonsterKills() { return monsterKills; }
     public int getTotalFights() { return totalFights; }
     
-    public String getArmor() { return armor; }
-    public void setArmor(String armor) { this.armor = armor; }
-    public String getHelm() { return helm; }
-    public void setHelm(String helm) { this.helm = helm; }
-    public String getPrimaryWeapon() { return primaryWeapon; }
-    public void setPrimaryWeapon(String primaryWeapon) { this.primaryWeapon = primaryWeapon; }
-    public String getSecondaryWeapon() { return secondaryWeapon; }
-    public void setSecondaryWeapon(String secondaryWeapon) { this.secondaryWeapon = secondaryWeapon; }
-    public String getBackupWeapon() { return backupWeapon; }
-    public void setBackupWeapon(String backupWeapon) { this.backupWeapon = backupWeapon; }
+    public ArmorPiece getArmor() { return armor; }
+    public void setArmor(ArmorPiece armor) { this.armor = armor; }
+    public ArmorPiece getHelm() { return helm; }
+    public void setHelm(ArmorPiece helm) { this.helm = helm; }
+    public Weapon getPrimaryWeapon() { return primaryWeapon; }
+    public void setPrimaryWeapon(Weapon primaryWeapon) { this.primaryWeapon = primaryWeapon; }
+    public Weapon getSecondaryWeapon() { return secondaryWeapon; }
+    public void setSecondaryWeapon(Weapon secondaryWeapon) { this.secondaryWeapon = secondaryWeapon; }
+    public Weapon getBackupWeapon() { return backupWeapon; }
+    public void setBackupWeapon(Weapon backupWeapon) { this.backupWeapon = backupWeapon; }
     
     public List<WarriorStrategy> getStrategies() { return strategies; }
     public void setStrategies(List<WarriorStrategy> strategies) { this.strategies = strategies; }

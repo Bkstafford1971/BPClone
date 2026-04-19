@@ -4,14 +4,14 @@ package com.bloodspire.model;
  * Combat modifiers for a given fighting style.
  */
 public class StyleProperties {
-    private final double apmModifier;      // Modifier to actions per minute
-    private final double damageModifier;   // Flat modifier to damage dealt
-    private final int parryBonus;          // Bonus to parry rolls (can be negative)
-    private final int dodgeBonus;          // Bonus to dodge rolls
-    private final double enduranceBurn;    // Endurance spent per action (negative = gain)
-    private final boolean intimidate;      // Chance to scare opponent
-    private final boolean anxiouslyAwaits; // Drains foe endurance when used
-    private final boolean totalKillMode;   // Ignores defenses, nearly no parry/dodge
+    private double apmModifier;      // Modifier to actions per minute
+    private double damageModifier;   // Flat modifier to damage dealt
+    private int parryBonus;          // Bonus to parry rolls (can be negative)
+    private int dodgeBonus;          // Bonus to dodge rolls
+    private double enduranceBurn;    // Endurance spent per action (negative = gain)
+    private boolean intimidate;      // Chance to scare opponent
+    private boolean anxiouslyAwaits; // Drains foe endurance when used
+    private boolean totalKillMode;   // Ignores defenses, nearly no parry/dodge
     private final String notes;            // Description
 
     public StyleProperties(double apmModifier, double damageModifier, int parryBonus, 

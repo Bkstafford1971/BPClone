@@ -127,4 +127,23 @@ public class PermanentInjuries {
             }
         }
     }
+    
+    /**
+     * Set injury level for a specific location.
+     */
+    public void setInjury(String location, int level) {
+        if (!LOCATIONS.contains(location.toLowerCase())) {
+            throw new IllegalArgumentException("Invalid injury location: " + location);
+        }
+        
+        switch (location.toLowerCase()) {
+            case "head" -> head = level;
+            case "chest" -> chest = level;
+            case "abdomen" -> abdomen = level;
+            case "primary_arm" -> primaryArm = level;
+            case "secondary_arm" -> secondaryArm = level;
+            case "primary_leg" -> primaryLeg = level;
+            case "secondary_leg" -> secondaryLeg = level;
+        }
+    }
 }
