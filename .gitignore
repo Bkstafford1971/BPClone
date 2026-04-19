@@ -7,7 +7,7 @@
 
 # Maven/Gradle directories
 target/
-.gradle/
+build/
 
 # IDE files
 .idea/
@@ -15,27 +15,14 @@ target/
 *.ipr
 *.iws
 
-# Temporary files
-*.tmp
-*.temp
-*.log
-
-# Environment
-.env
-.env.local
-*.env.*
-
 # Dependencies
 lib/
 libs/
-dependency-reduced-pom.xml
 
-# Build tools
-out/
-build/
-dist/
+# Logs
+*.log
 
-# OS files
-.DS_Store
-Thumbs.db
+# Temporary files
+*.tmp
+*.temp
 ```

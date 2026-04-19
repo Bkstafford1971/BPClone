@@ -141,6 +141,21 @@ public class Team {
             .collect(Collectors.toList());
     }
     
+    public List<Warrior> getFighters() {
+        /** Alias for getActiveWarriors() - returns all active fighters on the team. */
+        return getActiveWarriors();
+    }
+    
+    public boolean addFighter(Warrior warrior) {
+        /** Alias for addWarrior() - adds a fighter to the team. */
+        return addWarrior(warrior);
+    }
+    
+    public boolean removeFighter(Warrior warrior) {
+        /** Remove a specific warrior from the team roster. */
+        return warriors.remove(warrior);
+    }
+    
     public boolean isFull() {
         return warriors.size() == TEAM_SIZE && 
                warriors.stream().allMatch(w -> w != null);
