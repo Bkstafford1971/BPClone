@@ -55,6 +55,14 @@ public class WeaponsUtil {
         return Math.min(1.0, overage / capacity);
     }
     
+    /**
+     * Get a weapon by name from the Weapons class.
+     * Delegates to Weapons.getWeapon() for lookup.
+     */
+    public static Weapon getWeaponByName(String name) {
+        return Weapons.getWeapon(name);
+    }
+    
     // Helper class for strength ranges
     private static class StrengthRange {
         final int minStr;

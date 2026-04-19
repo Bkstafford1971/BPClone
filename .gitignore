@@ -1,43 +1,41 @@
 ```
-# Compiled and build artifacts
+# Java build artifacts
 *.class
-*.o
-*.obj
-*.out
+*.jar
+*.war
+*.ear
 
-# Dependencies
+# Maven/Gradle directories
 target/
 .gradle/
 
-# Logs and temp files
-*.log
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Temporary files
 *.tmp
+*.temp
+*.log
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
+# Dependencies
+lib/
+libs/
+dependency-reduced-pom.xml
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python cache (if any Python files exist in the project)
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.mypy_cache/
-.pytest_cache/
-
-# Distribution artifacts
-dist/
+# Build tools
+out/
 build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
 ```

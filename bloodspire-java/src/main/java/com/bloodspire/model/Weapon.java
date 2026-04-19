@@ -98,6 +98,7 @@ public class Weapon {
     
     // Getters
     public String getSkillKey() { return skillKey; }
+    public String getName() { return display; }
     public String getDisplay() { return display; }
     public double getWeight() { return weight; }
     public boolean isThrowable() { return throwable; }
