@@ -19,10 +19,12 @@ public class ArenaScreen extends JPanel {
     private JButton startFightButton;
     private JButton autoSimulateButton;
     private boolean isFighting = false;
+    private CombatEngine combatEngine;
     
     public ArenaScreen(JFrame frame, GameStateManager manager) {
         this.parentFrame = frame;
         this.gameStateManager = manager;
+        this.combatEngine = new CombatEngine();
         
         setLayout(new BorderLayout());
         setBackground(new Color(20, 20, 30));

@@ -46,6 +46,32 @@ public class ArmorPiece {
     public int getDexPenalty() { return dexPenalty; }
     public String getNotes() { return notes; }
     
+    /**
+     * Alias for getDefenseValue() to match Python API
+     */
+    public int getDefenseBonus() {
+        return defenseValue;
+    }
+    
+    /**
+     * Static lookup method to find armor by name (case-insensitive)
+     * This would typically search a registry of all armor pieces.
+     * For now, we'll return null or throw exception if not found.
+     * In a full implementation, this would query ArmorUtil.ALL_ARMOR
+     */
+    public static ArmorPiece fromName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return null;
+        }
+        // Search through known armor pieces
+        for (ArmorPiece piece : ArmorUtil.getAllArmors()) {
+            if (piece.getName().equalsIgnoreCase(name)) {
+                return piece;
+            }
+        }
+        return null;
+    }
+    
     @Override
     public String toString() {
         String kind = isHelm ? "Helm" : "Armor";

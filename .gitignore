@@ -1,28 +1,37 @@
 ```
-# Java build artifacts
+# Compiled and build artifacts
 *.class
-*.jar
-*.war
-*.ear
-
-# Maven/Gradle directories
-target/
+*.o
+*.obj
+*.out
 build/
-
-# IDE files
-.idea/
-*.iml
-*.ipr
-*.iws
+target/
 
 # Dependencies
+.gradle/
 lib/
-libs/
+vendor/
 
-# Logs
+# Logs and temp files
 *.log
-
-# Temporary files
 *.tmp
-*.temp
+*.swp
+
+# Editors
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# OS generated files
+.DS_Store
+Thumbs.db
 ```

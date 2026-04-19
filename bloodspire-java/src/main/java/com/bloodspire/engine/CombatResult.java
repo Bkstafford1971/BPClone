@@ -3,6 +3,7 @@ package com.bloodspire.engine;
 import com.bloodspire.model.Warrior;
 import com.bloodspire.model.Wound;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Represents the result of a combat encounter.
@@ -14,12 +15,24 @@ public class CombatResult {
     private List<Wound> wounds;
     private int rounds;
     private String lastActionNarrative;
+    public List<String> narrative;
+    public int w1FinalHealth;
+    public int w2FinalHealth;
+    public int turns;
     
     public CombatResult(Warrior winner, Warrior loser, String endMethod) {
         this.winner = winner;
         this.loser = loser;
         this.endMethod = endMethod;
         this.rounds = 0;
+        this.narrative = new ArrayList<>();
+        this.w1FinalHealth = 0;
+        this.w2FinalHealth = 0;
+        this.turns = 0;
+    }
+    
+    public CombatResult() {
+        this.narrative = new ArrayList<>();
     }
     
     public Warrior getWinner() {
